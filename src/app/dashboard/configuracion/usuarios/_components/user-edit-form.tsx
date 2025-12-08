@@ -1,0 +1,460 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { toast } from 'sonner';
+import { authService } from '@/services/auth';
+import { Checkbox } from '@/components/ui/checkbox';
+import { userService, UpdateUserDto, Store, User } from '@/services/user.service';
+
+// Schema para edición de usuario
+const userEditSchema = z.object({
+  name: z.string().min(2, {
+    message: 'El nombre debe tener al menos 2 caracteres.',
+  }),
+  username: z.string().min(3, {
+    message: 'El nombre de usuario debe tener al menos 3 caracteres.',
+  }),
+  email: z.string().email({
+    message: 'Por favor ingresa un correo electrónico válido.',
+  }),
+  phone: z.string().min(8, {
+    message: 'El número de teléfono debe tener al menos 8 dígitos.',
+  }),
+  language: z.string().optional(),
+  timezone: z.string().optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+  storeId: z.string().optional(),
+  permissions: z.array(z.string()).default([]),
+});
+
+type UserEditFormValues = z.infer<typeof userEditSchema>;
+
+interface UserEditFormProps {
+  user: User;
+  stores: Store[];
+  onSuccess: () => void;
+}
+
+const formatPermissionLabel = (permission: string): string => {
+  if (!permission) return '';
+
+  const normalized = permission
+    .replace(/[\s]+/g, '')
+    .trim()
+    .toLowerCase();
+
+  if (!normalized) return permission;
+
+  const tokens = permission
+    .toLowerCase()
+    .split(/[.:/_-]+/)
+    .filter(Boolean);
+
+  const dictionary: Record<string, string> = {
+    users: 'Usuarios',
+    user: 'Usuario',
+    roles: 'Roles',
+    role: 'Rol',
+    permissions: 'Permisos',
+    permission: 'Permiso',
+    products: 'Productos',
+    product: 'Producto',
+    services: 'Servicios',
+    service: 'Servicio',
+    orders: 'Órdenes',
+    order: 'Orden',
+    sales: 'Ventas',
+    sale: 'Venta',
+    inventory: 'Inventario',
+    stores: 'Tiendas',
+    store: 'Tienda',
+    dashboard: 'Dashboard',
+    reports: 'Reportes',
+    report: 'Reporte',
+    clients: 'Clientes',
+    client: 'Cliente',
+    prices: 'Precios',
+    price: 'Precio',
+    cash: 'Caja',
+    caja: 'Caja',
+
+    read: 'Ver',
+    view: 'Ver',
+    list: 'Listar',
+    create: 'Crear',
+    add: 'Agregar',
+    update: 'Editar',
+    edit: 'Editar',
+    delete: 'Eliminar',
+    remove: 'Eliminar',
+    manage: 'Gestionar',
+    export: 'Exportar',
+    print: 'Imprimir',
+    approve: 'Aprobar',
+    close: 'Cerrar',
+  };
+
+  const translated = tokens.map((token) => {
+    const key = token.toLowerCase();
+    if (dictionary[key]) return dictionary[key];
+    return key.charAt(0).toUpperCase() + key.slice(1);
+  });
+
+  if (translated.length === 2) {
+    return `${translated[0]} · ${translated[1]}`;
+  }
+
+  return translated.join(' · ');
+};
+
+export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [userComplete, setUserComplete] = useState<User | null>(null);
+  const [availablePermissions, setAvailablePermissions] = useState<string[]>([]);
+  const [isLoadingPermissions, setIsLoadingPermissions] = useState(true);
+
+  // Cargar permisos al montar
+  useEffect(() => {
+    const loadPermissions = async () => {
+      try {
+        setIsLoadingPermissions(true);
+        const permissions = await authService.getPermissions();
+        setAvailablePermissions(permissions);
+      } catch (error) {
+        console.error('Error loading permissions:', error);
+      } finally {
+        setIsLoadingPermissions(false);
+      }
+    };
+    loadPermissions();
+  }, []);
+
+  // Obtener el usuario completo al montar el componente
+  useEffect(() => {
+    const fetchUserComplete = async () => {
+      try {
+        console.log('🔍 Obteniendo usuario completo con getUserById...');
+        const completeUser = await userService.getUserById(user.id);
+        console.log('🔍 Usuario completo obtenido:', completeUser);
+        setUserComplete(completeUser);
+      } catch (error) {
+        console.error('❌ Error al obtener usuario completo:', error);
+        setUserComplete(user);
+      }
+    };
+
+    fetchUserComplete();
+  }, [user.id]);
+
+  const form = useForm({
+    resolver: zodResolver(userEditSchema),
+    defaultValues: {
+      name: '',
+      username: '',
+      email: '',
+      phone: '',
+      language: 'es',
+      timezone: 'America/Lima',
+      status: 'ACTIVE',
+      storeId: '',
+      permissions: [],
+    },
+  });
+
+  // Resetear el formulario cuando userComplete esté disponible
+  useEffect(() => {
+    if (userComplete) {
+      form.reset({
+        name: userComplete.name || '',
+        username: userComplete.username || '',
+        email: userComplete.email || '',
+        phone: userComplete.phone || '',
+        language: userComplete.language || 'es',
+        timezone: userComplete.timezone || 'America/Lima',
+        status: (userComplete.status === 'ACTIVE' || userComplete.status === 'INACTIVE') ? userComplete.status : 'ACTIVE',
+        storeId: userComplete.stores?.[0]?.id || '',
+        permissions: userComplete.permissions || [],
+      });
+    }
+  }, [userComplete, form]);
+
+  const onSubmit = async (data: any) => {
+    try {
+      setIsSubmitting(true);
+
+      console.log('🚀 Actualizando usuario:', data);
+
+      // Construir payload según el rol del usuario
+      const updatePayload: UpdateUserDto = {
+        name: data.name,
+        username: data.username,
+        email: data.email,
+        phone: data.phone,
+        language: data.language || 'es',
+        timezone: data.timezone || 'America/Lima',
+        status: data.status || 'ACTIVE',
+        // Solo incluir storeId si es USER y hay una tienda seleccionada
+        ...(user.role === 'USER' && data.storeId && { storeId: data.storeId }),
+        permissions: data.permissions,
+      };
+
+      console.log('📝 Payload para actualizar:', updatePayload);
+
+      const updatedUser = await userService.updateUser(user.id, updatePayload);
+      console.log('✅ Usuario actualizado correctamente:', updatedUser);
+
+      toast.success('Usuario actualizado correctamente');
+      onSuccess();
+    } catch (error) {
+      console.error('❌ Error al actualizar usuario:', error);
+      toast.error(error instanceof Error ? error.message : 'Error al actualizar el usuario');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Nombre completo</FormLabel>
+                <FormControl>
+                  <Input placeholder="Nombre del usuario" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="username"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Nombre de usuario</FormLabel>
+                <FormControl>
+                  <Input placeholder="nombre_usuario" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Correo electrónico</FormLabel>
+                <FormControl>
+                  <Input type="email" placeholder="usuario@ejemplo.com" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="phone"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Teléfono</FormLabel>
+                <FormControl>
+                  <Input type="tel" placeholder="+51 987 654 321" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="language"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Idioma</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona un idioma" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="es">Español</SelectItem>
+                    <SelectItem value="en">English</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="timezone"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Zona horaria</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona una zona horaria" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="America/Lima">America/Lima</SelectItem>
+                    <SelectItem value="Europe/Madrid">Europe/Madrid</SelectItem>
+                    <SelectItem value="America/New_York">America/New_York</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="status"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Estado</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona un estado" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="ACTIVE">Activo</SelectItem>
+                    <SelectItem value="INACTIVE">Inactivo</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Solo mostrar selector de tienda para usuarios USER */}
+          {user.role === 'USER' && (
+            <FormField
+              control={form.control}
+              name="storeId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tienda asignada</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona una tienda" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {stores.map((store) => (
+                        <SelectItem key={store.id} value={store.id}>
+                          {store.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+          
+          {/* Sección de Permisos */}
+          {user.role === 'USER' && (
+            <div className="md:col-span-2 space-y-4 border rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-medium">Permisos</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Selecciona los permisos que tendrá este usuario
+                  </p>
+                </div>
+              </div>
+              
+              {isLoadingPermissions ? (
+                <div className="text-sm text-muted-foreground">Cargando permisos...</div>
+              ) : (
+                <FormField
+                  control={form.control}
+                  name="permissions"
+                  render={() => (
+                    <FormItem>
+                      <div className="max-h-64 overflow-y-auto pr-1">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {availablePermissions.map((permission) => (
+                          <FormField
+                            key={permission}
+                            control={form.control}
+                            name="permissions"
+                            render={({ field }) => {
+                              return (
+                                <FormItem
+                                  key={permission}
+                                  className="flex flex-row items-start space-x-3 space-y-0"
+                                >
+                                  <FormControl>
+                                    <Checkbox
+                                      checked={field.value?.includes(permission)}
+                                      onCheckedChange={(checked) => {
+                                        return checked
+                                          ? field.onChange([...(field.value || []), permission])
+                                          : field.onChange(
+                                              (field.value || []).filter(
+                                                (value: string) => value !== permission
+                                              )
+                                            )
+                                      }}
+                                    />
+                                  </FormControl>
+                                  <FormLabel className="font-normal text-sm cursor-pointer">
+                                    {formatPermissionLabel(permission)}
+                                  </FormLabel>
+                                </FormItem>
+                              )
+                            }}
+                          />
+                        ))}
+                        </div>
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end space-x-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onSuccess}
+            disabled={isSubmitting}
+          >
+            Cancelar
+          </Button>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? 'Actualizando...' : 'Actualizar usuario'}
+          </Button>
+        </div>
+      </form>
+    </Form>
+  );
+}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -10,61 +10,69 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { UserForm } from './user-form';
+import { UserEditForm } from './user-edit-form';
+import { userService, type Store, type User } from '@/services/user.service';
 
-type User = {
-  id?: string;
-  name: string;
-  username: string;
-  email: string;
-  phone: string;
-  role: 'ADMIN' | 'USER';
-};
-
-type UserDialogProps = {
-  children?: React.ReactNode;
+interface UserDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  user?: User | null;
   onSuccess?: () => void;
-  user?: User;
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-};
+  children?: React.ReactNode;
+}
 
-export function UserDialog({ 
-  children, 
-  onSuccess, 
-  user, 
-  open: externalOpen,
-  onOpenChange: setExternalOpen
+export function UserDialog({
+  open,
+  onOpenChange,
+  user,
+  onSuccess,
+  children,
 }: UserDialogProps) {
-  const [internalOpen, setInternalOpen] = useState(false);
-  const isControlled = externalOpen !== undefined;
-  const open = isControlled ? externalOpen : internalOpen;
-
-  const handleOpenChange = (newOpen: boolean) => {
-    if (!isControlled) {
-      setInternalOpen(newOpen);
-    }
-    setExternalOpen?.(newOpen);
-  };
+  const [stores, setStores] = useState<Store[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleFormSuccess = () => {
     onSuccess?.();
-    handleOpenChange(false);
+    onOpenChange(false);
   };
 
-  // Map the user data to match the UserForm expected format
-  const formInitialData = user ? {
-    id: user.id,  // ✅ Agregar el ID para que el UserForm sepa que está editando
-    name: user.name,
-    username: user.username || '',
-    email: user.email,
-    phone: user.phone || '',
-    role: user.role,
-    password: '',
-    confirmPassword: '',
-  } : undefined;
+  // Cargar tiendas para el selector
+  useEffect(() => {
+    const loadStores = async () => {
+      try {
+        const users = await userService.getAllUsers();
+        const uniqueStores = new Map<string, string>();
+
+        // Extraer tiendas únicas de todos los usuarios
+        users.forEach((user) => {
+          if (user.stores) {
+            user.stores.forEach((store) => {
+              if (!uniqueStores.has(store.id)) {
+                uniqueStores.set(store.id, store.name);
+              }
+            });
+          }
+        });
+
+        const storesArray = Array.from(uniqueStores.entries()).map(([id, name]) => ({ 
+          id, 
+          name,
+          address: '',
+          phone: '',
+          createdAt: '',
+          updatedAt: '',
+          createdById: ''
+        } as Store));
+        setStores(storesArray);
+      } catch (error) {
+        console.error('Error loading stores:', error);
+      }
+    };
+    loadStores();
+  }, []);
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       {!user && children && (
         <DialogTrigger asChild>
           {children}
@@ -79,12 +87,21 @@ export function UserDialog({
               : 'Completa el formulario para crear un nuevo usuario.'}
           </DialogDescription>
         </DialogHeader>
-        
         <div className="py-4">
-          <UserForm 
-            initialData={formInitialData}
-            onSuccess={handleFormSuccess} 
-          />
+          {user ? (
+            // Modo edición: usar el nuevo formulario
+            <UserEditForm
+              user={user}
+              stores={stores}
+              onSuccess={handleFormSuccess}
+            />
+          ) : (
+            // Modo creación: usar el mismo UserForm pero con initialData undefined
+            <UserForm
+              initialData={undefined}
+              onSuccess={handleFormSuccess}
+            />
+          )}
         </div>
       </DialogContent>
     </Dialog>

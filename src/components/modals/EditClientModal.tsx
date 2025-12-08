@@ -23,8 +23,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Client } from '@/types/client.types';
-import { clientService } from '@/services/client.service';
+import { clientService, Client } from '@/services/client.service';
 
 // Esquema de validación con Zod
 const clientFormSchema = z.object({

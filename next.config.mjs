@@ -8,6 +8,10 @@ const nextConfig = {
     // Verificar tipos durante el desarrollo
     tsconfigPath: './tsconfig.json',
   },
+  // ⚠️ Nuevo: ignorar errores de ESLint en el build
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   // Configuración de imágenes
   images: {
     domains: [

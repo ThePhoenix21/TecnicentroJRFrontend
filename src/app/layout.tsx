@@ -2,6 +2,9 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { Suspense } from 'react';
 import { Providers } from '@/lib/providers';
+import { MaintenanceProvider } from '@/contexts/maintenance-context';
+import MaintenanceMode from '@/components/maintenance/maintenance-mode';
+import { MaintenanceInterceptor } from '@/components/maintenance/maintenance-interceptor';
 import './globals.css';
 import PWAWrapper from '@/components/pwa/PWAWrapper';
 
@@ -40,10 +43,14 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         <Providers>
-          <Suspense fallback={null}>
-            <PWAWrapper />
-          </Suspense>
-          {children}
+          <MaintenanceProvider>
+            <Suspense fallback={null}>
+              <PWAWrapper />
+              <MaintenanceInterceptor />
+              <MaintenanceMode />
+            </Suspense>
+            {children}
+          </MaintenanceProvider>
         </Providers>
       </body>
     </html>

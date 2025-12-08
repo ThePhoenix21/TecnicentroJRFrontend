@@ -4,6 +4,15 @@ import { createContext, useContext, ReactNode, useState, useEffect, useCallback 
 import { useRouter } from 'next/navigation';
 import { jwtDecode } from 'jwt-decode';
 import { authService, api } from '@/services/auth';
+import { userService } from '@/services/user.service';
+import { storeService } from '@/services/store.service';
+import { Store } from '@/types/store';
+
+// Interfaz simplificada para el contexto de autenticación
+export interface AuthStore {
+  id: string;
+  name: string;
+}
 
 export type UserRole = 'User' | 'Admin';
 
@@ -13,6 +22,8 @@ interface JwtPayload {
   name?: string;
   role?: string;
   verified?: boolean;
+  stores?: string[]; // 🆕 IDs de tiendas en el JWT
+  permissions?: string[]; // 🆕 Permisos del usuario
   iat?: number;
   exp?: number;
 }
@@ -22,25 +33,32 @@ export interface User {
   email: string;
   name: string;
   role: string;  // Changed from UserRole to string to match backend
+  permissions?: string[]; // 🆕 Permisos del usuario
   verified: boolean;
+  stores?: AuthStore[];  // Tiendas asociadas al usuario (formato simplificado)
   iat?: number;
   exp?: number;
 }
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<boolean>;
+  currentStore: AuthStore | null;
+  login: (email: string, password: string) => Promise<User | null>;
   logout: () => void;
+  selectStore: (store: AuthStore) => void;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  hasPermission: (permission: string) => boolean;
   loading: boolean;
   error: string | null;
+  hasStoreSelected: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [currentStore, setCurrentStore] = useState<AuthStore | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -51,14 +69,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('user');
+    localStorage.removeItem('current_store'); // Limpiar tienda seleccionada
+    localStorage.removeItem('stores_cache'); // Limpiar cache de tiendas
     
     // Clear axios default headers
     if (api?.defaults?.headers?.common) {
       delete api.defaults.headers.common['Authorization'];
     }
     
-    // Resetear el estado del usuario
+    // Resetear el estado del usuario y tienda
     setUser(null);
+    setCurrentStore(null);
     setError(null);
     
     if (redirect) {
@@ -79,6 +100,188 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (lowerRole === 'admin' || lowerRole === 'administrator') return 'Admin';
     return 'User';
   }, []);
+
+  const hasPermission = useCallback((permission: string): boolean => {
+    if (!user) return false;
+    // Admins always have all permissions, but we can also check the array if strictly needed.
+    // However, per requirements, admin implies full access.
+    if (user.role?.toLowerCase() === 'admin') return true;
+    return user.permissions?.includes(permission) || false;
+  }, [user]);
+
+  // Función para cargar tiendas reales desde el backend
+  const loadRealStores = useCallback(async (): Promise<Store[]> => {
+    try {
+      console.log('🏪 Cargando tiendas reales desde el backend...');
+      const stores = await storeService.getAllStores();
+      console.log('✅ Tiendas reales cargadas:', stores);
+      
+      // Guardar en cache para uso futuro
+      localStorage.setItem('stores_cache', JSON.stringify(stores));
+      return stores;
+    } catch (error) {
+      console.error('❌ Error al cargar tiendas reales:', error);
+      return [];
+    }
+  }, []);
+
+  // Función para obtener tiendas del usuario (reales o del JWT)
+  const getUserStores = useCallback(async (userStores: string[]): Promise<AuthStore[]> => {
+    try {
+      // Intentar cargar tiendas reales
+      const realStores = await loadRealStores();
+      
+      if (realStores.length > 0) {
+        // Filtrar tiendas que pertenecen al usuario
+        const userRealStores = realStores.filter(store => userStores.includes(store.id));
+        console.log('🏪 Tiendas reales del usuario:', userRealStores);
+        
+        return userRealStores.map(store => ({
+          id: store.id,
+          name: store.name
+        }));
+      }
+    } catch (error) {
+      console.error('Error al obtener tiendas reales, usando fallback:', error);
+    }
+    
+    // Fallback: usar nombres temporales del JWT
+    console.log('🔄 Usando fallback de tiendas del JWT');
+    return userStores.map((storeId: string) => ({
+      id: storeId,
+      name: `Tienda ${storeId.slice(-8)}`
+    }));
+  }, [loadRealStores]);
+
+  // Función para seleccionar tienda
+  const selectStore = useCallback((store: AuthStore) => {
+    console.log('🏪 Seleccionando tienda:', store);
+    setCurrentStore(store);
+    localStorage.setItem('current_store', JSON.stringify(store));
+    console.log('✅ Tienda guardada en localStorage y estado actualizado');
+  }, []);
+
+  const login = async (email: string, password: string): Promise<User | null> => {
+    setLoading(true);
+    setError(null);
+    
+    // Basic email validation
+    if (!email || !email.includes('@')) {
+      setError('Por favor ingresa un correo electrónico válido');
+      setLoading(false);
+      return null; // Devolver null en caso de error de validación
+    }
+    
+    try {
+      // Clear any existing auth state
+      localStorage.removeItem(process.env.NEXT_PUBLIC_TOKEN_KEY || 'auth_token');
+      localStorage.removeItem(process.env.NEXT_PUBLIC_REFRESH_TOKEN_KEY || 'refresh_token');
+      localStorage.removeItem(process.env.NEXT_PUBLIC_USER_KEY || 'user');
+      localStorage.removeItem('current_store'); // Limpiar tienda anterior
+      localStorage.removeItem('stores_cache'); // Limpiar cache de tiendas
+      
+      // Call the auth service
+      const response = await authService.login({ email, password });
+      
+      if (!response.access_token || !response.user) {
+        throw new Error('Invalid login response: Missing token or user data');
+      }
+      
+      // Update user state - obtener tiendas reales
+      const jwtToken = response.access_token;
+      let jwtStores: AuthStore[] = [];
+      
+      // Extraer tiendas del JWT si existen
+      try {
+        console.log('JWT Token:', jwtToken);
+        const decoded = jwtDecode(jwtToken) as any;
+        console.log('JWT Decoded:', decoded);
+        
+        if (decoded.stores && Array.isArray(decoded.stores)) {
+          // El JWT tiene IDs de tiendas, obtener los nombres reales
+          console.log('Tiendas en JWT:', decoded.stores);
+          
+          // Obtener tiendas reales usando los IDs del JWT
+          jwtStores = await getUserStores(decoded.stores);
+          console.log('Tiendas procesadas con nombres reales:', jwtStores);
+        } else {
+          console.log('No hay tiendas en el JWT o no es array');
+        }
+      } catch (error) {
+        console.error('Error al extraer tiendas del JWT:', error);
+      }
+      
+      const userData = {
+        id: response.user.id,
+        email: response.user.email,
+        name: response.user.name || '',
+        role: response.user.role || 'USER',
+        permissions: response.user.permissions || [], // 🆕 Permisos del usuario
+        verified: response.user.verified || false,
+        stores: jwtStores, // Usar tiendas con nombres reales
+      };
+      
+      console.log('UserData creado con tiendas reales:', userData);
+      
+      setUser(userData);
+      localStorage.setItem('user', JSON.stringify(userData));
+      
+      if (response.refresh_token) {
+        localStorage.setItem('refresh_token', response.refresh_token);
+      }
+      
+      // Para usuarios USER con una sola tienda, seleccionarla automáticamente
+      if (userData.role.toLowerCase() === 'user' && jwtStores.length === 1) {
+        console.log('🏪 Usuario USER con una sola tienda, seleccionando automáticamente');
+        setCurrentStore(jwtStores[0]);
+        localStorage.setItem('current_store', JSON.stringify(jwtStores[0]));
+      }
+      
+      return userData;
+      
+    } catch (err: unknown) {
+      console.error('Login error:', err);
+      
+      // Clear any partial authentication state
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('user');
+      localStorage.removeItem('current_store');
+      localStorage.removeItem('stores_cache');
+      
+      // Handle different error types
+      if (err && typeof err === 'object') {
+        const error = err as {
+          response?: {
+            status?: number;
+            data?: {
+              message?: string;
+              error?: string;
+            };
+          };
+          message?: string;
+        };
+        
+        if (error?.response?.status === 401) {
+          setError('Correo o contraseña incorrectos');
+        } else if (error?.response?.status === 500) {
+          setError('Error en el servidor. Por favor, inténtalo de nuevo más tarde.');
+        } else if (error?.response?.data?.message) {
+          setError(error.response.data.message);
+        } else if (error?.message) {
+          setError(error.message);
+        } else {
+          setError('Error al iniciar sesión. Por favor, inténtalo de nuevo.');
+        }
+      } else {
+        setError('Error al iniciar sesión. Por favor, inténtalo de nuevo.');
+      }
+      
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Función para verificar la autenticación
   const checkAuth = useCallback(async (): Promise<boolean> => {
@@ -112,17 +315,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (tokenExpiration < currentTime - 5) {
         console.log('Token expired, attempting to refresh...');
         // Try to refresh the token
-        authService.refreshToken()
-          .then(() => {
+        try {
+          const refreshed = await authService.refreshToken();
+          if (refreshed) {
             // If refresh is successful, check auth again
-            checkAuth();
-          })
-          .catch((err) => {
-            console.error('Failed to refresh token:', err);
+            return await checkAuth();
+          } else {
             logout(false);
             return false;
-          });
-        return false;
+          }
+        } catch (err) {
+          console.error('Failed to refresh token:', err);
+          logout(false);
+          return false;
+        }
       } else {
         // Token is valid, set up the user
         if (!decoded.sub || !decoded.email) {
@@ -137,15 +343,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (storedUser) {
           try {
             const parsedUser = JSON.parse(storedUser);
+            // Lógica robusta para permisos: priorizar token si tiene datos, sino usar localStorage
+            const tokenPermissions = decoded.permissions;
+            const storedPermissions = parsedUser.permissions;
+            const effectivePermissions = (tokenPermissions && tokenPermissions.length > 0) 
+              ? tokenPermissions 
+              : (storedPermissions || []);
+
             userData = {
-              id: parsedUser.id || decoded.sub,
-              email: parsedUser.email || decoded.email,
-              name: parsedUser.name || decoded.name || '',
-              role: normalizeRole(parsedUser.role || decoded.role),
-              verified: parsedUser.verified || decoded.verified || false,
+              id: decoded.sub || parsedUser.id,
+              email: decoded.email || parsedUser.email,
+              name: decoded.name || parsedUser.name || '',
+              role: normalizeRole(decoded.role || parsedUser.role),
+              permissions: effectivePermissions,
+              verified: decoded.verified || parsedUser.verified || false,
+              stores: parsedUser.stores || [], // Tiendas del localStorage
               iat: decoded.iat,
               exp: decoded.exp
             };
+            
+            // Si no hay tiendas en localStorage pero sí en JWT, actualizar
+            if ((!userData.stores || userData.stores.length === 0) && decoded.stores) {
+              console.log('Actualizando tiendas desde JWT en checkAuth...');
+              const userRealStores = await getUserStores(decoded.stores);
+              userData.stores = userRealStores;
+              localStorage.setItem('user', JSON.stringify(userData));
+              console.log('Usuario actualizado con tiendas reales:', userData);
+            }
           } catch (e) {
             console.error('Error parsing stored user data:', e);
             userData = {
@@ -153,18 +377,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               email: decoded.email,
               name: decoded.name || '',
               role: normalizeRole(decoded.role),
+              permissions: decoded.permissions || [], // 🆕 Permisos del usuario
               verified: decoded.verified || false,
+              stores: [], // Tiendas vacías por defecto
               iat: decoded.iat,
               exp: decoded.exp
             };
           }
         } else {
+          // No hay usuario en localStorage, crear desde JWT con tiendas reales
+          let userStores: AuthStore[] = [];
+          if (decoded.stores && Array.isArray(decoded.stores)) {
+            userStores = await getUserStores(decoded.stores);
+          }
+          
           userData = {
             id: decoded.sub,
             email: decoded.email,
             name: decoded.name || '',
             role: decoded.role || 'USER',
+            permissions: decoded.permissions || [], // 🆕 Permisos del usuario
             verified: decoded.verified || false,
+            stores: userStores,
             iat: decoded.iat,
             exp: decoded.exp
           };
@@ -173,7 +407,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         
         console.log('User authenticated:', userData);
+        console.log('📊 UserData stores:', userData.stores);
+        console.log('📊 UserData role:', userData.role);
         setUser(userData);
+
+        // Recuperar tienda seleccionada del localStorage
+        const savedStore = localStorage.getItem('current_store');
+        if (savedStore) {
+          try {
+            const storeData = JSON.parse(savedStore);
+            console.log('Tienda recuperada:', storeData);
+            setCurrentStore(storeData);
+          } catch (error) {
+            console.error('Error al recuperar tienda seleccionada:', error);
+            localStorage.removeItem('current_store');
+          }
+        } else if (userData.role.toLowerCase() === 'user' && userData.stores && userData.stores.length > 0) {
+          // Para usuarios USER, seleccionar automáticamente la primera tienda
+          console.log('🏪 Usuario USER sin tienda seleccionada');
+          console.log('📋 Tiendas disponibles:', userData.stores);
+          console.log('✅ Usando primera tienda:', userData.stores[0]);
+          setCurrentStore(userData.stores[0]);
+          // Guardar en localStorage para futuras sesiones
+          localStorage.setItem('current_store', JSON.stringify(userData.stores[0]));
+        } else {
+          console.log('❌ No se pudo seleccionar tienda automáticamente:', {
+            role: userData.role,
+            hasStores: !!userData.stores,
+            storesLength: userData.stores?.length || 0
+          });
+        }
 
         // Schedule token refresh 1 minute before expiration
         const timeUntilExpire = (tokenExpiration - currentTime - 60) * 1000; // 1 minute before
@@ -197,200 +460,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }
     
-    return true; // Added missing return statement
+    return true;
     
-  }, [logout, normalizeRole]); // Removed checkAuth from dependencies
+  }, [logout, normalizeRole, getUserStores]);
 
   // Verificar token al cargar
   useEffect(() => {
-    setLoading(true);
-    
-    const verifyAuth = async () => {
-      try {
-        if (typeof window === 'undefined') {
-          setLoading(false);
-          return;
-        }
-
-        const token = localStorage.getItem('auth_token');
-        console.log('Initial auth check with token:', token);
-        
-        if (token) {
-          try {
-            const decoded = jwtDecode<JwtPayload>(token);
-            const currentTime = Date.now() / 1000;
-            
-            if (decoded.exp && decoded.exp > currentTime) {
-              // Token is valid, set up user
-              const currentUser = await authService.getCurrentUser();
-              if (currentUser) {
-                setUser({
-                  id: currentUser.id,
-                  email: currentUser.email,
-                  name: currentUser.name || '',
-                  role: currentUser.role || 'User',
-                  verified: currentUser.verified || false
-                });
-                // Schedule token refresh only if token won't expire soon
-                const timeUntilExpire = (decoded.exp - currentTime - 60) * 1000;
-                if (timeUntilExpire > 60000) { // Only schedule if more than 1 minute left
-                  setTimeout(() => {
-                    authService.refreshToken().catch(console.error);
-                  }, Math.min(timeUntilExpire, 2147483647));
-                }
-              }
-            } else {
-              // Token expired, try to refresh
-              console.log('Token expired, attempting refresh...');
-              try {
-                const refreshed = await authService.refreshToken();
-                if (refreshed) {
-                  // Refresh successful, get current user again
-                  const currentUser = await authService.getCurrentUser();
-                  if (currentUser) {
-                    setUser({
-                      id: currentUser.id,
-                      email: currentUser.email,
-                      name: currentUser.name || '',
-                      role: currentUser.role || 'User',
-                      verified: currentUser.verified || false
-                    });
-                  }
-                } else {
-                  // Refresh failed, logout
-                  logout(false);
-                }
-              } catch (refreshError) {
-                console.error('Refresh failed:', refreshError);
-                logout(false);
-              }
-            }
-          } catch (error) {
-            console.error('Error during token verification:', error);
-            logout(false);
-          }
-        }
-      } catch (error) {
-        console.error('Error during initial auth check:', error);
-        logout(false);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    verifyAuth();
-  }, [logout]); // Only include stable dependencies
-
-  const login = async (email: string, password: string): Promise<boolean> => {
-    setLoading(true);
-    setError(null);
-    
-    // Basic email validation
-    if (!email || !email.includes('@')) {
-      setError('Por favor ingresa un correo electrónico válido');
-      setLoading(false);
-      return false;
-    }
-    
-    try {
-      // Clear any existing auth state
-      localStorage.removeItem(process.env.NEXT_PUBLIC_TOKEN_KEY || 'auth_token');
-      localStorage.removeItem(process.env.NEXT_PUBLIC_REFRESH_TOKEN_KEY || 'refresh_token');
-      localStorage.removeItem(process.env.NEXT_PUBLIC_USER_KEY || 'user');
-      
-      // Call the auth service
-      const response = await authService.login({ email, password });
-      
-      if (!response.access_token || !response.user) {
-        throw new Error('Invalid login response: Missing token or user data');
-      }
-      
-      // Update user state
-      setUser({
-        id: response.user.id,
-        email: response.user.email,
-        name: response.user.name || '',
-        role: response.user.role || 'USER',
-        verified: response.user.verified || false,
-      });
-      if (response.refresh_token) {
-        localStorage.setItem('refresh_token', response.refresh_token);
-      }
-      
-      // Create user data
-      const userData = {
-        id: response.user.id,
-        email: response.user.email,
-        name: response.user.name || '',
-        role: response.user.role || 'USER',
-        verified: response.user.verified || false
-      };
-      
-      // Update state and storage
-      setUser(userData);
-      localStorage.setItem('user', JSON.stringify(userData));
-      
-      // Schedule token refresh (using default 1 hour if not provided)
-      const expiresIn = response.expires_in || 3600;
-      setTimeout(() => {
-        authService.refreshToken().catch((err: Error) => {
-          console.error('Failed to refresh token:', err);
-          logout(false);
-        });
-      }, (expiresIn - 60) * 1000); // 1 minute before expiration
-      
-      return true;
-      
-    } catch (err: unknown) {
-      console.error('Login error:', err);
-      
-      // Clear any partial authentication state
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('refresh_token');
-      localStorage.removeItem('user');
-      
-      // Handle different error types
-      if (err && typeof err === 'object') {
-        const error = err as {
-          response?: {
-            status?: number;
-            data?: {
-              message?: string;
-              error?: string;
-            };
-          };
-          message?: string;
-        };
-        
-        if (error?.response?.status === 401) {
-          setError('Correo o contraseña incorrectos');
-        } else if (error?.response?.status === 500) {
-          setError('Error en el servidor. Por favor, inténtalo de nuevo más tarde.');
-        } else if (error?.response?.data?.message) {
-          setError(error.response.data.message);
-        } else if (error?.message) {
-          setError(error.message);
-        } else if (error?.response?.data?.error) {
-          setError(error.response.data.error);
-        } else {
-          setError('Ocurrió un error inesperado al iniciar sesión');
-        }
-      } else {
-        setError('Error de autenticación');
-      }
-      
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  };
+    checkAuth();
+  }, [checkAuth]);
 
   const value = {
     user,
+    currentStore,
     login,
     logout,
+    selectStore,
     isAuthenticated: !!user,
     isAdmin: user?.role?.toLowerCase() === 'admin',
+    hasPermission,
+    hasStoreSelected: !!currentStore,
     loading,
     error,
   };
@@ -401,7 +489,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth debe ser usado dentro de un AuthProvider');
+    throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
 }

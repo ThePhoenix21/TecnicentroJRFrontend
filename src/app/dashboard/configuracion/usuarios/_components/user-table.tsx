@@ -11,55 +11,46 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Edit, Trash2, Users as UsersIcon, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Edit, Trash2, Users as UsersIcon, ChevronLeft, ChevronRight, X, Building } from "lucide-react";
 import { toast } from "sonner";
 import { UserDialog } from "./user-dialog";
+import { userService, type User } from "@/services/user.service";
 
 /**
- * SISTEMA DE DESACTIVACIÓN DE USUARIOS (SOLO FRONTEND)
+ * SISTEMA DE GESTIÓN DE USUARIOS CON SOFT DELETE
  *
- * Este componente implementa un sistema de "eliminación suave" donde:
- * - Los usuarios se "desactivan" en lugar de eliminarse físicamente
- * - La lista de usuarios desactivados se guarda en localStorage
- * - Solo se muestran usuarios activos (no en la lista de desactivados)
- * - La desactivación es permanente pero reversible editando localStorage
- * - No requiere cambios en el backend
+ * Este componente implementa un sistema completo de gestión de usuarios donde:
+ * - Los usuarios se eliminan con soft delete desde el backend (endpoint DELETE)
+ * - Se muestra el estado del usuario (ACTIVO, INACTIVO, ELIMINADO)
+ * - Hay un filtro para mostrar/ocultar usuarios eliminados
+ * - Por defecto, los usuarios eliminados no se muestran
+ * - La eliminación es real y persistente en el backend
  *
  * Flujo:
  * 1. Se cargan todos los usuarios del backend
- * 2. Se filtran los usuarios desactivados usando localStorage
- * 3. Se aplica búsqueda adicional si hay searchTerm
- * 4. Se muestra la lista filtrada de usuarios activos
+ * 2. Se filtran por estado según el checkbox "Mostrar usuarios eliminados"
+ * 3. Se aplican filtros adicionales de tienda y búsqueda
+ * 4. Se muestra la lista filtrada con badges de estado
  */
-
-type User = {
-  id: string;
-  name: string;
-  email: string;
-  username: string;
-  phone: string;
-  role: "ADMIN" | "USER";
-  status?: "ACTIVE" | "INACTIVE";
-  createdAt: string;
-  updatedAt: string;
-};
 
 interface UserTableProps {
   searchTerm?: string;
+  storeId?: string;
   onSearchChange?: (search: string) => void;
 }
 
 export function UserTable({
   searchTerm = '',
+  storeId = '',
   onSearchChange
 }: UserTableProps) {
   const [users, setUsers] = useState<User[]>([]);
-  const [disabledUsers, setDisabledUsers] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [showDeletedUsers, setShowDeletedUsers] = useState(false); // Por defecto ocultar eliminados
   const itemsPerPage = 10;
 
   const handleEditClick = (user: User) => {
@@ -73,95 +64,70 @@ export function UserTable({
     await fetchUsers(); // Refresh the user list
   };
 
-  // Cargar usuarios desactivados desde localStorage
-  useEffect(() => {
-    const savedDisabledUsers = localStorage.getItem('disabledUsers');
-    if (savedDisabledUsers) {
-      setDisabledUsers(JSON.parse(savedDisabledUsers));
-    }
-  }, []);
-
   const fetchUsers = useCallback(async () => {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem(
-        process.env.NEXT_PUBLIC_TOKEN_KEY || "auth_token"
-      );
+      console.log('🔥 Iniciando fetchUsers con searchTerm:', searchTerm, 'storeId:', storeId);
+      console.log('🔍 showDeletedUsers:', showDeletedUsers);
+      
+      const data = await userService.getAllUsers(searchTerm);
+      console.log('📥 Respuesta del backend (todos los usuarios):', data);
+      console.log('📊 Total usuarios del backend:', data.length);
 
-      let url = `${process.env.NEXT_PUBLIC_API_URL}/users`;
-      const params = new URLSearchParams();
-
-      if (searchTerm) {
-        params.append('search', searchTerm);
-      }
-
-      if (params.toString()) {
-        url += `?${params.toString()}`;
-      }
-
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+      let filteredUsers = data.filter((user: User) => {
+        // Filtrar por tienda solo si se especifica una tienda específica (no "all")
+        if (storeId && storeId !== 'all' && user.stores) {
+          const hasStore = user.stores.some(store => store.id === storeId);
+          if (!hasStore) return false;
+        }
+        return true;
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.message || "No se pudieron cargar los usuarios"
-        );
+      console.log('🏪 Usuarios después de filtro de tienda:', filteredUsers.length);
+
+      // Filtrar usuarios eliminados si el filtro está desactivado
+      if (!showDeletedUsers) {
+        const beforeDeletedFilter = filteredUsers.length;
+        filteredUsers = filteredUsers.filter(user => user.status !== 'DELETED');
+        console.log('🗑️ Usuarios eliminados filtrados:', beforeDeletedFilter - filteredUsers.length);
+        console.log('📋 Estados de TODOS los usuarios:', data.map(u => ({ name: u.name, status: u.status })));
+        console.log('📋 Usuarios con status DELETED:', data.filter(u => u.status === 'DELETED').map(u => ({ name: u.name, status: u.status })));
+      } else {
+        console.log('✅ Filtro de eliminados DESACTIVADO - mostrando todos');
       }
 
-      const data = await response.json();
-      const allUsers = data.items || data; // Handle both paginated and non-paginated responses
-
-      console.log('📊 Usuarios del backend:', allUsers.length);
-      console.log('🔍 Search term:', searchTerm);
-      console.log('🚫 Usuarios desactivados:', disabledUsers.length);
-
-      // Filtrado inteligente por palabras - solo usuarios activos (no desactivados)
-      let filteredUsers = allUsers;
-
-      // Filtrar usuarios desactivados del frontend
-      filteredUsers = allUsers.filter((user: User) => !disabledUsers.includes(user.id));
-
-      console.log('📋 Usuarios activos después del filtro:', filteredUsers.length);
-
+      // Aplicar búsqueda si hay searchTerm
       if (searchTerm) {
-        const searchLower = searchTerm.toLowerCase();
-        const searchWords = searchLower.split(' ').filter(word => word.length > 0);
-
+        const searchWords = searchTerm.toLowerCase().split(' ').filter(word => word.length > 0);
+        
         filteredUsers = filteredUsers.filter((user: User) => {
           const searchableText = [
             user.name,
             user.email,
-            user.phone || '',
-            user.username || ''
+            user.phone || ''
           ].join(' ').toLowerCase();
 
-          // Buscar si todas las palabras del searchTerm están presentes
-          return searchWords.every(word =>
+          return searchWords.every((word: string) =>
             searchableText.includes(word)
           );
         });
 
-        console.log('🎯 Usuarios filtrados:', filteredUsers.length);
-        console.log('📝 Usuarios filtrados:', filteredUsers.map((u: User) => ({ name: u.name, email: u.email })));
+        console.log('🔍 Usuarios después de búsqueda:', filteredUsers.length);
       }
 
+      console.log('� Usuarios finales después de todos los filtros:', filteredUsers.length);
+      console.log('� Usuarios finales:', filteredUsers.map(u => ({ name: u.name, email: u.email, status: u.status })));
+      
       setUsers(filteredUsers);
       setError(null);
-      setCurrentPage(1); // Reset to first page on new search
     } catch (err) {
-      console.error("Error al cargar usuarios:", err);
-      const errorMessage = err instanceof Error ? err.message : "Ocurrió un error inesperado";
-      setError(errorMessage);
-      toast.error(`Error al cargar los usuarios: ${errorMessage}`);
+      console.error('Error fetching users:', err);
+      setError(err instanceof Error ? err.message : 'Error al cargar usuarios');
+      setUsers([]);
     } finally {
       setIsLoading(false);
     }
-  }, [searchTerm, disabledUsers]);
+  }, [searchTerm, storeId, showDeletedUsers]);
 
   useEffect(() => {
     fetchUsers();
@@ -189,29 +155,47 @@ export function UserTable({
     return <Badge className={variant}>{label}</Badge>;
   };
 
+  const getStatusBadge = (status?: string) => {
+    const statusMap = {
+      ACTIVE: {
+        label: "Activo",
+        variant: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+      },
+      INACTIVE: {
+        label: "Inactivo", 
+        variant: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+      },
+      DELETED: {
+        label: "Eliminado",
+        variant: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+      },
+    };
+
+    const userStatus = status || 'ACTIVE';
+    const { label, variant } = statusMap[userStatus as keyof typeof statusMap] || statusMap.ACTIVE;
+
+    return <Badge className={variant}>{label}</Badge>;
+  };
+
 
   const handleDelete = async (userId: string) => {
-    if (!confirm("¿Estás seguro de que deseas desactivar este usuario?\n\nEl usuario ya no aparecerá en la lista de usuarios activos, pero sus datos y ventas relacionadas se mantendrán intactos en el sistema.")) {
+    if (!confirm("¿Estás seguro de que deseas eliminar este usuario?\n\nEsta acción realizará un soft delete y el usuario pasará a estado 'ELIMINADO'.")) {
       return;
     }
 
     try {
-      // Agregar usuario a la lista de desactivados en localStorage
-      const newDisabledUsers = [...disabledUsers, userId];
-      setDisabledUsers(newDisabledUsers);
-      localStorage.setItem('disabledUsers', JSON.stringify(newDisabledUsers));
+      // Llamar al endpoint de soft delete del backend
+      await userService.deleteUser(userId);
+      
+      // Actualizar la lista de usuarios
+      await fetchUsers();
 
-      // Actualizar la lista de usuarios activos inmediatamente
-      setUsers(prevUsers => prevUsers.filter(user => user.id !== userId));
-
-      console.log('🚫 Usuario desactivado:', userId);
-      console.log('📊 Total usuarios desactivados:', newDisabledUsers.length);
-
-      toast.success("¡Usuario desactivado correctamente! El usuario ya no aparece en la lista de usuarios activos.");
+      console.log('�️ Usuario eliminado correctamente:', userId);
+      toast.success("¡Usuario eliminado correctamente!");
     } catch (err) {
-      console.error("Error al desactivar usuario:", err);
-      const errorMessage = err instanceof Error ? err.message : "Error al desactivar el usuario";
-      toast.error(`Error al desactivar el usuario: ${errorMessage}`);
+      console.error("Error al eliminar usuario:", err);
+      const errorMessage = err instanceof Error ? err.message : "Error al eliminar el usuario";
+      toast.error(`Error al eliminar el usuario: ${errorMessage}`);
     }
   };
 
@@ -318,6 +302,22 @@ export function UserTable({
 
   return (
     <div className="rounded-md border">
+      {/* Filtro para mostrar usuarios eliminados */}
+      <div className="border-b p-4">
+        <div className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            id="showDeletedUsers"
+            checked={showDeletedUsers}
+            onChange={(e) => setShowDeletedUsers(e.target.checked)}
+            className="rounded border-gray-300 text-primary focus:ring-primary"
+          />
+          <label htmlFor="showDeletedUsers" className="text-sm font-medium cursor-pointer">
+            Mostrar usuarios eliminados
+          </label>
+        </div>
+      </div>
+      
       <div className="relative w-full overflow-auto">
         <Table>
           <TableHeader className="bg-muted/50">
@@ -325,6 +325,8 @@ export function UserTable({
               <TableHead className="w-[200px]">Nombre</TableHead>
               <TableHead className="hidden md:table-cell">Email</TableHead>
               <TableHead className="w-[120px]">Rol</TableHead>
+              <TableHead className="w-[100px]">Estado</TableHead>
+              <TableHead className="hidden sm:table-cell">Tienda</TableHead>
               <TableHead className="hidden sm:table-cell">Teléfono</TableHead>
               <TableHead className="hidden lg:table-cell">Creado</TableHead>
               <TableHead className="hidden xl:table-cell">Actualizado</TableHead>
@@ -351,6 +353,28 @@ export function UserTable({
                 </div>
               </TableCell>
               <TableCell>{getRoleBadge(user.role)}</TableCell>
+              <TableCell>{getStatusBadge(user.status)}</TableCell>
+              <TableCell className="hidden sm:table-cell">
+                {user.stores && user.stores.length > 0 ? (
+                  <div className="space-y-1">
+                    {user.stores.slice(0, 2).map((store) => (
+                      <div key={store.id} className="flex items-center gap-1">
+                        <Building className="h-4 w-4 text-gray-400" />
+                        <span className="truncate max-w-[150px]" title={store.name}>
+                          {store.name}
+                        </span>
+                      </div>
+                    ))}
+                    {user.stores.length > 2 && (
+                      <span className="text-xs text-muted-foreground">
+                        +{user.stores.length - 2} más
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-muted-foreground">-</span>
+                )}
+              </TableCell>
               <TableCell className="hidden sm:table-cell">
                 {user.phone ? (
                   <a 

@@ -1,75 +1,93 @@
 // src/services/client.service.ts
 import { api } from './api';
 import { AxiosError } from 'axios';
-import { Client, CreateClientDto, UpdateClientDto, ClientsResponse } from '@/types/client.types';
+
+// Interfaces basadas en el backend
+export interface Client {
+  id: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  ruc: string | null;
+  dni: string;
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateClientDto {
+  name?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  ruc?: string;
+  dni: string; // obligatorio
+  userId: string; // obligatorio
+}
+
+export interface UpdateClientDto {
+  name?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  ruc?: string;
+  dni?: string;
+  userId?: string;
+}
+
+export interface ClientsResponse {
+  data: Client[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
 
 export const clientService = {
   async getClients(page: number = 1, limit: number = 10): Promise<ClientsResponse> {
     try {
       console.log('Obteniendo clientes...', { page, limit });
-      const response = await api.get<{
-        data: Client[];
-        meta: {
-          total: number;
-          page: number;
-          limit: number;
-          totalPages: number;
-        }
-      }>('/clientes', {
+      const response = await api.get<ClientsResponse>('/clientes', {
         params: { page, limit }
       });
 
       console.log('Respuesta del backend (getClients):', response.data);
-
-      if (!response.data || !Array.isArray(response.data.data)) {
-        console.log('No se encontraron clientes o la respuesta no tiene el formato esperado');
-        return {
-          data: [],
-          total: 0,
-          meta: {
-            totalItems: 0,
-            itemCount: 0,
-            itemsPerPage: limit,
-            totalPages: 0,
-            currentPage: page
-          }
-        };
-      }
-
-      return {
-        data: response.data.data,
-        total: response.data.meta.total,
-        meta: {
-          totalItems: response.data.meta.total,
-          itemCount: response.data.data.length,
-          itemsPerPage: response.data.meta.limit,
-          totalPages: response.data.meta.totalPages,
-          currentPage: response.data.meta.page
-        }
-      };
+      return response.data;
     } catch (error) {
       const axiosError = error as AxiosError<{ message?: string }>;
-      console.error('Error fetching clients:', {
-        message: axiosError.message,
+      
+      console.error('Error en getClients:', {
+        error: axiosError.message,
         response: axiosError.response?.data,
+        status: axiosError.response?.status,
+        url: axiosError.config?.url
       });
-      return {
-        data: [],
-        total: 0,
-        meta: {
-          totalItems: 0,
-          itemCount: 0,
-          itemsPerPage: limit,
-          totalPages: 0,
-          currentPage: page
-        }
-      };
+      
+      // Manejar error de permisos específico
+      if (axiosError.response?.status === 403) {
+        throw new Error('No tienes permisos para ver la lista de clientes (solo ADMIN)');
+      }
+      
+      throw new Error(
+        axiosError.response?.data?.message || 
+        'Error al obtener los clientes. Por favor, intente nuevamente.'
+      );
     }
   },
 
+  // ✅ CORREGIDO: Solo ADMIN puede buscar
   async searchClients(query: string): Promise<Client[]> {
     console.log('Buscando clientes con query:', query);
     try {
+      // El backend requiere mínimo 3 caracteres
+      if (query.trim().length < 3) {
+        console.log('La búsqueda requiere mínimo 3 caracteres');
+        return [];
+      }
+
       const response = await api.get<Client[]>('/clientes/search', {
         params: { query }
       });
@@ -77,6 +95,17 @@ export const clientService = {
       return response.data || [];
     } catch (error) {
       const axiosError = error as AxiosError<{ message?: string }>;
+      
+      // ✅ Manejar error de permisos específico para búsqueda
+      if (axiosError.response?.status === 403) {
+        console.log('No tienes permisos para buscar clientes (solo ADMIN)');
+        throw new Error('No tienes permisos para buscar clientes. Esta función está disponible solo para administradores.');
+      }
+      
+      if (axiosError.response?.status === 400) {
+        console.log('Búsqueda inválida o muy corta');
+        return [];
+      }
       
       if (axiosError.response?.status === 404) {
         console.log('No se encontraron resultados para la búsqueda');
@@ -87,13 +116,47 @@ export const clientService = {
         message: axiosError.message,
         response: axiosError.response?.data,
         status: axiosError.response?.status,
-        statusText: axiosError.response?.statusText,
-        url: axiosError.config?.url,
-        method: axiosError.config?.method,
-        headers: axiosError.config?.headers
+        url: axiosError.config?.url
       });
       
       return [];
+    }
+  },
+
+  async getClientByDni(dni: string): Promise<Client | null> {
+    console.log('Buscando cliente con DNI:', dni);
+    try {
+      // ✅ USAR NUEVO ENDPOINT DIRECTO (no requiere permisos de ADMIN)
+      const response = await api.get<Client>(`/clientes/dni/${dni}`);
+      console.log('Respuesta de getClientByDni directo:', response.data);
+      return response.data;
+      
+    } catch (error) {
+      const axiosError = error as AxiosError<{ message?: string }>;
+      
+      console.error('Error en getClientByDni:', {
+        dni,
+        error: axiosError.message,
+        response: axiosError.response?.data,
+        status: axiosError.response?.status,
+        url: axiosError.config?.url
+      });
+      
+      // ✅ Manejar error de permisos específico
+      if (error instanceof Error && error.message.includes('solo ADMIN')) {
+        throw error;
+      }
+      
+      // Si es 404, el cliente no existe (no es error, es resultado esperado)
+      if (axiosError.response?.status === 404) {
+        console.log('Cliente no encontrado con DNI:', dni);
+        return null;
+      }
+      
+      throw new Error(
+        axiosError.response?.data?.message || 
+        'Error al buscar el cliente por DNI. Por favor, intente nuevamente.'
+      );
     }
   },
 
@@ -112,6 +175,12 @@ export const clientService = {
         status: axiosError.response?.status,
         url: axiosError.config?.url
       });
+      
+      // ✅ Manejar error de permisos específico
+      if (axiosError.response?.status === 403) {
+        throw new Error('No tienes permisos para ver este cliente. Solo puedes ver tu propio perfil.');
+      }
+      
       throw new Error(axiosError.response?.data?.message || 'No se pudo cargar el cliente. Por favor, intente nuevamente.');
     }
   },
@@ -119,6 +188,14 @@ export const clientService = {
   async createClient(clientData: CreateClientDto): Promise<Client> {
     console.log('Creando nuevo cliente con datos:', clientData);
     try {
+      // Validaciones obligatorias según el backend
+      if (!clientData.dni) {
+        throw new Error('El DNI es obligatorio para crear un cliente');
+      }
+      if (!clientData.userId) {
+        throw new Error('El userId es obligatorio para crear un cliente');
+      }
+      
       const response = await api.post<Client>('/clientes', clientData);
       console.log('Cliente creado exitosamente:', response.data);
       return response.data;
@@ -130,6 +207,12 @@ export const clientService = {
         status: axiosError.response?.status,
         requestData: clientData
       });
+      
+      // ✅ Manejar error de conflicto específico
+      if (axiosError.response?.status === 409) {
+        throw new Error('El cliente ya existe (email, RUC o DNI duplicado)');
+      }
+      
       throw new Error(axiosError.response?.data?.message || 'No se pudo crear el cliente. Por favor, intente nuevamente.');
     }
   },
@@ -149,6 +232,17 @@ export const clientService = {
         status: axiosError.response?.status,
         requestData: clientData
       });
+      
+      // ✅ Manejar error de permisos específico
+      if (axiosError.response?.status === 403) {
+        throw new Error('No tienes permisos para actualizar este cliente. Solo puedes actualizar tu propio perfil.');
+      }
+      
+      // ✅ Manejar error de conflicto específico
+      if (axiosError.response?.status === 409) {
+        throw new Error('Conflicto con datos únicos (email, RUC o DNI duplicado)');
+      }
+      
       throw new Error(axiosError.response?.data?.message || 'No se pudo actualizar el cliente. Por favor, intente nuevamente.');
     }
   },
@@ -157,40 +251,27 @@ export const clientService = {
     console.log('Eliminando cliente con ID:', id);
     try {
       const response = await api.delete(`/clientes/${id}`);
-      console.log('Respuesta del servidor al eliminar:', response);
-      if (response.status >= 200 && response.status < 300) {
-        console.log('Cliente eliminado exitosamente');
-        return;
-      }
-      throw new Error(`Error inesperado al eliminar: ${response.status} ${response.statusText}`);
+      console.log('Cliente eliminado exitosamente');
+      return;
     } catch (error) {
       const axiosError = error as AxiosError<{ message?: string }>;
       
-      // Detallar el error para depuración
-      const errorDetails = {
+      console.error('Error al eliminar cliente:', {
         id,
-        message: axiosError.message,
+        error: axiosError.message,
+        response: axiosError.response?.data,
         status: axiosError.response?.status,
-        statusText: axiosError.response?.statusText,
-        responseData: axiosError.response?.data,
-        requestConfig: {
-          url: axiosError.config?.url,
-          method: axiosError.config?.method,
-          headers: axiosError.config?.headers
-        }
-      };
+        url: axiosError.config?.url
+      });
       
-      console.error('Error detallado al eliminar cliente:', errorDetails);
-      
-      // Proporcionar un mensaje de error más descriptivo
+      // Mensajes de error específicos según el código de estado
       let errorMessage = 'No se pudo eliminar el cliente. ';
       
       if (axiosError.response) {
-        // El servidor respondió con un código de estado fuera del rango 2xx
         if (axiosError.response.status === 404) {
           errorMessage = 'El cliente no fue encontrado o ya fue eliminado.';
         } else if (axiosError.response.status === 403) {
-          errorMessage = 'No tienes permiso para eliminar este cliente.';
+          errorMessage = 'No tienes permiso para eliminar este cliente (solo ADMIN puede eliminar).';
         } else if (axiosError.response.status === 400) {
           errorMessage = 'Solicitud incorrecta. Verifica los datos e inténtalo de nuevo.';
         } else if (axiosError.response.data?.message) {
@@ -199,10 +280,8 @@ export const clientService = {
           errorMessage += `Error del servidor (${axiosError.response.status}).`;
         }
       } else if (axiosError.request) {
-        // La solicitud fue hecha pero no se recibió respuesta
         errorMessage = 'No se recibió respuesta del servidor. Verifica tu conexión a internet.';
       } else {
-        // Algo pasó en la configuración de la solicitud
         errorMessage = `Error al configurar la solicitud: ${axiosError.message}`;
       }
       

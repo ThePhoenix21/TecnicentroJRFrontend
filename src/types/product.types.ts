@@ -7,6 +7,7 @@ export interface User {
 
 export interface Product {
   id: string;
+  storeProductId?: string; // ✅ ID del store-product para enviar al backend
   name: string;
   description: string | Record<string, unknown>; // Handle the {} case in the response
   price: number;
@@ -20,6 +21,7 @@ export interface Product {
   updatedAt: string;
   createdById: string;
   createdBy?: User;
+  isDeleted?: boolean; // Indica si el producto ha sido eliminado lógicamente
 }
 
 export interface ProductsResponse {

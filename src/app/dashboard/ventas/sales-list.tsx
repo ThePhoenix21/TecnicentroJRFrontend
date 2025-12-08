@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import React from "react";
-import type { SaleResponse } from "@/services/sale.service";
+import type { Order } from "@/services/order.service";
 
 // Table components with consistent theming
 const Table = ({ children }: { children: React.ReactNode }) => (
@@ -106,7 +106,7 @@ const Badge = ({
 );
 
 type SalesListProps = {
-  sales: SaleResponse[];
+  sales: Order[];
   onNewSale: () => void;
   onViewSale: (orderId: string) => void;
 };
@@ -186,8 +186,6 @@ export function SalesList({ sales, onNewSale, onViewSale }: SalesListProps) {
                     <span className="text-sm text-muted-foreground">Total:</span>
                     <span className="font-medium">${sale.totalAmount?.toFixed(2) || '0.00'}</span>
                   </div>
-                  
-                  
                 </div>
                 
                 <Button 
@@ -250,14 +248,14 @@ export function SalesList({ sales, onNewSale, onViewSale }: SalesListProps) {
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       <div className="space-y-1 max-w-[200px]">
-                        {sale.products?.slice(0, 2).map((product, index) => (
+                        {sale.orderProducts?.slice(0, 2).map((product, index) => (
                           <div key={`${product.productId}-${index}`} className="text-sm truncate">
-                            {product.productName || 'Producto'} × {product.quantity}
+                            {product.product?.name || 'Producto'} × {product.quantity}
                           </div>
                         ))}
-                        {(sale.products?.length || 0) > 2 && (
+                        {(sale.orderProducts?.length || 0) > 2 && (
                           <div className="text-xs text-muted-foreground">
-                            +{(sale.products?.length || 0) - 2} más
+                            +{(sale.orderProducts?.length || 0) - 2} más
                           </div>
                         )}
                       </div>
@@ -265,7 +263,9 @@ export function SalesList({ sales, onNewSale, onViewSale }: SalesListProps) {
                     <TableCell className="font-medium whitespace-nowrap">
                       ${sale.totalAmount?.toFixed(2) || '0.00'}
                     </TableCell>
-                    
+                    <TableCell className="hidden lg:table-cell">
+                      <span className="text-sm">{sale.paymentMethod || 'N/A'}</span>
+                    </TableCell>
                     <TableCell>
                       <Badge 
                         variant="outline" 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { Product } from "@/types/product.types";
+import type { SaleData } from '@/types/sale.types';
 import {
   Plus,
   Minus,
@@ -9,18 +10,79 @@ import {
   ShoppingCart,
   X,
   XCircle,
-  FileText,
   Info,
+  Printer,
+  Download,
+  AlertCircle,
 } from "lucide-react";
 import { uploadImages } from "@/lib/api/imageService";
 import { Progress } from "@/components/ui/progress";
+import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import Image from "next/image";
 import { toast } from "sonner";
-import { PDFViewer } from "@react-pdf/renderer";
-import ReceiptPDF from './ReceiptPDF';
+import { PDFViewer, pdf, PDFDownloadLink, PDFDownloadLinkProps } from "@react-pdf/renderer";
+import ReceiptThermalPDF from './ReceiptThermalPDF';
+import { clientService } from '@/services/client.service';
+import { cashSessionService } from "@/services/cash-session.service";
+
+// Definir el tipo para los props del PDFDownloadLink
+type PDFDownloadLinkRenderProps = {
+  loading: boolean;
+  error: Error | null;
+  blob: Blob | null;
+  url: string | null;
+};
+
+// Enum para métodos de pago
+enum PaymentType {
+  EFECTIVO = 'EFECTIVO',
+  TARJETA = 'TARJETA',
+  TRANSFERENCIA = 'TRANSFERENCIA',
+  YAPE = 'YAPE',
+  PLIN = 'PLIN',
+  OTRO = 'OTRO'
+}
+
+// Tipo para método de pago individual
+type PaymentMethod = {
+  id: string;
+  type: PaymentType;
+  amount: number;
+};
+
+// Definir el tipo para los datos de la venta
+type ReceiptData = {
+  orderId: string;
+  orderNumber?: string;
+  customerName: string;
+  customer: {
+    documentNumber: string;
+    documentType: 'dni' | 'ruc' | 'ci' | 'other';
+    phone: string;
+    email: string;
+    address: string;
+  };
+  items: Array<{
+    name: string;
+    quantity: number;
+    price: number;
+    type: 'product' | 'service';
+    notes?: string;
+  }>;
+  subtotal: number;
+  total: number;
+  paymentMethod?: string;
+  paymentReference?: string;
+  createdBy?: {
+    name: string;
+    email?: string;
+  };
+};
+
 import { StyleSheet, Font, Image as PDFImage } from '@react-pdf/renderer';
 import {
   Dialog,
@@ -29,6 +91,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useDropzone } from "react-dropzone";
+import { Order } from "@/services/order.service";
+import { PaymentConfirmationDialog } from "@/components/ui/payment-confirmation-dialog";
 
 type CartItem = {
   id: string;
@@ -41,7 +105,10 @@ type CartItem = {
   serviceType?: 'REPAIR' | 'WARRANTY'; // Added service type field
   // Add these to match ProductOrder
   productId?: string;
+  storeProductId?: string; // ID del store-product para enviar al backend
   unitPrice?: number;
+  customPrice?: number; // Precio personalizado para el producto
+  paymentMethods: PaymentMethod[]; // Métodos de pago para el ítem
 };
 
 interface NewItemForm {
@@ -56,7 +123,8 @@ interface NewItemForm {
   // Add these to match ProductOrder
   productId?: string;
   unitPrice?: number;
-}
+  paymentMethods: PaymentMethod[]; // Métodos de pago para el ítem
+};
 
 type Service = {
   id: string;
@@ -72,33 +140,13 @@ type Service = {
 // Tipos para la estructura de la venta
 // Types moved to sale.service.ts
 
-type SaleData = {
-  clientInfo: {
-    name: string;
-    email: string;
-    phone: string;
-    address?: string;
-    dni?: string;
-  };
-  products: Array<{
-    productId: string;
-    quantity: number;
-  }>;
-  services: Array<{
-    name: string;
-    description: string;
-    price: number;
-    type: "REPAIR" | "WARRANTY"; // Updated to match backend specification
-    photoUrls: string[];
-  }>;
-};
 
 // Mantenemos el tipo CartItem para el estado del carrito
 
 type SaleFormProps = {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: SaleData) => Promise<{ success: boolean; orderId?: string; orderNumber?: string }>;
+  onSubmit: (data: SaleData) => Promise<{ success: boolean; orderId?: string; orderNumber?: string; orderData?: any }>;
   products: Product[];
   services?: Service[];
 };
@@ -110,15 +158,23 @@ export function SaleForm({
   products,
   services,
 }: SaleFormProps) {
+  const { currentStore } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState<CartItem[]>([]);
   const [showServiceSheet, setShowServiceSheet] = useState(false); // Para la hoja de servicio
+  const [isDniValid, setIsDniValid] = useState(false);
+  const [isSearchingClient, setIsSearchingClient] = useState(false);
+  const [documentNumberChangedManually, setDocumentNumberChangedManually] = useState(false);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [currentCashSession, setCurrentCashSession] = useState<string | null>(null);
+  const [isLoadingCashSession, setIsLoadingCashSession] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
+  const [orderResponse, setOrderResponse] = useState<any>(null);
   // Estados para el seguimiento de carga de imágenes
   const [uploadStatus, setUploadStatus] = useState<{
     inProgress: boolean;
@@ -137,6 +193,42 @@ export function SaleForm({
   const [showUploadError, setShowUploadError] = useState(false);
   const [forceSubmit, setForceSubmit] = useState(false);
 
+  // Estado para manejar errores de creación de orden
+  const [orderError, setOrderError] = useState<{
+    message: string;
+    code?: string;
+  } | null>(null);
+
+  // Estado para el modal de confirmación de pago
+  const [paymentConfirmation, setPaymentConfirmation] = useState<{
+    isOpen: boolean;
+    itemName: string;
+    expectedTotal: number;
+    paymentTotal: number;
+    pendingItem: {
+      item: Pick<CartItem, "id" | "name" | "price"> & {
+        productId?: string;
+        customPrice?: number;
+      };
+      type: CartItem["type"];
+      notes: string;
+      quantity: number;
+      images: File[];
+      serviceType?: 'REPAIR' | 'WARRANTY';
+      customPrice?: number;
+      paymentMethods: PaymentMethod[];
+    } | null;
+  }>({
+    isOpen: false,
+    itemName: "",
+    expectedTotal: 0,
+    paymentTotal: 0,
+    pendingItem: null,
+  });
+
+  // Obtener información del usuario autenticado
+  const { user } = useAuth();
+
   const [newItem, setNewItem] = useState<NewItemForm>({
     id: "",
     type: "",
@@ -146,6 +238,13 @@ export function SaleForm({
     notes: "",
     images: [],
     serviceType: "REPAIR", // Default service type
+    productId: "",
+    unitPrice: 0,
+    paymentMethods: [{
+      id: "1",
+      type: PaymentType.EFECTIVO,
+      amount: 0
+    }]
   });
   const onDrop = useCallback((acceptedFiles: File[]) => {
     setNewItem((prev) => {
@@ -189,6 +288,7 @@ export function SaleForm({
     name: string;
     phone: string;
     documentNumber: string;
+    documentType?: string;
     email: string;
     address: string;
     ruc?: string; // Added RUC field
@@ -199,6 +299,7 @@ export function SaleForm({
     name: "",
     phone: "",
     documentNumber: "",
+    documentType: "dni",
     email: "",
     address: "",
     ruc: "",
@@ -206,6 +307,7 @@ export function SaleForm({
   });
 
   const [errors, setErrors] = useState<{
+    name?: string;
     email?: string;
     phone?: string;
     documentNumber?: string;
@@ -260,7 +362,7 @@ export function SaleForm({
 
   // Reset completo del estado de la venta
   const resetSaleState = useCallback(() => {
-    console.log("🧹 Iniciando reset del estado de venta");
+    console.log(" Iniciando reset del estado de venta");
 
     setSelectedItems([]); // Limpiar el carrito
     setCustomerData({
@@ -286,6 +388,8 @@ export function SaleForm({
     setForceSubmit(false);
     setOrderId(null);
     setOrderNumber(null);
+    setOrderError(null); // Limpiar errores de orden
+    setOrderResponse(null); // Limpiar respuesta de orden
     // Reset newItem form
     setNewItem({
       id: "",
@@ -295,21 +399,60 @@ export function SaleForm({
       quantity: "1",
       notes: "",
       images: [],
-      serviceType: "REPAIR",
+      serviceType: "REPAIR", // Reset service type
+      productId: "",
+      unitPrice: 0,
+      paymentMethods: [{
+        id: "1",
+        type: PaymentType.EFECTIVO,
+        amount: 0
+      }]
     });
 
     console.log("✅ Estado de venta reseteado completamente");
   }, []);
 
-  // ✅ Limpiar estado cuando se abre una nueva venta
+  // Efecto para cargar la sesión de caja activa cuando se abre el formulario o cambia la tienda
+  useEffect(() => {
+    if (isOpen && currentStore?.id) {
+      loadActiveCashSession();
+    }
+  }, [isOpen, currentStore?.id]);
+
+  // Función para cargar la sesión de caja activa
+  const loadActiveCashSession = async () => {
+    if (!currentStore?.id) return;
+    
+    setIsLoadingCashSession(true);
+    try {
+      console.log('🔍 Buscando sesión de caja abierta para la tienda:', currentStore.id);
+      const openSession = await cashSessionService.getOpenCashSession(currentStore.id);
+      
+      if (openSession) {
+        setCurrentCashSession(openSession.id);
+        console.log('✅ Sesión de caja abierta encontrada:', openSession.id);
+      } else {
+        setCurrentCashSession(null);
+        console.log('⚠️ No hay sesión de caja abierta para esta tienda');
+        toast.warning('No hay una sesión de caja abierta. Debe abrir una sesión de caja antes de crear ventas.');
+      }
+    } catch (error) {
+      console.error('❌ Error al cargar sesión de caja abierta:', error);
+      setCurrentCashSession(null);
+      toast.error('Error al verificar la sesión de caja');
+    } finally {
+      setIsLoadingCashSession(false);
+    }
+  };
+
+  // Limpiar estado cuando se abre una nueva venta
   useEffect(() => {
     if (isOpen) {
-      console.log("🚪 Nueva venta abierta - limpiando estado anterior");
+      console.log(" Nueva venta abierta - limpiando estado anterior");
       resetSaleState();
       setShowUploadError(false);
     }
   }, [isOpen, resetSaleState]);
-
 
   const filteredItems = (): (Product | Service)[] => {
     if (!searchTerm.trim()) return [];
@@ -338,14 +481,73 @@ export function SaleForm({
 
   // Manejar selección de ítem
   const handleItemSelect = (item: Product | Service) => {
-    setNewItem((prev) => ({
-      ...prev,
-      id: item.id,
-      name: item.name,
-      price: item.price.toString(),
-    }));
+    setNewItem((prev) => {
+      const updated = {
+        ...prev,
+        id: item.id,
+        name: item.name,
+        price: item.price.toString(),
+      };
+      
+      // Si es un producto, configurar payment automático de EFECTIVO
+      if ("stock" in item) { // Es un producto
+        updated.paymentMethods = [{
+          id: "1",
+          type: PaymentType.EFECTIVO,
+          amount: item.price
+        }];
+      }
+      
+      return updated;
+    });
     setSearchTerm(""); // Limpiar búsqueda
     setIsDropdownOpen(false);
+  };
+
+  // Manejar foco en el campo de búsqueda
+  const handleFocus = () => {
+    if (newItem.type === "product") {
+      setSearchTerm(newItem.name);
+      setIsDropdownOpen(!!newItem.name);
+    }
+  };
+
+  // Funciones para manejar métodos de pago
+  const addPaymentMethod = () => {
+    setNewItem(prev => ({
+      ...prev,
+      paymentMethods: [
+        ...prev.paymentMethods,
+        {
+          id: Date.now().toString(),
+          type: PaymentType.EFECTIVO,
+          amount: 0
+        }
+      ]
+    }));
+  };
+
+  const removePaymentMethod = (id: string) => {
+    if (newItem.paymentMethods.length > 1) {
+      setNewItem(prev => ({
+        ...prev,
+        paymentMethods: prev.paymentMethods.filter(pm => pm.id !== id)
+      }));
+    }
+  };
+
+  const updatePaymentMethod = (id: string, field: 'type' | 'amount', value: PaymentType | number) => {
+    setNewItem(prev => ({
+      ...prev,
+      paymentMethods: prev.paymentMethods.map(pm => 
+        pm.id === id ? { ...pm, [field]: value } : pm
+      )
+    }));
+  };
+
+  // Eliminar ítem del carrito
+  const removeItem = (id: string) => {
+    setSelectedItems((prev) => prev.filter((item) => item.id !== id));
   };
 
   // Manejar cambios en el formulario
@@ -380,23 +582,20 @@ export function SaleForm({
 
       if (name === "name" && prev.type === "product") {
         setIsDropdownOpen(!!value);
+        
+        // Si es un producto y se encuentra en la lista, configurar payment automático
+        const product = products.find(p => p.id === value);
+        if (product && prev.paymentMethods.length === 1 && prev.paymentMethods[0].amount === 0) {
+          newState.paymentMethods = [{
+            id: "1",
+            type: PaymentType.EFECTIVO,
+            amount: product.price
+          }];
+        }
       }
 
       return newState;
     });
-  };
-
-  // Manejar foco en el campo de búsqueda
-  const handleFocus = () => {
-    if (newItem.type === "product") {
-      setSearchTerm(newItem.name);
-      setIsDropdownOpen(!!newItem.name);
-    }
-  };
-
-  // Eliminar ítem del carrito
-  const removeItem = (id: string): void => {
-    setSelectedItems((prev) => prev.filter((item) => item.id !== id));
   };
 
   // Agregar ítem personalizado
@@ -416,25 +615,12 @@ export function SaleForm({
     // Para servicios, la cantidad siempre debe ser 1
     const finalQuantity = newItem.type === "service" ? 1 : quantity;
 
-    if (newItem.type === "product") {
-      // Para productos, necesitamos el ID del producto
-      const product = products.find((p) => p.id === newItem.id);
-      if (!product) return;
+    // Calcular total esperado y total de métodos de pago
+    const expectedTotal = price * finalQuantity;
+    const paymentTotal = newItem.paymentMethods.reduce((sum, pm) => sum + pm.amount, 0);
 
-      handleAddItem(
-        {
-          id: product.id,
-          name: product.name,
-          price: product.price,
-          productId: product.id,
-        },
-        "product",
-        notes,
-        quantity,
-        [],
-        undefined // serviceType no aplica para productos
-      );
-    } else if (newItem.type === "service") {
+    // Para servicios, los métodos de pago son opcionales - no mostrar modal de confirmación
+    if (newItem.type === "service") {
       // Para servicios, generamos un ID temporal
       const serviceId = `temp-${Date.now()}-${Math.random()
         .toString(36)
@@ -450,7 +636,103 @@ export function SaleForm({
         notes,
         finalQuantity,
         images,
-        newItem.serviceType || "REPAIR" // serviceType del formulario
+        newItem.serviceType || "REPAIR", // serviceType del formulario
+        undefined,
+        newItem.paymentMethods // Pasar métodos de pago del formulario (pueden estar vacíos)
+      );
+
+      // Reiniciar formulario
+      setNewItem({
+        id: "",
+        type: newItem.type, // Mantener el tipo seleccionado
+        name: "",
+        price: "",
+        quantity: "1",
+        notes: "",
+        images: [],
+        serviceType: "REPAIR", // Reset service type
+        productId: "",
+        unitPrice: 0,
+        paymentMethods: [], // Reset payment methods
+      });
+      return;
+    }
+
+    // Si los montos no coinciden, mostrar modal de confirmación (solo para productos y personalizados)
+    if (expectedTotal !== paymentTotal) {
+      // Preparar el ítem pendiente para confirmación
+      let pendingItem;
+      
+      if (newItem.type === "product") {
+        const product = products.find((p) => p.id === newItem.id);
+        if (!product) return;
+        
+        pendingItem = {
+          item: {
+            id: product.id,
+            name: product.name,
+            price: product.price,
+            productId: product.id,
+          },
+          type: "product" as const,
+          notes,
+          quantity,
+          images: [],
+          customPrice: price > 0 ? price : undefined,
+          paymentMethods: newItem.paymentMethods,
+        };
+      } else {
+        // Ítem personalizado
+        pendingItem = {
+          item: {
+            id: `custom-${Date.now()}`,
+            name: newItem.name,
+            price: price,
+          },
+          type: "custom" as const,
+          notes,
+          quantity,
+          images,
+          paymentMethods: newItem.paymentMethods,
+        };
+      }
+
+      // Mostrar modal de confirmación
+      setPaymentConfirmation({
+        isOpen: true,
+        itemName: newItem.name,
+        expectedTotal,
+        paymentTotal,
+        pendingItem,
+      });
+      
+      return; // No continuar con el agregado hasta confirmar
+    }
+
+    // Si los montos coinciden, agregar directamente
+    if (newItem.type === "product") {
+      // Para productos, necesitamos el ID del producto
+      const product = products.find((p) => p.id === newItem.id);
+      if (!product) return;
+
+      // Usar el precio personalizado si se ingresó, de lo contrario usar el precio del producto
+      const finalPrice = price > 0 ? price : product.price;
+      
+      handleAddItem(
+        {
+          id: product.id,
+          name: product.name,
+          price: product.price, // Mantener el precio original
+          customPrice: finalPrice, // Usar el precio personalizado
+          productId: product.storeProductId || product.id, // Guardar storeProductId si existe
+        } as CartItem, // Cast a CartItem para permitir storeProductId
+        "product",
+        notes,
+        quantity,
+        [],
+        undefined,
+        undefined,
+        newItem.paymentMethods // Pasar métodos de pago del formulario
       );
     } else {
       // Para ítems personalizados
@@ -464,7 +746,9 @@ export function SaleForm({
         notes,
         quantity,
         [],
-        undefined // serviceType no aplica para personalizados
+        undefined, // serviceType no aplica para personalizados
+        undefined,
+        newItem.paymentMethods // Pasar métodos de pago del formulario
       );
     }
 
@@ -477,18 +761,30 @@ export function SaleForm({
       quantity: "1",
       notes: "",
       images: [],
-      serviceType: "REPAIR", // Reset service type
+      serviceType: "REPAIR",
+      productId: "",
+      unitPrice: 0,
+      paymentMethods: [{
+        id: "1",
+        type: PaymentType.EFECTIVO,
+        amount: 0
+      }]
     });
   };
 
   // Agregar ítem al carrito
   const handleAddItem = (
-    item: Pick<CartItem, "id" | "name" | "price"> & { productId?: string },
+    item: Pick<CartItem, "id" | "name" | "price"> & {
+      productId?: string;
+      customPrice?: number; // Precio personalizado para el producto
+    },
     type: CartItem["type"],
     notes: string = "",
     quantity: number = 1,
     images: File[] = [],
-    serviceType?: 'REPAIR' | 'WARRANTY' // Added serviceType parameter
+    serviceType?: 'REPAIR' | 'WARRANTY', // Added serviceType parameter
+    customPrice?: number, // Precio personalizado opcional
+    paymentMethods: PaymentMethod[] = [] // Métodos de pago del formulario
   ): void => {
     setSelectedItems((prev: CartItem[]): CartItem[] => {
       const existingItem = prev.find((i: CartItem) => {
@@ -502,7 +798,10 @@ export function SaleForm({
         return false;
       });
 
-      const quantityToAdd = Math.max(1, isNaN(quantity) ? 1 : quantity);
+      const quantityToAdd = Math.max(
+        1,
+        isNaN(quantity) ? 1 : quantity
+      );
 
       if (existingItem) {
         return prev.map((i: CartItem) => {
@@ -518,6 +817,7 @@ export function SaleForm({
             ...i,
             quantity: i.quantity + quantityToAdd,
             notes: type === "service" ? notes || i.notes || "" : i.notes,
+            paymentMethods: paymentMethods, // Usar el parámetro paymentMethods
           };
 
           if (type === "service" && images.length > 0) {
@@ -535,18 +835,129 @@ export function SaleForm({
         });
       }
 
-      const newItem: CartItem = {
+      // Determinar el precio a usar: customPrice si está definido, de lo contrario usar el precio base del producto
+      const finalPrice = customPrice !== undefined ? customPrice : item.price;
+
+      const cartItem: CartItem = {
         ...item,
         id: item.id || `temp-${Date.now()}`,
+        price: item.price, // Mantener siempre el precio original
         quantity: quantityToAdd,
         type,
         notes: type === "service" ? notes : "",
-        ...(type === "product" && { productId: item.productId || item.id }),
+        paymentMethods: paymentMethods, // Usar el parámetro paymentMethods
+        ...(type === "product" && {
+          productId: item.productId || item.id,
+          storeProductId: item.productId || item.id,
+          // Guardar el precio personalizado si es diferente al precio base
+          ...(customPrice !== undefined && customPrice > 0 && customPrice !== item.price && {
+            customPrice: customPrice
+          })
+        }),
         ...(type === "service" && { images }),
         ...(type === "service" && { serviceType: serviceType || "REPAIR" }),
       } as CartItem;
 
-      return [...prev, newItem];
+      return [...prev, cartItem];
+    });
+  };
+
+  // Funciones para manejar la confirmación del modal de pago
+  const handlePaymentConfirmation = () => {
+    if (!paymentConfirmation.pendingItem) return;
+
+    const { pendingItem } = paymentConfirmation;
+    
+    // Usar el total de métodos de pago como precio confirmado
+    const confirmedPrice = paymentConfirmation.paymentTotal;
+
+    // Agregar el ítem con el precio confirmado
+    if (pendingItem.type === "product") {
+      const product = products.find((p) => p.id === pendingItem.item.id);
+      handleAddItem(
+        {
+          ...pendingItem.item,
+          price: pendingItem.item.price, // Mantener precio original
+          customPrice: confirmedPrice, // Usar precio confirmado
+          productId: product?.storeProductId || product?.id,
+          storeProductId: product?.storeProductId || product?.id,
+        } as CartItem, // Cast a CartItem para permitir storeProductId
+        pendingItem.type,
+        pendingItem.notes,
+        pendingItem.quantity,
+        pendingItem.images,
+        undefined,
+        confirmedPrice, // Precio personalizado confirmado
+        pendingItem.paymentMethods
+      );
+    } else if (pendingItem.type === "service") {
+      handleAddItem(
+        {
+          ...pendingItem.item,
+          price: confirmedPrice, // Para servicios, reemplazar el precio
+        },
+        pendingItem.type,
+        pendingItem.notes,
+        pendingItem.quantity,
+        pendingItem.images,
+        pendingItem.serviceType,
+        confirmedPrice, // Precio confirmado
+        pendingItem.paymentMethods
+      );
+    } else {
+      // Ítem personalizado
+      handleAddItem(
+        {
+          ...pendingItem.item,
+          price: confirmedPrice, // Reemplazar el precio
+        },
+        pendingItem.type,
+        pendingItem.notes,
+        pendingItem.quantity,
+        pendingItem.images,
+        undefined,
+        confirmedPrice, // Precio confirmado
+        pendingItem.paymentMethods
+      );
+    }
+
+    // Cerrar modal y reiniciar formulario
+    setPaymentConfirmation({
+      isOpen: false,
+      itemName: "",
+      expectedTotal: 0,
+      paymentTotal: 0,
+      pendingItem: null,
+    });
+
+    // Reiniciar formulario del nuevo ítem
+    setNewItem({
+      id: "",
+      type: newItem.type, // Mantener el tipo seleccionado
+      name: "",
+      price: "",
+      quantity: "1",
+      notes: "",
+      images: [],
+      serviceType: "REPAIR",
+      productId: "",
+      unitPrice: 0,
+      paymentMethods: [{
+        id: "1",
+        type: PaymentType.EFECTIVO,
+        amount: 0
+      }]
+    });
+  };
+
+  const handlePaymentCancel = () => {
+    // Cerrar modal sin agregar el ítem
+    setPaymentConfirmation({
+      isOpen: false,
+      itemName: "",
+      expectedTotal: 0,
+      paymentTotal: 0,
+      pendingItem: null,
     });
   };
 
@@ -554,7 +965,7 @@ export function SaleForm({
   const defaultClientInfo = {
     name: "venta",
     email: "venta_cliente@example.com",
-    phone: "999999999",
+    phone: "",
     address: "Calle Falsa 123",
     dni: "11111111",
   };
@@ -584,6 +995,9 @@ export function SaleForm({
     }
 
     try {
+      // Limpiar errores previos
+      setOrderError(null);
+
       // Iniciar estado de carga
       setUploadStatus((prev) => ({
         ...prev,
@@ -596,105 +1010,269 @@ export function SaleForm({
       // Procesar productos
       const productsData = selectedItems
         .filter((item) => item.type === "product")
-        .map((item) => ({
-          productId: item.id,
-          quantity: item.quantity,
-        }));
+        .map((item) => {
+          const hasCustomPrice = item.customPrice !== undefined && item.customPrice > 0 && item.customPrice !== item.price;
+          const finalPrice = hasCustomPrice ? item.customPrice! : item.price;
+          
+          // Usar los métodos de pago del formulario
+          const payments = item.paymentMethods.map(pm => ({
+            type: pm.type,
+            amount: pm.amount
+          }));
 
-      // Procesar servicios con subida de imágenes
+          return {
+            productId: item.storeProductId || item.productId || item.id, // Usar storeProductId si existe
+            quantity: item.quantity,
+            ...(hasCustomPrice ? { customPrice: finalPrice } : { price: item.price }),
+            payments
+          };
+        });
+
+      console.log("Productos procesados:", productsData);
+
+      // Procesar servicios
       const servicesData = await Promise.all(
         selectedItems
           .filter((item) => item.type === "service")
           .map(async (item) => {
             let photoUrls: string[] = [];
-
             if (item.images?.length) {
-              const result = await uploadImages(
-                item.images,
-                ({ total, completed }) => {
-                  const progress = Math.round((completed / total) * 100);
-                  setUploadStatus((prev) => ({
-                    ...prev,
-                    progress,
-                  }));
-                }
-              );
-
+              const result = await uploadImages(item.images, ({ total, completed }) => {
+                setUploadStatus((prev) => ({ ...prev, progress: Math.round((completed / total) * 100) }));
+              });
               if (result.failed.length > 0 && !forceSubmit) {
-                setUploadStatus((prev) => ({
-                  ...prev,
-                  error: `No se pudieron cargar ${result.failed.length} imágenes`,
-                  failedFiles: result.failed,
-                }));
+                setUploadStatus((prev) => ({ ...prev, error: `No se pudieron cargar ${result.failed.length} imágenes`, failedFiles: result.failed }));
                 setShowUploadError(true);
                 throw new Error("Error al subir imágenes");
               }
-
               photoUrls = result.urls;
             }
 
+            // Usar los métodos de pago del formulario
+            const payments = item.paymentMethods.map(pm => ({
+              type: pm.type,
+              amount: pm.amount
+            }));
+
             return {
-              name: item.name,
-              description: item.notes || "Sin descripción",
-              price:
-                typeof item.price === "string"
-                  ? parseFloat(item.price)
-                  : item.price,
+              name: item.name,              
+              price: typeof item.price === "string" ? parseFloat(item.price) : item.price,
               type: (item.serviceType as 'REPAIR' | 'WARRANTY' || "REPAIR"),
+              description: item.notes,
               photoUrls,
+              payments
             };
           })
       );
 
       // Validar que haya al menos un producto o servicio
       if (productsData.length === 0 && servicesData.length === 0) {
-        toast.error(
-          "La venta debe incluir al menos un producto o servicio válido"
-        );
+        toast.error("La venta debe incluir al menos un producto o servicio válido");
         return;
+      }
+
+      // Generar DNI único para ventas de productos si no se ingresó
+      let finalDni = customerData.documentNumber;
+      if (!finalDni && hasProducts && !hasServices) {
+        // Generar DNI único con timestamp para evitar colisiones
+        const timestamp = Date.now().toString().slice(-6);
+        finalDni = `00${timestamp}`;
       }
 
       // Usar los datos del cliente si hay servicios o productos, de lo contrario usar los valores por defecto
       const clientInfo = (hasServices || hasProducts)
         ? {
-            name: customerData.name || (hasServices ? "Venta" : "Cliente"),
-            email: customerData.email || (hasServices ? "venta@venta.com" : "cliente@ejemplo.com"),
-            phone: customerData.phone || (hasServices ? "123456789" : "999999999"),
-            address: customerData.address || (hasServices ? "Venta" : "Sin dirección"),
-            dni: customerData.documentNumber || (hasServices ? "11111111" : "00000000"),
-            ...(customerData.ruc && { ruc: customerData.ruc }),
-          }
+          name: customerData.name || (hasServices ? "Venta" : "Cliente"),
+          email: customerData.email,
+          phone: customerData.phone,
+          address: customerData.address || (hasServices ? "Venta" : "Sin dirección"),
+          dni: finalDni || (hasServices ? "11111111" : "00000000"),
+          ...(customerData.ruc && { ruc: customerData.ruc }),
+        }
         : defaultClientInfo;
+
+      console.log("existe productsData:", productsData);
+
+      // Calcular el totalAmount basado en la suma de métodos de pago de todos los ítems
+      const totalAmount = selectedItems.reduce((sum, item) => {
+        const itemPaymentTotal = item.paymentMethods.reduce((paymentSum, pm) => paymentSum + pm.amount, 0);
+        return sum + itemPaymentTotal;
+      }, 0);
+
+      // Validar que haya una sesión de caja activa
+      if (!currentCashSession) {
+        toast.error('No hay una sesión de caja activa. Debe abrir una sesión de caja antes de crear ventas.');
+        return;
+      }
 
       const saleData = {
         clientInfo,
         products: productsData,
         services: servicesData,
+        totalAmount, // Agregar el monto total confirmado
+        cashSessionId: currentCashSession, // Usar sesión de caja real
       };
 
-      console.log("Enviando datos de venta:", saleData);
       const result = await onSubmit(saleData);
 
       if (result.success) {
-        // Guardar el orderNumber para mostrarlo en el PDF
+        // Guardar la respuesta completa del backend para el PDF
+        console.log("este es el resultado: ", result);
+        setOrderResponse(result.orderData || result);
         setOrderNumber(result.orderNumber || null);
 
-        // ✅ Mostrar el PDF solo después de que la venta se concrete exitosamente
-        console.log("✅ Venta completada - mostrando hoja de servicio");
+        // Mostrar el PDF solo después de que la venta se concrete exitosamente
+        console.log(" Venta completada - mostrando hoja de servicio");
         setShowServiceSheet(true);
 
-        // ✅ El formulario se mantiene intacto hasta que el usuario cierre el PDF
-        console.log("📋 Hoja de servicio se mostrará - el usuario decidirá cuándo cerrar");
+        // El formulario se mantiene intacto hasta que el usuario cierre el PDF
+        console.log(" Hoja de servicio se mostrará - el usuario decidirá cuándo cerrar");
       }
     } catch (error) {
       console.error("Error al procesar la venta:", error);
-      toast.error(
-        error instanceof Error ? error.message : "Error al registrar la venta"
-      );
+
+      // Extraer mensaje de error y código si están disponibles
+      let errorMessage = error instanceof Error ? error.message : "Error al registrar la venta";
+      let errorCode = error && typeof error === 'object' && 'code' in error ? String(error.code) : undefined;
+
+      // Manejar específicamente el error de DNI duplicado
+      if (errorMessage.includes('Unique constraint failed on the fields: (`dni`)') ||
+        errorMessage.includes('duplicate key') ||
+        errorCode === 'DNI_ALREADY_EXISTS') {
+        errorMessage = 'El DNI 00000000 esta reservado para clientes por defecto. Ingrese un DNI diferente o deje el campo vacío para generar uno automáticamente.';
+        errorCode = 'DNI_ALREADY_EXISTS';
+      }
+
+      // Guardar el error en el estado para mostrarlo en la UI
+      setOrderError({
+        message: errorMessage,
+        code: errorCode
+      });
+
+      // También mostrar toast para notificación inmediata
+      toast.error(errorMessage);
     } finally {
       setUploadStatus((prev) => ({ ...prev, inProgress: false }));
     }
   };
+
+  // Buscar cliente por DNI con useCallback para evitar recreaciones innecesarias
+  const searchClientByDni = useCallback(async (dni: string) => {
+    if (!dni || dni.length !== 8) {
+      console.log('DNI inválido o incompleto');
+      return;
+    }
+    
+    console.log('Buscando cliente con DNI:', dni);
+    setIsSearchingClient(true);
+    
+    try {
+      const client = await clientService.getClientByDni(dni);
+      console.log('Respuesta de getClientByDni:', client);
+      
+      if (client) {
+        console.log('Cliente encontrado, actualizando campos con:', {
+          name: client.name,
+          email: client.email,
+          phone: client.phone,
+          address: client.address,
+          ruc: client.ruc,
+          dni: client.dni
+        });
+        
+        // Si encontramos el cliente, actualizamos los campos
+        setCustomerData(prev => {
+          const newData = {
+            ...prev,
+            name: client.name || '',
+            email: client.email || '',
+            phone: client.phone || '',
+            address: client.address || '',
+            ruc: client.ruc || '',
+            documentNumber: dni,
+            // Mantenemos las notas existentes
+            notes: prev.notes
+          };
+          console.log('Nuevos datos del cliente:', newData);
+          return newData;
+        });
+        
+        console.log('Cliente encontrado y cargado:', client);
+        toast.success('Cliente encontrado y cargado correctamente');
+      } else {
+        console.log('Cliente no encontrado, limpiando campos excepto DNI');
+        
+        // Si no encontramos el cliente, limpiamos todos los campos excepto el DNI
+        setCustomerData(prev => {
+          const newData = {
+            ...prev,
+            name: '',
+            email: '',
+            phone: '',
+            address: '',
+            ruc: '',
+            documentNumber: dni, // Mantenemos el DNI ingresado
+            // Mantenemos las notas existentes
+            notes: prev.notes
+          };
+          console.log('Datos limpiados (cliente no encontrado):', newData);
+          return newData;
+        });
+        
+        console.log('Cliente no encontrado');
+        toast.info('Cliente no encontrado. Complete los datos manualmente');
+      }
+    } catch (error) {
+      console.error('Error al buscar cliente:', error);
+      toast.error('Error al buscar el cliente. Verifique el DNI e intente nuevamente');
+    } finally {
+      setIsSearchingClient(false);
+      setDocumentNumberChangedManually(false);
+    }
+  }, []);
+
+  // Efecto para validar DNI y buscar cliente cuando esté completo
+  useEffect(() => {
+    let isMounted = true;
+    let timer: NodeJS.Timeout;
+
+    const searchClient = async () => {
+      if (!isMounted) return;
+      
+      const currentDni = customerData.documentNumber;
+      
+      // Solo buscar si el DNI es válido y no estamos ya buscando
+      if (currentDni.length === 8 && !isSearchingClient && documentNumberChangedManually) {
+        console.log('Iniciando búsqueda automática de cliente con DNI:', currentDni);
+        
+        try {
+          await searchClientByDni(currentDni);
+        } catch (error) {
+          console.error('Error en la búsqueda automática:', error);
+        }
+      }
+    };
+
+    // Usamos un pequeño timeout para agrupar múltiples cambios rápidos
+    if (customerData.documentNumber.length === 8) {
+      timer = setTimeout(() => {
+        if (isMounted) {
+          searchClient();
+        }
+      }, 800); // 800ms de retraso para evitar múltiples búsquedas
+    }
+
+    // Limpieza
+    return () => {
+      isMounted = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [customerData.documentNumber, isSearchingClient, searchClientByDni, documentNumberChangedManually]);
+
+  // Efecto para actualizar isDniValid cuando cambia el DNI
+  useEffect(() => {
+    setIsDniValid(customerData.documentNumber.length === 8);
+  }, [customerData.documentNumber]);
 
   // Renderizar formulario de cliente
   const renderCustomerForm = () => (
@@ -704,22 +1282,36 @@ export function SaleForm({
       </h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-2">
-          <Label htmlFor="name" className="text-foreground/90">
+          <Label 
+            htmlFor="name" 
+            className="text-foreground/90"
+          >
             Nombre completo
+            {selectedItems.some((item) => item.type === "service") && (
+              <span className="text-destructive ml-1">*</span>
+            )}
           </Label>
           <Input
             id="name"
             value={customerData.name}
             onChange={(e) => {
               setCustomerData({ ...customerData, name: e.target.value });
+              if (errors.name) setErrors({ ...errors, name: undefined });
             }}
-            placeholder="Nombre del cliente"
-            className="mt-1"
+            placeholder={isDniValid ? "Ej: Juan Pérez" : "Ingrese DNI de 8 dígitos primero"}
+            disabled={!isDniValid || isSearchingClient}
+            className={errors.name ? "border-destructive" : ""}
           />
+          {errors.name && (
+            <p className="text-sm text-destructive">{errors.name}</p>
+          )}
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="email" className="text-foreground/90">
+          <Label 
+            htmlFor="email" 
+            className="text-foreground/90"
+          >
             Correo electrónico
           </Label>
           <Input
@@ -730,8 +1322,9 @@ export function SaleForm({
               setCustomerData({ ...customerData, email: e.target.value });
               if (errors.email) setErrors({ ...errors, email: undefined });
             }}
-            placeholder="correo@ejemplo.com"
-            className="mt-1"
+            placeholder={isDniValid ? "correo@ejemplo.com" : "Ingrese DNI de 8 dígitos primero"}
+            disabled={!isDniValid || isSearchingClient}
+            className={errors.email ? "border-destructive" : ""}
           />
           {errors.email && (
             <p className="text-sm text-destructive mt-1.5">{errors.email}</p>
@@ -739,7 +1332,10 @@ export function SaleForm({
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="phone" className="text-foreground/90">
+          <Label 
+            htmlFor="phone" 
+            className="text-foreground/90"
+          >
             Teléfono
           </Label>
           <Input
@@ -750,8 +1346,9 @@ export function SaleForm({
               setCustomerData({ ...customerData, phone: e.target.value });
               if (errors.phone) setErrors({ ...errors, phone: undefined });
             }}
-            placeholder="+51 999 999 999"
-            className="mt-1"
+            placeholder={isDniValid ? "+51 999 999 999" : "Ingrese DNI de 8 dígitos primero"}
+            disabled={!isDniValid || isSearchingClient}
+            className={errors.phone ? "border-destructive" : ""}
           />
           {errors.phone && (
             <p className="text-sm text-destructive mt-1.5">{errors.phone}</p>
@@ -760,29 +1357,73 @@ export function SaleForm({
 
         <div className="space-y-2">
           <Label htmlFor="documentNumber" className="text-foreground/90">
-            DNI
+            DNI {!isDniValid && <span className="text-muted-foreground text-xs">(8 dígitos)</span>}
             {selectedItems.some((item) => item.type === "service") && (
               <span className="text-destructive ml-1">*</span>
             )}
           </Label>
-          <Input
-            id="documentNumber"
-            value={customerData.documentNumber}
-            onChange={(e) => {
-              setCustomerData({ ...customerData, documentNumber: e.target.value });
-              if (errors.documentNumber) setErrors({ ...errors, documentNumber: undefined });
-            }}
-            placeholder="12345678"
-            maxLength={8}
-            className={`mt-1 ${errors.documentNumber ? "border-destructive" : ""}`}
-          />
-          {errors.documentNumber && (
-            <p className="text-sm text-destructive mt-1.5">{errors.documentNumber}</p>
-          )}
+          <div className="relative">
+            <Input
+              id="documentNumber"
+              value={customerData.documentNumber}
+              onChange={(e) => {
+                // Solo permitir números
+                const value = e.target.value.replace(/\D/g, '');
+                const newDocumentNumber = value.slice(0, 8);
+                
+                // Actualizamos el estado del DNI
+                setCustomerData(prev => ({
+                  ...prev,
+                  documentNumber: newDocumentNumber
+                }));
+                
+                // Marcamos que el usuario está realizando un cambio manual
+                setDocumentNumberChangedManually(true);
+                
+                // Limpiamos el error si existe
+                if (errors.documentNumber) {
+                  setErrors(prev => ({
+                    ...prev,
+                    documentNumber: undefined
+                  }));
+                }
+              }}
+              placeholder="12345678"
+              maxLength={8}
+              className={`mt-1 pr-10 ${errors.documentNumber ? "border-destructive" : ""} ${isSearchingClient ? 'opacity-70' : ''}`}
+              disabled={isSearchingClient}
+              onKeyDown={(e) => {
+                // Si presiona Enter y el DNI es válido, forzamos la búsqueda
+                if (e.key === 'Enter' && customerData.documentNumber.length === 8) {
+                  searchClientByDni(customerData.documentNumber);
+                }
+              }}
+            />
+            {isSearchingClient && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+              </div>
+            )}
+            {customerData.documentNumber.length > 0 && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                {customerData.documentNumber.length}/8
+              </span>
+            )}
+          </div>
+          {errors.documentNumber ? (
+            <p className="text-sm text-destructive">{errors.documentNumber}</p>
+          ) : customerData.documentNumber.length > 0 && customerData.documentNumber.length < 8 ? (
+            <p className="text-sm text-amber-500 mt-1.5">Ingrese 8 dígitos</p>
+          ) : isDniValid ? (
+            <p className="text-sm text-green-600 mt-1.5">✓ DNI válido</p>
+          ) : null}
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="address" className="text-foreground/90">
+          <Label 
+            htmlFor="address" 
+            className="text-foreground/90"
+          >
             Dirección
           </Label>
           <Input
@@ -791,13 +1432,16 @@ export function SaleForm({
             onChange={(e) =>
               setCustomerData({ ...customerData, address: e.target.value })
             }
-            placeholder="Dirección del cliente"
-            className="mt-1"
+            placeholder={isDniValid ? "Dirección del cliente" : "Ingrese DNI de 8 dígitos primero"}
+            disabled={!isDniValid || isSearchingClient}
           />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="ruc" className="text-foreground/90">
+          <Label 
+            htmlFor="ruc" 
+            className="text-foreground/90"
+          >
             RUC (opcional)
           </Label>
           <Input
@@ -806,13 +1450,16 @@ export function SaleForm({
             onChange={(e) =>
               setCustomerData({ ...customerData, ruc: e.target.value })
             }
-            placeholder="Número de RUC"
-            className="mt-1"
+            placeholder={isDniValid ? "Número de RUC" : "Ingrese DNI de 8 dígitos primero"}
+            disabled={!isDniValid || isSearchingClient}
           />
         </div>
 
         <div className="space-y-2 md:col-span-2">
-          <Label htmlFor="notes" className="text-foreground/90">
+          <Label 
+            htmlFor="notes" 
+            className="text-foreground/90"
+          >
             Notas adicionales
           </Label>
           <textarea
@@ -821,8 +1468,9 @@ export function SaleForm({
             onChange={(e) =>
               setCustomerData({ ...customerData, notes: e.target.value })
             }
-            placeholder="Notas adicionales del cliente"
-            className="flex h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 mt-1"
+            placeholder={isDniValid ? "Notas adicionales del cliente" : "Ingrese DNI de 8 dígitos primero"}
+            className="flex h-24 w-full rounded-md border border-input px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 mt-1 bg-background"
+            disabled={!isDniValid || isSearchingClient}
           />
         </div>
       </div>
@@ -845,226 +1493,165 @@ export function SaleForm({
     </div>
   );
 
-// Registrar la imagen del logo
-const logo = '/icons/logo-jr-g.png';
+  // Registrar la imagen del logo
+  const logo = '/icons/logo-jr-g.png';
 
-// Registrar fuentes
-Font.register({
-  family: 'Helvetica',
-  fonts: [
-    { src: 'https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/roboto-regular-webfont.ttf', fontWeight: 400 },
-    { src: 'https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/roboto-bold-webfont.ttf', fontWeight: 700 },
-  ],
-});
+  // Registrar fuentes
+  Font.register({
+    family: 'Helvetica',
+    fonts: [
+      { src: 'https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/roboto-regular-webfont.ttf', fontWeight: 400 },
+      { src: 'https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/roboto-bold-webfont.ttf', fontWeight: 700 },
+    ],
+  });
 
-const styles = StyleSheet.create({
-  page: {
-    flexDirection: 'column',
-    backgroundColor: '#ffffff',
-    padding: 10,
-    fontFamily: 'Helvetica',
-    fontSize: 8,
-  },
-  receiptContainer: {
-    flex: 1,
-    justifyContent: 'flex-start',
-    padding: 8,
-  },
-  receipt: {
-    marginBottom: 10,
-    border: '1px solid #e2e8f0',
-    borderRadius: 3,
-    padding: 8,
-    position: 'relative',
-    fontSize: 8,
-  },
-  logoContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 10,
-  },
-  logo: {
-    width: '80px',
-    height: 'auto',
-    marginRight: 10,
-  },
-  headerInfo: {
-    flex: 1,
-    marginLeft: 10,
-  },
-  header: {
-    marginBottom: 10,
-    textAlign: 'center',
-    borderBottom: '1px solid #e2e8f0',
-    paddingBottom: 10,
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 5,
-  },
-  subtitle: {
-    fontSize: 10,
-    color: '#64748b',
-    marginBottom: 5,
-  },
-  section: {
-    marginBottom: 6,
-    fontSize: 8,
-  },
-  sectionTitle: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    marginBottom: 3,
-    borderBottom: '1px solid #e2e8f0',
-    paddingBottom: 2,
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 3,
-    fontSize: 10,
-  },
-  col: {
-    flex: 1,
-  },
-  colRight: {
-    textAlign: 'right',
-  },
-  itemRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 0.5,
-    fontSize: 7,
-    lineHeight: 1.1,
-  },
-  itemName: {
-    flex: 3,
-  },
-  itemQty: {
-    flex: 1,
-    textAlign: 'center',
-  },
-  itemPrice: {
-    flex: 2,
-    textAlign: 'right',
-  },
-  totalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 8,
-    paddingTop: 4,
-    borderTop: '1px dashed #cbd5e1',
-    fontWeight: 'bold',
-    fontSize: 10,
-  },
-  footer: {
-    marginTop: 4,
-    fontSize: 6,
-    textAlign: 'center',
-    color: '#64748b',
-    paddingTop: 4,
-    borderTop: '1px solid #e2e8f0',
-  },
-  divider: {
-    borderTop: '1px dashed #cbd5e1',
-    margin: '10px 0',
-  },
-});
+  const styles = StyleSheet.create({
+    page: {
+      flexDirection: 'column',
+      backgroundColor: '#ffffff',
+      padding: 10,
+      fontFamily: 'Helvetica',
+      fontSize: 8,
+    },
+    receiptContainer: {
+      flex: 1,
+      justifyContent: 'flex-start',
+      padding: 8,
+    },
+    receipt: {
+      marginBottom: 10,
+      border: '1px solid #e2e8f0',
+      borderRadius: 3,
+      padding: 8,
+      position: 'relative',
+      fontSize: 8,
+    },
+    logoContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      marginBottom: 10,
+    },
+    logo: {
+      width: '80px',
+      height: 'auto',
+      marginRight: 10,
+    },
+    headerInfo: {
+      flex: 1,
+      marginLeft: 10,
+    },
+    header: {
+      marginBottom: 10,
+      textAlign: 'center',
+      borderBottom: '1px solid #e2e8f0',
+      paddingBottom: 10,
+    },
+    title: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      marginBottom: 5,
+    },
+    subtitle: {
+      fontSize: 10,
+      color: '#64748b',
+      marginBottom: 5,
+    },
+    section: {
+      marginBottom: 6,
+      fontSize: 8,
+    },
+    sectionTitle: {
+      fontSize: 10,
+      fontWeight: 'bold',
+      marginBottom: 3,
+      borderBottom: '1px solid #e2e8f0',
+      paddingBottom: 2,
+    },
+    row: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 3,
+      fontSize: 10,
+    },
+    col: {
+      flex: 1,
+    },
+    colRight: {
+      textAlign: 'right',
+    },
+    itemRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 0.5,
+      fontSize: 7,
+      lineHeight: 1.1,
+    },
+    itemName: {
+      flex: 3,
+    },
+    itemQty: {
+      flex: 1,
+      textAlign: 'center',
+    },
+    itemPrice: {
+      flex: 2,
+      textAlign: 'right',
+    },
+    totalRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginTop: 8,
+      paddingTop: 4,
+      borderTop: '1px dashed #cbd5e1',
+      fontWeight: 'bold',
+      fontSize: 10,
+    },
+    footer: {
+      marginTop: 4,
+      fontSize: 6,
+      textAlign: 'center',
+      color: '#64748b',
+      paddingTop: 4,
+      borderTop: '1px solid #e2e8f0',
+    },
+    divider: {
+      borderTop: '1px dashed #cbd5e1',
+      margin: '10px 0',
+    },
+  });
 
-  const generateReceiptData = () => {
-    const items = selectedItems.map((item) => ({
-      name: item.name,
-      price: item.price,
-      quantity: item.quantity,
-      total: item.price * item.quantity,
-      notes: item.notes || "",
-      type: item.type, // ✅ Agregar el tipo de item para verificar si hay servicios
-    }));
+  // Definir el tipo BusinessInfo
+  interface BusinessInfo {
+    name: string;
+    address: string;
+    phone: string;
+    email: string;
+    ruc: string;
+    cuit: string;
+    footerText: string;
+    logo: string;
+  }
 
-    const subtotal = selectedItems.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0
-    );
-    const total = subtotal;
-
-    // ✅ Usar siempre los datos del cliente proporcionados por el usuario
-    const customerInfo = {
-      name: customerData.name || "Cliente",
-      phone: customerData.phone || "999999999",
-      documentNumber: customerData.documentNumber || "00000000",
-      email: customerData.email || "cliente@ejemplo.com",
-      address: customerData.address || "Sin dirección",
-    };
-
-    const result = {
-      customerName: customerInfo.name,
-      customer: {
-        documentNumber: customerInfo.documentNumber,
-        phone: customerInfo.phone,
-        email: customerInfo.email,
-        address: customerInfo.address,
-      },
-      items,
-      subtotal,
-      total,
-      orderId: orderId || undefined,
-      orderNumber: orderNumber || undefined,
-    };
-
-    return result;
-  };
-
-  const businessInfo = {
+  const businessInfo: BusinessInfo = {
     name: "Tecnicentro JR",
     address: "Av. Ejemplo 123, Lima, Perú",
     phone: "+51 987 654 321",
     email: "contacto@tecnicentrojr.com",
     ruc: "20123456789",
-    cuit: "20-12345678-9", // Agregado el CUIT que faltaba
+    cuit: "20-12345678-9",
     footerText: "Gracias por su compra. Vuelva pronto.",
+    logo: ""
   };
 
-  // Generar datos para la hoja de servicio (ReceiptPDF)
-  const generateServiceSheetData = () => {
-    const items = selectedItems.map((item) => ({
-      name: item.name,
-      price: typeof item.price === "string" ? parseFloat(item.price) : item.price,
-      quantity: item.quantity,
-      notes: item.notes || "",
-      type: item.type, // ✅ Agregar el tipo de item para verificar si hay servicios
-    }));
-
-    const subtotal = selectedItems.reduce(
-      (sum, item) => sum + (typeof item.price === "string" ? parseFloat(item.price) : item.price) * item.quantity,
-      0
-    );
-    const total = subtotal;
-
-    // ✅ Usar siempre los datos del cliente proporcionados por el usuario
-    const customerInfo = {
-      name: customerData.name || "Cliente",
-      phone: customerData.phone || "999999999",
-      documentNumber: customerData.documentNumber || "00000000",
-      email: customerData.email || "cliente@ejemplo.com",
-      address: customerData.address || "Sin dirección",
-      documentType: "DNI"
-    };
-
-    return {
-      customerName: customerInfo.name,
-      customer: {
-        documentNumber: customerInfo.documentNumber,
-        documentType: customerInfo.documentType,
-        phone: customerInfo.phone,
-      },
-      items,
-      subtotal,
-      total,
-      orderId: orderId || undefined,
-      orderNumber: orderNumber || undefined,
-    };
+  // Función para validar y normalizar el tipo de documento
+  const getValidDocumentType = (docType: string | undefined): 'dni' | 'ruc' | 'ci' | 'other' => {
+    if (!docType) return 'dni';
+    const type = docType.toLowerCase();
+    if (['dni', 'ruc', 'ci', 'other'].includes(type)) {
+      return type as 'dni' | 'ruc' | 'ci' | 'other';
+    }
+    return 'dni'; // Valor por defecto
   };
 
   return (
@@ -1085,115 +1672,13 @@ const styles = StyleSheet.create({
           </div>
         </div>
 
-        {/* ✅ Contenido oculto para impresión automática (versión HTML) */}
-        <div
-          ref={receiptRef}
-          className="hidden"
-          style={{
-            position: 'absolute',
-            left: '-9999px',
-            top: '-9999px',
-            width: '300px', // Ancho de ticket térmico
-            padding: '10px',
-            background: 'white',
-            fontFamily: 'monospace',
-            fontSize: '12px',
-            lineHeight: '1.2',
-          }}
-        >
-          <div style={{ textAlign: 'center', marginBottom: '10px' }}>
-            <h3 style={{ margin: '0', fontSize: '16px', fontWeight: 'bold' }}>
-              {businessInfo.name}
-            </h3>
-            <p style={{ margin: '2px 0', fontSize: '10px' }}>
-              {businessInfo.address}
-            </p>
-            <p style={{ margin: '2px 0', fontSize: '10px' }}>
-              Tel: {businessInfo.phone}
-            </p>
-            <p style={{ margin: '2px 0', fontSize: '10px' }}>
-              RUC: {businessInfo.ruc}
-            </p>
-          </div>
-
-          <div style={{ borderTop: '1px dashed #000', padding: '5px 0' }}>
-            <p style={{ margin: '2px 0', fontSize: '10px' }}>
-              <strong>Fecha:</strong> {new Date().toLocaleDateString('es-PE')}
-            </p>
-            <p style={{ margin: '2px 0', fontSize: '10px' }}>
-              <strong>Hora:</strong> {new Date().toLocaleTimeString('es-PE')}
-            </p>
-            {orderNumber && (
-              <p style={{ margin: '2px 0', fontSize: '10px' }}>
-                <strong>Orden N°:</strong> {orderNumber}
-              </p>
-            )}
-          </div>
-
-          <div style={{ borderTop: '1px dashed #000', padding: '5px 0' }}>
-            <p style={{ margin: '2px 0', fontSize: '10px' }}>
-              <strong>Cliente:</strong> {customerData.name || "Cliente"}
-            </p>
-            {customerData.documentNumber && (
-              <p style={{ margin: '2px 0', fontSize: '10px' }}>
-                <strong>DNI:</strong> {customerData.documentNumber}
-              </p>
-            )}
-            {customerData.phone && (
-              <p style={{ margin: '2px 0', fontSize: '10px' }}>
-                <strong>Tel:</strong> {customerData.phone}
-              </p>
-            )}
-            {customerData.email && (
-              <p style={{ margin: '2px 0', fontSize: '10px' }}>
-                <strong>Email:</strong> {customerData.email}
-              </p>
-            )}
-            {customerData.address && (
-              <p style={{ margin: '2px 0', fontSize: '10px' }}>
-                <strong>Dirección:</strong> {customerData.address}
-              </p>
-            )}
-          </div>
-
-          <div style={{ borderTop: '1px dashed #000', padding: '5px 0' }}>
-            {selectedItems.map((item) => (
-              <div key={`${item.id}-${item.type}`} style={{ marginBottom: '3px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '10px' }}>
-                    {item.name} x{item.quantity}
-                  </span>
-                  <span style={{ fontSize: '10px' }}>
-                    S/ {(item.price * item.quantity).toFixed(2)}
-                  </span>
-                </div>
-                {item.notes && (
-                  <div style={{ fontSize: '8px', color: '#666', marginTop: '1px' }}>
-                    {item.notes}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <div style={{ borderTop: '1px dashed #000', padding: '5px 0', marginTop: '5px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-              <span style={{ fontSize: '12px' }}>TOTAL:</span>
-              <span style={{ fontSize: '12px' }}>
-                S/ {selectedItems.reduce((sum, item) => sum + item.price * item.quantity, 0).toFixed(2)}
-              </span>
-            </div>
-          </div>
-
-          <div style={{ textAlign: 'center', marginTop: '10px', fontSize: '8px', color: '#666' }}>
-            {businessInfo.footerText}
-          </div>
-        </div>
+        {/* Referencia para la impresión - ya no se usa, se mantiene para compatibilidad */}
+        <div ref={receiptRef} className="hidden" />
 
         {/* Diálogo de hoja de servicio */}
         <Dialog open={showServiceSheet} onOpenChange={(open) => {
           if (!open) {
-            console.log("🚫 Usuario cerró hoja de servicio - reseteando formulario y cerrando modal padre");
+            console.log(" Usuario cerró hoja de servicio - reseteando formulario y cerrando modal padre");
             resetSaleState(); // Reset completo cuando el usuario cierra la hoja de servicio
             setShowServiceSheet(false);
             onClose(); // Cerrar el modal padre
@@ -1201,12 +1686,73 @@ const styles = StyleSheet.create({
         }}>
           <DialogContent className="w-[98vw] max-w-[98vw] h-[98vh] max-h-[98vh] flex flex-col p-0 overflow-hidden">
             <DialogHeader className="px-6 pt-4 pb-2 border-b">
-              <DialogTitle className="text-2xl font-bold">
-                Comprobante de Venta
-              </DialogTitle>
+              <div className="flex justify-between items-center">
+                <DialogTitle className="text-2xl font-bold">
+                  Comprobante de Venta
+                </DialogTitle>
+                <div className="flex space-x-2">
+                  <PDFDownloadLink
+                    document={
+                      <ReceiptThermalPDF
+                        saleData={orderResponse}
+                        businessInfo={businessInfo}
+                        isCompleted={orders.some(order => order.id === orderResponse.orderId && order.status === 'COMPLETED')}
+                      />
+                    }
+                    fileName={`comprobante-${new Date().toISOString().split('T')[0]}.pdf`}
+                    className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                  >
+                    {({ loading }: PDFDownloadLinkRenderProps) => (
+                      <>
+                        <Download className="h-4 w-4 mr-2" />
+                        {loading ? 'Generando...' : 'Descargar PDF'}
+                      </>
+                    )}
+                  </PDFDownloadLink>
+                  <button
+                    onClick={async () => {
+                      const receiptData = orderResponse;
+                      if (!receiptData) return;
+                      
+                      try {
+                        const { default: ReceiptThermalPDF } = await import('./ReceiptThermalPDF');
+                        const blob = await pdf(
+                          <ReceiptThermalPDF 
+                            saleData={receiptData} 
+                            businessInfo={businessInfo}
+                            isCompleted={orders.some(order => order.id === receiptData.orderId && order.status === 'COMPLETED')}
+                          />
+                        ).toBlob();
+                        
+                        const pdfUrl = URL.createObjectURL(blob);
+                        const printWindow = window.open(pdfUrl, '_blank');
+                        
+                        if (printWindow) {
+                          setTimeout(() => {
+                            printWindow.print();
+                          }, 500);
+                        }
+                      } catch (error) {
+                        console.error('Error al generar el PDF:', error);
+                        // Usar toast de la forma correcta
+                        const { toast: showToast } = await import('@/components/ui/use-toast');
+                        showToast({
+                          title: "Error",
+                          description: "No se pudo generar el PDF para imprimir",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
+                    className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    <Printer className="h-4 w-4 mr-2" />
+                    Imprimir
+                  </button>
+                </div>
+              </div>
             </DialogHeader>
             <div className="flex-1 overflow-hidden p-0">
-              {showServiceSheet ? (
+              {showServiceSheet && orderResponse ? (
                 <PDFViewer
                   width="100%"
                   height="100%"
@@ -1216,9 +1762,10 @@ const styles = StyleSheet.create({
                     backgroundColor: "white",
                   }}
                 >
-                  <ReceiptPDF
-                    saleData={generateServiceSheetData()}
+                  <ReceiptThermalPDF
+                    saleData={orderResponse}
                     businessInfo={businessInfo}
+                    isCompleted={orders.some(order => order.id === orderResponse.orderId && order.status === 'COMPLETED')}
                   />
                 </PDFViewer>
               ) : (
@@ -1240,15 +1787,6 @@ const styles = StyleSheet.create({
                   </div>
                 </div>
               )}
-            </div>
-            <div className="p-3 border-t flex justify-center bg-gray-50">
-              <Button
-                variant="outline"
-                onClick={() => setShowServiceSheet(false)}
-                className="px-6 py-2 text-base"
-              >
-                Cerrar
-              </Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -1337,45 +1875,120 @@ const styles = StyleSheet.create({
                   </div>
                 </div>
 
-                <div className={newItem.type === "service" ? "space-y-4" : newItem.type === "custom" ? "space-y-4" : "grid grid-cols-2 gap-4"}>
-                  {/* ✅ Solo mostrar input de precio para servicios y personalizados */}
+                {/* Campos de precio y cantidad con métodos de pago */}
+                <div className="space-y-4">
                   {(() => {
                     const showPrice = newItem.type === "service" || newItem.type === "custom";
                     const showQuantity = newItem.type !== "service";
+                    const isProduct = newItem.type === "product";
+                    const selectedProduct = isProduct && products.find(p => p.id === newItem.id);
+                    const basePrice = selectedProduct ? selectedProduct.price : 0;
 
                     return (
                       <>
-                        {showPrice && (
-                          <div className="space-y-2">
-                            <label className="text-sm font-medium">Precio</label>
-                            <input
-                              type="number"
-                              name="price"
-                              value={newItem.price}
-                              onChange={handleNewItemChange}
-                              className="w-full p-2 border rounded"
-                              placeholder="0.00"
-                              min="0"
-                              step="0.01"
-                              required
-                            />
-                          </div>
-                        )}
+                        {/* Campos de precio y cantidad en una fila */}
+                        <div className="grid grid-cols-2 gap-4">
+                          {showPrice && (
+                            <div className="space-y-2">
+                              <div className="flex justify-between items-center">
+                                <label className="text-sm font-medium">
+                                  {isProduct ? "Precio unitario" : "Precio"}
+                                </label>
+                                {isProduct && (
+                                  <span className="text-xs text-muted-foreground">
+                                    S/{basePrice.toFixed(2)}
+                                  </span>
+                                )}
+                              </div>
+                              <input
+                                type="number"
+                                name="price"
+                                value={newItem.price}
+                                onChange={handleNewItemChange}
+                                className="w-full p-2 border rounded"
+                                placeholder={isProduct ? `Dejar vacío para usar precio base (S/${basePrice.toFixed(2)})` : "0.00"}
+                                min="0"
+                                step="0.01"
+                                required={!isProduct}
+                              />
+                            </div>
+                          )}
 
-                        {showQuantity && (
-                          <div className="space-y-2">
-                            <label className="text-sm font-medium">Cantidad</label>
-                            <input
-                              type="number"
-                              name="quantity"
-                              value={newItem.quantity}
-                              onChange={handleNewItemChange}
-                              className="w-full p-2 border rounded"
-                              min="1"
-                              required
-                            />
+                          {showQuantity && (
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">Cantidad</label>
+                              <input
+                                type="number"
+                                name="quantity"
+                                value={newItem.quantity}
+                                onChange={handleNewItemChange}
+                                className="w-full p-2 border rounded"
+                                min="1"
+                                required
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Métodos de pago */}
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <label className="text-sm font-medium">Métodos de pago</label>
+                            <button
+                              type="button"
+                              onClick={addPaymentMethod}
+                              className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                            >
+                              <Plus className="w-3 h-3" />
+                              Agregar método
+                            </button>
                           </div>
-                        )}
+                          
+                          <div className="space-y-2">
+                            {newItem.paymentMethods.map((paymentMethod, index) => (
+                              <div key={paymentMethod.id} className="flex gap-2">
+                                <select
+                                  value={paymentMethod.type}
+                                  onChange={(e) => updatePaymentMethod(paymentMethod.id, 'type', e.target.value as PaymentType)}
+                                  className="flex-1 p-2 border rounded text-sm text-[#a3a3a3]"
+                                >
+                                  <option value={PaymentType.EFECTIVO}>Efectivo</option>
+                                  <option value={PaymentType.TARJETA}>Tarjeta</option>
+                                  <option value={PaymentType.TRANSFERENCIA}>Transferencia</option>
+                                  <option value={PaymentType.YAPE}>Yape</option>
+                                  <option value={PaymentType.PLIN}>Plin</option>
+                                  <option value={PaymentType.OTRO}>Otro</option>
+                                </select>
+                                
+                                <input
+                                  type="number"
+                                  value={paymentMethod.amount}
+                                  onChange={(e) => updatePaymentMethod(paymentMethod.id, 'amount', parseFloat(e.target.value) || 0)}
+                                  onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                                  className="w-24 p-2 border rounded text-sm"
+                                  placeholder="Monto"
+                                  min="0"
+                                  step="0.01"
+                                />
+                                
+                                {newItem.paymentMethods.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => removePaymentMethod(paymentMethod.id)}
+                                    className="p-2 text-red-500 hover:bg-red-50 rounded transition-colors"
+                                  >
+                                    <Minus className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                          
+                          {/* Total de métodos de pago */}
+                          <div className="text-xs text-muted-foreground text-right">
+                            Total métodos de pago: S/{newItem.paymentMethods.reduce((sum, pm) => sum + pm.amount, 0).toFixed(2)}
+                          </div>
+                        </div>
                       </>
                     );
                   })()}
@@ -1408,7 +2021,6 @@ const styles = StyleSheet.create({
                       >
                         <option value="REPAIR">Reparación</option>
                         <option value="WARRANTY">Garantía</option>
-                        
                       </select>
                     </div>
 
@@ -1543,24 +2155,40 @@ const styles = StyleSheet.create({
                 <>
                   <div className="flex-1 overflow-auto mb-4">
                     <div className="space-y-2">
-                      {selectedItems.map((item) => (
-                        <div
-                          key={`${item.id}-${item.type}`}
-                          className="p-3 border rounded-lg flex justify-between items-center"
-                        >
-                          <div>
-                            <div className="font-medium">{item.name}</div>
-                            <div className="text-sm text-gray-500">
-                              S/{item.price.toFixed(2)} x {item.quantity} = S/
-                              {(item.price * item.quantity).toFixed(2)}
-                            </div>
-                            {item.notes && (
-                              <div className="text-xs text-gray-500 mt-1">
-                                {item.notes}
+                      {selectedItems.map((item) => {
+                        // Para servicios, siempre usar el precio total del servicio
+                        // Para productos y personalizados, usar el precio personalizado si existe
+                        const finalPrice = item.type === "service" 
+                          ? item.price 
+                          : item.customPrice || item.price;
+                        
+                        // Usar finalPrice en el cálculo para evitar la advertencia
+                        const originalTotal = item.price * item.quantity;
+                        const finalTotal = finalPrice * item.quantity;
+                        
+                        return (
+                          <div
+                            key={`${item.id}-${item.type}`}
+                            className="p-3 border rounded-lg flex justify-between items-center"
+                          >
+                            <div>
+                              <div className="font-medium">{item.name}</div>
+                              <div className="text-sm text-gray-500">
+                                S/{finalPrice.toFixed(2)} x {item.quantity} = S/
+                                {finalTotal.toFixed(2)}
+                                {item.customPrice !== undefined && (
+                                  <span className="text-xs text-muted-foreground ml-2 line-through">
+                                    S/{originalTotal.toFixed(2)}
+                                  </span>
+                                )}
                               </div>
-                            )}
-                          </div>
-                          <div className="flex items-center space-x-2">
+                              {item.notes && (
+                                <div className="text-xs text-gray-500 mt-1">
+                                  {item.notes}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-center space-x-2">
                             {item.type !== "service" && (
                               <>
                                 <Button
@@ -1615,7 +2243,7 @@ const styles = StyleSheet.create({
                             </Button>
                           </div>
                         </div>
-                      ))}
+                      )})}
                     </div>
                   </div>
 
@@ -1623,27 +2251,32 @@ const styles = StyleSheet.create({
                     <div className="flex justify-between mb-2">
                       <span>Subtotal:</span>
                       <span>
-                        S/
-                        {selectedItems
-                          .reduce(
-                            (sum, item) => sum + item.price * item.quantity,
-                            0
-                          )
-                          .toFixed(2)}
+                        S/{
+                          selectedItems.reduce((sum, item) => {
+                            // Para servicios, siempre usar el precio total del servicio
+                            // Para productos y personalizados, usar el precio personalizado si existe
+                            const itemPrice = item.type === "service" 
+                              ? item.price 
+                              : item.customPrice !== undefined ? item.customPrice : item.price;
+                            return sum + (itemPrice * item.quantity);
+                          }, 0).toFixed(2)
+                        }
                       </span>
                     </div>
                     <div className="flex justify-between font-medium text-lg">
                       <div className="flex justify-between w-full gap-4">
                         <span>Total:</span>
-
                         <span className="font-medium">
-                          S/
-                          {selectedItems
-                            .reduce(
-                              (sum, item) => sum + item.price * item.quantity,
-                              0
-                            )
-                            .toFixed(2)}
+                          S/{
+                            selectedItems.reduce((sum, item) => {
+                              // Para servicios, siempre usar el precio total del servicio
+                              // Para productos y personalizados, usar el precio personalizado si existe
+                              const itemPrice = item.type === "service" 
+                                ? item.price 
+                                : item.customPrice !== undefined ? item.customPrice : item.price;
+                              return sum + (itemPrice * item.quantity);
+                            }, 0).toFixed(2)
+                          }
                         </span>
                       </div>
                     </div>
@@ -1761,11 +2394,47 @@ const styles = StyleSheet.create({
                           </div>
                         )}
                         
+                        {/* Mostrar error de creación de orden */}
+                        {orderError && (
+                          <Alert variant="destructive" className="mb-4">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertTitle>Error al crear la orden</AlertTitle>
+                            <AlertDescription>
+                              {orderError.message}
+                              {orderError.code && (
+                                <span className="block mt-1 text-xs opacity-75">
+                                  Código: {orderError.code}
+                                </span>
+                              )}
+                            </AlertDescription>
+                          </Alert>
+                        )}
+                        
+                        {/* Indicador de sesión de caja */}
+                        <div className="mb-4">
+                          {isLoadingCashSession ? (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+                              Verificando sesión de caja abierta...
+                            </div>
+                          ) : currentCashSession ? (
+                            <div className="flex items-center gap-2 text-sm text-green-600">
+                              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                              Sesión de caja abierta
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 text-sm text-red-600">
+                              <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                              No hay sesión de caja abierta
+                            </div>
+                          )}
+                        </div>
+                        
                         <Button
                           className="w-full"
                           size="lg"
                           onClick={handleSubmit}
-                          disabled={selectedItems.length === 0 || uploadStatus.inProgress}
+                          disabled={selectedItems.length === 0 || uploadStatus.inProgress || !currentCashSession}
                         >
                           <ShoppingCart className="h-4 w-4 mr-2" />
                           {uploadStatus.inProgress ? 'Procesando...' : 'Finalizar Venta'}
@@ -1790,6 +2459,16 @@ const styles = StyleSheet.create({
           </div>
         </div>
       </div>
+
+      {/* Modal de confirmación de pago */}
+      <PaymentConfirmationDialog
+        isOpen={paymentConfirmation.isOpen}
+        onClose={handlePaymentCancel}
+        onConfirm={handlePaymentConfirmation}
+        itemName={paymentConfirmation.itemName}
+        expectedTotal={paymentConfirmation.expectedTotal}
+        paymentTotal={paymentConfirmation.paymentTotal}
+      />
     </div>
   );
 }

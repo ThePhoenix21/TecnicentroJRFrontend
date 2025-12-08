@@ -2,69 +2,83 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { productService } from '@/services/product.service';
-import { Product } from '@/types/product.types';
+import { storeProductService } from '@/services/store-product.service';
+import { inventoryService } from '@/services/inventory.service';
+import { StoreProduct, Product, CreateStoreProductRequest } from '@/types/store-product.types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Search, Edit, Trash2, X, Info } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { Plus, Search, Edit, Trash2, X, Info, Package, History } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/contexts/auth-context';
+import { ProductHistory } from '@/components/inventory/ProductHistory';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-interface ProductFormData {
+interface StoreProductFormData {
   name: string;
   description: string;
-  buycost: number;        // ✅ Campo obligatorio de la API
-  price: number;          // ✅ Campo obligatorio de la API (calculado)
-  stock: number;          // ❌ Campo opcional de la API (default: 0)
-  stockTreshold: number;  // ❌ Campo opcional de la API (default: 1)
-  // Campos adicionales para lógica de cálculo (no se envían a la API)
-  profitType: 'fixed' | 'percentage';
-  profitValue: number;
+  buyCost: number;
+  basePrice: number;
+  price: number;
+  stock: number;
+  stockThreshold: number;
 }
 
 export default function ProductsPage() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [storeProducts, setStoreProducts] = useState<StoreProduct[]>([]);
+  const [filteredStoreProducts, setFilteredStoreProducts] = useState<StoreProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [hideOutOfStock, setHideOutOfStock] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [currentProduct, setCurrentProduct] = useState<Product | null>(null);
-  const [formData, setFormData] = useState<ProductFormData>({
+  const [currentStoreProduct, setCurrentStoreProduct] = useState<StoreProduct | null>(null);
+  const [originalStock, setOriginalStock] = useState<number | null>(null); // Nuevo estado
+  const [formData, setFormData] = useState<StoreProductFormData>({
     name: '',
     description: '',
-    buycost: 0,
-    price: 0,           // ✅ Campo obligatorio (se calcula automáticamente)
-    stock: 0,           // ❌ Campo opcional (default: 0)
-    stockTreshold: 1,   // ❌ Campo opcional (default: 1)
-    profitType: 'fixed', // Campo adicional para lógica de cálculo
-    profitValue: 0,     // Campo adicional para lógica de cálculo
+    buyCost: 0,
+    basePrice: 0,
+    price: 0,
+    stock: 0,
+    stockThreshold: 1,
   });
 
   // Inicializar hooks
   const router = useRouter();
   const { toast } = useToast();
-  const { isAuthenticated, isAdmin } = useAuth();
-  const calculateFinalPrice = (buycost: number, profitType: 'fixed' | 'percentage', profitValue: number): number => {
-    if (profitType === 'fixed') {
-      return buycost + profitValue;
-    } else {
-      return buycost + (buycost * profitValue / 100);
+  const { user, currentStore, isAuthenticated, isAdmin, hasPermission } = useAuth();
+
+  const canViewProducts = isAdmin || hasPermission?.("VIEW_PRODUCTS") || hasPermission?.("MANAGE_PRODUCTS");
+  const canManageProducts = isAdmin || hasPermission?.("MANAGE_PRODUCTS");
+  const canManagePrices = isAdmin || hasPermission?.("MANAGE_PRICES");
+
+  const fetchStoreProducts = useCallback(async () => {
+    if (!currentStore) {
+      console.log('❌ No hay currentStore, abortando fetchStoreProducts');
+      return;
     }
-  };
-
-  // Obtener el precio final calculado
-  const finalPrice = calculateFinalPrice(formData.buycost, formData.profitType, formData.profitValue);
-
-  const fetchProducts = useCallback(async () => {
+    
+    console.log('🚀 Iniciando fetchStoreProducts para tienda:', currentStore.id);
+    
     try {
       setLoading(true);
-      const data = await productService.getProducts(1, 100, searchTerm);
-      setProducts(data.data || []);
-      setFilteredProducts(data.data || []);
+      const response = await storeProductService.getStoreProducts(currentStore.id, 1, 100, searchTerm);
+      console.log('📦 Datos recibidos de storeProductService:', response);
+      
+      // El backend devuelve {data: Array(1), total: 1, page: 1, limit: 100, totalPages: 1}
+      // Necesitamos acceder a response.data, no response directamente
+      const productsArray = Array.isArray(response?.data) ? response.data : [];
+      console.log('📊 Array procesado:', productsArray.length, 'productos');
+      
+      setStoreProducts(productsArray);
+      setFilteredStoreProducts(productsArray);
     } catch (error) {
-      console.error('Error fetching products:', error);
+      console.error('❌ Error fetching store products:', error);
+      setStoreProducts([]);
+      setFilteredStoreProducts([]);
       toast({
         title: 'Error',
         description: 'No se pudieron cargar los productos',
@@ -72,125 +86,207 @@ export default function ProductsPage() {
       });
     } finally {
       setLoading(false);
+      console.log('🏁 fetchStoreProducts finalizado');
     }
-  }, [searchTerm, toast]);
+  }, [currentStore?.id, searchTerm, toast]);
 
   useEffect(() => {
     if (!isAuthenticated) {
       router.push('/login');
       return;
     }
-    fetchProducts();
-  }, [isAuthenticated, router, fetchProducts]);
-
-  // Filtro local para búsqueda en tiempo real
-  useEffect(() => {
-    if (!searchTerm.trim()) {
-      setFilteredProducts(products);
-    } else {
-      const filtered = products.filter((product) =>
-        product.id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (typeof product.description === 'string' && product.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        product.sku?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.category?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredProducts(filtered);
+    if (currentStore) {
+      fetchStoreProducts();
     }
-  }, [searchTerm, products]);
+  }, [isAuthenticated, router, currentStore?.id]);
 
-  // Efecto para búsqueda con debounce
+  useEffect(() => {
+    let filtered = storeProducts;
+    
+    // Aplicar filtro de búsqueda
+    if (searchTerm.trim()) {
+      filtered = filtered.filter((storeProduct) =>
+        storeProduct.product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (storeProduct.product.description && storeProduct.product.description.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+    }
+    
+    // Aplicar filtro de stock
+    if (hideOutOfStock) {
+      filtered = filtered.filter((storeProduct) => storeProduct.stock > 0);
+    }
+    
+    setFilteredStoreProducts(filtered);
+  }, [searchTerm, storeProducts, hideOutOfStock]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (isAuthenticated) {
-        fetchProducts();
+      if (isAuthenticated && currentStore) {
+        fetchStoreProducts();
       }
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [searchTerm, isAuthenticated, fetchProducts]);
+  }, [searchTerm, isAuthenticated, currentStore?.id]);
+
+  // Debug: verificar estado actual
+  useEffect(() => {
+    console.log('🔍 Estado de productos:', {
+      loading,
+      storeProductsCount: storeProducts.length,
+      filteredStoreProductsCount: filteredStoreProducts.length,
+      isAuthenticated,
+      currentStoreId: currentStore?.id,
+      searchTerm
+    });
+  }, [loading, storeProducts.length, filteredStoreProducts.length, isAuthenticated, currentStore?.id, searchTerm]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => {
-      const updatedData = {
-        ...prev,
-        [name]: name === 'buycost' || name === 'profitValue' || name === 'stock' || name === 'stockTreshold' ? Number(value) : value,
-      };
-
-      // Si cambió el tipo de ganancia, recalcular el precio final
-      if (name === 'profitType') {
-        updatedData.profitType = value as 'fixed' | 'percentage';
-      }
-
-      return updatedData;
-    });
+    setFormData(prev => ({
+      ...prev,
+      [name]: name === 'buyCost' || name === 'basePrice' || name === 'price' || name === 'stock' || name === 'stockThreshold' ? Number(value) : value,
+    }));
   };
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      // ✅ Preparar datos para enviar (solo campos válidos para la API)
-      const productData = {
-        name: formData.name,
-        description: formData.description,
-        price: finalPrice, // ✅ Usar el precio calculado
-        buycost: formData.buycost,
-        stock: formData.stock,
-        stockTreshold: formData.stockTreshold,
-      };
+    if (!currentStore) return;
 
-      if (isEditing && currentProduct) {
-        await productService.updateProduct(currentProduct.id, productData);
+    // Validar que no se reduzca el stock en edición
+    if (isEditing && originalStock !== null && formData.stock < originalStock) {
+      toast({
+        title: "Error",
+        description: "No se puede reducir el stock desde aquí. Use la sección de Inventario.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      let productData: CreateStoreProductRequest;
+
+      if (isEditing && currentStoreProduct) {
+        // Edición: enviar solo los campos que se van a actualizar
+        let updateData: any;
+        
+        if (isAdmin) {
+          // ADMIN puede editar todo
+          updateData = {
+            name: formData.name,
+            description: formData.description,
+            buyCost: formData.buyCost,
+            basePrice: formData.basePrice,
+            price: formData.price,
+            stock: formData.stock,
+            stockThreshold: formData.stockThreshold,
+          };
+        } else {
+          // USER: control fino por permisos
+          updateData = {
+            stock: formData.stock,
+            stockThreshold: formData.stockThreshold,
+          };
+
+          // Solo usuarios con MANAGE_PRICES pueden modificar el precio
+          if (canManagePrices) {
+            updateData.price = formData.price;
+          }
+        }
+
+        console.log('🔍 IDs para actualizar:', {
+          storeProductId: currentStoreProduct.id,
+          productId: currentStoreProduct.productId,
+          endpointId: currentStoreProduct.id
+        });
+        console.log('📦 Datos de actualización:', updateData);
+        await storeProductService.updateStoreProduct(currentStoreProduct.id, updateData);
+
         toast({
-          title: 'Éxito',
-          description: 'Producto actualizado correctamente',
+          title: 'Producto actualizado',
+          description: 'El producto se ha actualizado correctamente',
         });
       } else {
-        await productService.createProduct(productData);
+        // Creación: siempre crear producto nuevo
+        if (isAdmin) {
+          // ADMIN crea con todos los campos
+          productData = {
+            createNewProduct: true,
+            name: formData.name,
+            description: formData.description,
+            buyCost: formData.buyCost,
+            basePrice: formData.basePrice,
+            storeId: currentStore.id,
+            price: formData.price,
+            stock: formData.stock,
+            stockThreshold: formData.stockThreshold,
+          };
+        } else {
+          // USER crea con campos limitados; precio solo si tiene MANAGE_PRICES
+          productData = {
+            createNewProduct: true,
+            name: formData.name,
+            description: formData.description,
+            storeId: currentStore.id,
+            stock: formData.stock,
+            stockThreshold: formData.stockThreshold,
+          } as CreateStoreProductRequest;
+
+          if (canManagePrices) {
+            (productData as any).price = formData.price;
+          }
+        }
+
+        const response = await storeProductService.createStoreProduct(productData);
+        console.log('📦 Producto creado (respuesta backend):', response);
+
+        // Manejar si el backend devuelve un array o un objeto
+        const createdProduct = Array.isArray(response) ? response[0] : response;
+
         toast({
-          title: 'Éxito',
-          description: 'Producto creado correctamente',
+          title: 'Producto creado',
+          description: 'El producto se ha creado correctamente',
         });
       }
+
+      await fetchStoreProducts();
+      resetForm();
       setIsModalOpen(false);
-      fetchProducts();
-    } catch (error: unknown) {
-      console.error('Error saving product:', error);
-      const errorMessage = error instanceof Error ? error.message : 'No se pudo guardar el producto';
+    } catch (error) {
+      console.error('Error al guardar producto:', error);
       toast({
         title: 'Error',
-        description: errorMessage,
+        description: 'No se pudo guardar el producto',
         variant: 'destructive',
       });
     }
-  }, [formData, finalPrice, isEditing, currentProduct, toast, fetchProducts]);
+  }, [currentStore, isEditing, currentStoreProduct, formData, isAdmin, fetchStoreProducts, toast]);
 
-  const handleEdit = useCallback((product: Product) => {
-    setCurrentProduct(product);
+  const handleEdit = useCallback((storeProduct: StoreProduct) => {
+    setCurrentStoreProduct(storeProduct);
+    setOriginalStock(storeProduct.stock); // Guardar stock original
     setFormData({
-      name: product.name,
-      description: typeof product.description === 'string' ? product.description : '',
-      buycost: product.buycost,
-      price: product.price,           // ✅ Usar precio existente del producto
-      stock: product.stock,
-      stockTreshold: product.stockTreshold || 1,
-      profitType: 'fixed',           // ✅ Valor por defecto para cálculo
-      profitValue: product.price - product.buycost, // ✅ Calcular ganancia fija
+      name: storeProduct.product.name,
+      description: storeProduct.product.description || '',
+      buyCost: storeProduct.product.buyCost || 0,
+      basePrice: storeProduct.product.basePrice || 0,
+      price: storeProduct.price,
+      stock: storeProduct.stock,
+      stockThreshold: storeProduct.stockThreshold,
     });
     setIsEditing(true);
     setIsModalOpen(true);
   }, []);
 
   const handleDelete = useCallback(async (id: string) => {
-    if (window.confirm('¿Estás seguro de que deseas eliminar este producto?')) {
+    if (window.confirm('¿Estás seguro de que deseas eliminar este producto de la tienda?')) {
       try {
-        await productService.deleteProduct(id);
+        await storeProductService.deleteStoreProduct(id);
         toast({
           title: 'Éxito',
           description: 'Producto eliminado correctamente',
         });
-        fetchProducts();
+        fetchStoreProducts();
       } catch (error) {
         console.error('Error deleting product:', error);
         toast({
@@ -200,33 +296,62 @@ export default function ProductsPage() {
         });
       }
     }
-  }, [toast, fetchProducts]);
+  }, [toast, fetchStoreProducts]);
 
   const openNewProductModal = () => {
-    setCurrentProduct(null);
+    setCurrentStoreProduct(null);
+    setOriginalStock(null);
     setFormData({
       name: '',
       description: '',
-      buycost: 0,
+      buyCost: 0,
+      basePrice: 0,
       price: 0,
       stock: 0,
-      stockTreshold: 1,
-      profitType: 'fixed',
-      profitValue: 0,
+      stockThreshold: 1,
     });
     setIsEditing(false);
     setIsModalOpen(true);
   };
 
-  if (!isAuthenticated) {
-    return null; // O un componente de carga
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      description: '',
+      buyCost: 0,
+      basePrice: 0,
+      price: 0,
+      stock: 0,
+      stockThreshold: 1,
+    });
+    setCurrentStoreProduct(null);
+    setOriginalStock(null);
+    setIsEditing(false);
+  };
+
+  if (!isAuthenticated || !currentStore) {
+    return null;
+  }
+
+  if (!canViewProducts) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-2xl font-bold mb-4">Productos</h1>
+        <p className="text-muted-foreground">
+          No tienes permisos para ver esta sección.
+        </p>
+      </div>
+    );
   }
 
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Productos</h1>
-        {isAdmin && (
+        <div>
+          <h1 className="text-3xl font-bold">Productos</h1>
+          <p className="text-muted-foreground">{currentStore.name}</p>
+        </div>
+        {canManageProducts && (
           <Button onClick={openNewProductModal}>
             <Plus className="mr-2 h-4 w-4" />
             Nuevo Producto
@@ -235,35 +360,49 @@ export default function ProductsPage() {
       </div>
 
       <div className="mb-6">
-        <div className="relative">
+        <div className="relative mb-4">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
           <Input
             type="text"
-            placeholder="Buscar por ID, nombre, SKU o categoría..."
+            placeholder="Buscar por nombre o descripción..."
             className="pl-10 pr-10"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && fetchProducts()}
           />
           {searchTerm && (
             <button
               type="button"
-              onClick={() => {
-                setSearchTerm('');
-                fetchProducts();
-              }}
+              onClick={() => setSearchTerm('')}
               className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
             >
               <X className="h-4 w-4" />
             </button>
           )}
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
-          <Info className="h-3.5 w-3.5" />
-          <span>
-            Mostrando {filteredProducts.length} de {products.length} productos
-            {searchTerm.trim() && ` (filtrados por "${searchTerm}")`}
-          </span>
+        
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Info className="h-3.5 w-3.5" />
+            <span>
+              Mostrando {filteredStoreProducts.length} de {storeProducts.length} productos
+              {searchTerm.trim() && ` (filtrados por "${searchTerm}")`}
+              {hideOutOfStock && ' (sin stock oculto)'}
+            </span>
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="hide-out-of-stock"
+              checked={hideOutOfStock}
+              onCheckedChange={(checked: boolean) => setHideOutOfStock(checked)}
+            />
+            <Label 
+              htmlFor="hide-out-of-stock" 
+              className="text-sm font-medium cursor-pointer"
+            >
+              Ocultar sin stock
+            </Label>
+          </div>
         </div>
       </div>
 
@@ -271,54 +410,73 @@ export default function ProductsPage() {
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
         </div>
-      ) : filteredProducts.length === 0 ? (
+      ) : filteredStoreProducts.length === 0 ? (
         <div className="text-center py-12">
+          <Package className="mx-auto h-12 w-12 text-gray-400 mb-4" />
           <p className="text-gray-500">
             {searchTerm.trim()
               ? `No se encontraron productos que coincidan con "${searchTerm}"`
-              : "No se encontraron productos"
+              : hideOutOfStock
+                ? "No hay productos con stock en esta tienda"
+                : "No hay productos en esta tienda"
             }
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProducts.map((product) => (
-            <Card key={product.id} className="h-full flex flex-col">
+          {filteredStoreProducts.map((storeProduct) => (
+            <Card key={storeProduct.id} className="h-full flex flex-col">
               <CardHeader>
                 <div className="flex justify-between items-start">
-                  <CardTitle>{product.name}</CardTitle>
-                  {isAdmin && (
+                  <CardTitle className="text-lg">{storeProduct.product.name}</CardTitle>
+                  {canManageProducts && (
                     <div className="flex space-x-2">
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleEdit(product)}
+                        onClick={() => handleEdit(storeProduct)}
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDelete(product.id)}
-                      >
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
+                    {/*desctivado temporalmente
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDelete(storeProduct.id)}
+                    >
+                      <Trash2 className="h-4 w-4 text-red-500" />
+                    </Button>
+                    */}
                     </div>
                   )}
                 </div>
-                <p className="text-muted-foreground">
-                  S/{product.price.toFixed(2)}
-                  <span className="ml-2 text-sm text-green-500">
-                    {product.stock} en stock
-                  </span>
-                </p>
+                <div className="space-y-1">
+                  <p className="text-2xl font-bold text-primary">
+                    S/ {storeProduct.price.toFixed(2)}
+                  </p>
+                  <div className="flex items-center gap-4 text-sm">
+                    <span className={`font-medium ${
+                      storeProduct.stock <= storeProduct.stockThreshold 
+                        ? 'text-red-600' 
+                        : 'text-green-600'
+                    }`}>
+                      {storeProduct.stock} unidades
+                    </span>
+                    {storeProduct.stock <= storeProduct.stockThreshold && (
+                      <span className="text-red-600 text-xs">
+                        ⚠️ Stock bajo
+                      </span>
+                    )}
+                  </div>
+                </div>
               </CardHeader>
-              <CardContent className="flex-grow">
-                <p className="text-sm text-gray-600 mb-4">
-                  {typeof product.description === 'string' && product.description !== null
-                    ? product.description
-                    : 'Sin descripción'}
-                </p>
+              <CardContent className="flex-grow">                
+                {isAdmin && storeProduct.product.buyCost && (
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p>Costo: S/ {storeProduct.product.buyCost.toFixed(2)}</p>
+                    <p>Ganancia: S/ {(storeProduct.price - storeProduct.product.buyCost).toFixed(2)}</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}
@@ -342,26 +500,13 @@ export default function ProductsPage() {
                 onClick={() => setIsModalOpen(false)}
                 className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-5 w-5"
-                >
-                  <path d="M18 6L6 18" />
-                  <path d="M6 6l12 12" />
-                </svg>
+                <X className="h-5 w-5" />
                 <span className="sr-only">Cerrar</span>
               </button>
             </div>
             <form onSubmit={handleSubmit}>
               <div className="space-y-5">
+                {/* Campos visibles para todos */}
                 <div>
                   <label className="block text-sm font-medium mb-2">
                     Nombre <span className="text-destructive">*</span>
@@ -371,8 +516,10 @@ export default function ProductsPage() {
                     value={formData.name}
                     onChange={handleInputChange}
                     required
+                    disabled={isEditing && !isAdmin} // Solo ADMIN puede editar nombre en edición
                   />
                 </div>
+
                 <div>
                   <label className="block text-sm font-medium mb-2">
                     Descripción
@@ -383,74 +530,67 @@ export default function ProductsPage() {
                     onChange={handleInputChange}
                     className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     rows={3}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Costo de compra <span className="text-destructive">*</span>
-                  </label>
-                  <Input
-                    type="number"
-                    name="buycost"
-                    value={formData.buycost}
-                    onChange={handleInputChange}
-                    min="0"
-                    step="0.01"
-                    required
+                    disabled={isEditing && !isAdmin} // Solo ADMIN puede editar descripción en edición
                   />
                 </div>
 
-                {/* Sección de Calculadora de Precios */}
-                <div className="border rounded-lg p-4 bg-muted/30">
-                  <div className="flex items-center gap-2 mb-4">
-                    <span className="font-medium">Calculadora de Precios</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-4 mb-4">
+                {/* Campos solo para ADMIN */}
+                {isAdmin && (
+                  <>
                     <div>
                       <label className="block text-sm font-medium mb-2">
-                        Tipo de ganancia
-                      </label>
-                      <select
-                        name="profitType"
-                        value={formData.profitType}
-                        onChange={handleInputChange}
-                        className="w-full p-2 border border-input bg-background rounded-md focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
-                      >
-                        <option value="fixed">Monto fijo (S/)</option>
-                        <option value="percentage">Porcentaje (%)</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium mb-2">
-                        {formData.profitType === 'fixed' ? 'Ganancia (S/)' : 'Ganancia (%)'}
+                        Costo de compra <span className="text-destructive">*</span>
                       </label>
                       <Input
                         type="number"
-                        name="profitValue"
-                        value={formData.profitValue}
+                        name="buyCost"
+                        value={formData.buyCost}
                         onChange={handleInputChange}
                         min="0"
-                        step={formData.profitType === 'fixed' ? "0.01" : "1"}
-                        placeholder={formData.profitType === 'fixed' ? "5.00" : "20"}
+                        step="0.01"
+                        required
+                        disabled={isEditing && !isAdmin} // Solo ADMIN puede editar costo
                       />
                     </div>
-                  </div>
 
-                  <div className="p-3 bg-background rounded border">
-                    <div className="flex justify-between items-center">
-                      <span className="font-medium">Precio final calculado:</span>
-                      <span className="text-lg font-bold text-primary">
-                        S/ {finalPrice.toFixed(2)}
-                      </span>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Precio base <span className="text-destructive">*</span>
+                      </label>
+                      <Input
+                        type="number"
+                        name="basePrice"
+                        value={formData.basePrice}
+                        onChange={handleInputChange}
+                        min="0"
+                        step="0.01"
+                        required
+                        disabled={isEditing && !isAdmin} // Solo ADMIN puede editar precio base
+                      />
                     </div>
-                    {formData.profitType === 'percentage' && formData.buycost > 0 && (
-                      <div className="text-sm text-muted-foreground mt-1">
-                        ({formData.profitValue}% de S/ {formData.buycost.toFixed(2)})
-                      </div>
-                    )}
-                  </div>
+                  </>
+                )}
+
+                {/* Campos visibles para todos */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Precio de venta <span className="text-destructive">*</span>
+                  </label>
+                  <Input
+                    type="number"
+                    name="price"
+                    value={formData.price}
+                    onChange={handleInputChange}
+                    min="0"
+                    step="0.01"
+                    required={canManagePrices}
+                    disabled={!canManagePrices}
+                  />
+                  {!canManagePrices && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      No tienes permisos para modificar precios.
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -462,9 +602,15 @@ export default function ProductsPage() {
                     name="stock"
                     value={formData.stock}
                     onChange={handleInputChange}
-                    min="0"
+                    min={isEditing && originalStock !== null ? originalStock : 0}
+                    placeholder="0"
                     required
                   />
+                  {isEditing && originalStock !== null && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Solo se permite aumentar el stock. Para reducirlo, use la sección de Inventario.
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -473,8 +619,8 @@ export default function ProductsPage() {
                   </label>
                   <Input
                     type="number"
-                    name="stockTreshold"
-                    value={formData.stockTreshold}
+                    name="stockThreshold"
+                    value={formData.stockThreshold}
                     onChange={handleInputChange}
                     min="1"
                     placeholder="1"

@@ -18,11 +18,17 @@ interface JwtPayload {
   exp?: number;
   name?: string;
   verified?: boolean;
+  permissions?: string[];
+  stores?: string[];
 }
 
 export interface LoginCredentials {
   email: string;
   password: string;
+}
+
+export interface PermissionsResponse {
+  permissions: string[];
 }
 
 export interface AuthResponse {
@@ -34,7 +40,12 @@ export interface AuthResponse {
     email: string;
     name: string;
     role: string;
+    permissions: string[];
     verified: boolean;
+    stores?: {
+      id: string;
+      name: string;
+    }[];
   };
 }
 
@@ -273,6 +284,17 @@ export const authService = {
   // Verificar si el usuario está autenticado
   isAuthenticated(): boolean {
     return !isTokenExpired();
+  },
+
+  // Obtener catálogo de permisos
+  async getPermissions(): Promise<string[]> {
+    try {
+      const response = await api.get<PermissionsResponse>('/auth/permissions');
+      return response.data.permissions;
+    } catch (error) {
+      console.error('Error al obtener permisos:', error);
+      return [];
+    }
   },
 
   // Cerrar sesión y limpiar todos los datos de autenticación

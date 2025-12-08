@@ -37,8 +37,8 @@ interface Client {
 
 interface Service {
   id: string;
-  type: 'REPAIR' | 'WARRANTY'; // Updated to match backend specification
-  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'PAID';
+  type: 'REPAIR' | 'WARRANTY';
+  status: 'IN_PROGRESS' | 'COMPLETED' | 'DELIVERED' | 'PAID' | 'ANNULLATED';
   name: string;
   description?: string;
   photoUrls?: string[];
@@ -62,9 +62,16 @@ export interface OrderProduct {
   };
 }
 
+export interface UserInfo {
+  id: string;
+  name?: string;
+  email?: string;
+  role?: string;
+}
+
 export interface Order {
   id: string;
-  orderNumber: string; // Added orderNumber field
+  orderNumber: string;
   items: OrderItem[];
   userId: string;
   totalAmount: number;
@@ -76,14 +83,46 @@ export interface Order {
   client?: Client;
   services?: Service[];
   orderProducts?: OrderProduct[];
+  user?: UserInfo;
+  cashSessionId?: string;
+  cashSession?: {
+    id: string;
+    status: "OPEN" | "CLOSED";
+    openingAmount?: number;
+    closingAmount?: number | null;
+    openedAt?: string;
+    closedAt?: string | null;
+  };
 }
 
 export const orderService = {
-  async updateOrderStatus(id: string, status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'PAID'): Promise<Order> {
-    const response = await api.patch<Order>(`/orders/${id}/status`, { status });
-    return response.data;
+  // ✅ ACTUALIZADO: Completar orden (ahora soporta abonos parciales)
+  async completeOrder(orderData: {
+    orderId: string;
+    services: Array<{
+      serviceId: string;
+      payments: Array<{
+        type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+        amount: number;
+      }>;
+    }>;
+  }): Promise<Order> {
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await api.patch<Order>('orders/complete', orderData, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` })
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Error al completar la orden:", error);
+      throw error;
+    }
   },
 
+  // ✅ ACTUALIZADO: Crear orden (con cashSessionId obligatorio)
   async createOrder(orderData: {
     clientId?: string;
     clientInfo?: {
@@ -97,77 +136,147 @@ export const orderService = {
     products?: Array<{
       productId: string;
       quantity: number;
+      price?: number; // Ahora se usa como customPrice
+      payments?: Array<{
+        type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+        amount: number;
+      }>;
     }>;
     services?: Array<{
       name: string;
       description?: string;
       price: number;
-      type: 'REPAIR' | 'WARRANTY'; // Updated to match backend specification
+      type: 'REPAIR' | 'WARRANTY';
       photoUrls?: string[];
+      payments?: Array<{
+        type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+        amount: number;
+      }>; // Ahora permite adelantos
     }>;
-    status?: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'PAID';
+    cashSessionId: string; // ✅ OBLIGATORIO
   }): Promise<Order> {
+    console.log('=== INICIO: Datos recibidos en orderService.createOrder ===');
+    console.log('Datos completos recibidos:', JSON.stringify(orderData, null, 2));
+    
+    // ✅ Validación obligatoria de cashSessionId
+    if (!orderData.cashSessionId) {
+      throw new Error('El ID de la sesión de caja es obligatorio');
+    }
+
+    // Validar que al menos se proporcione clientId o clientInfo con DNI
+    if (!orderData.clientId && !orderData.clientInfo?.dni) {
+      throw new Error('Se requiere clientId o clientInfo con DNI');
+    }
+
+    // Validar que se proporcione al menos un producto o servicio
+    if ((!orderData.products || orderData.products.length === 0) &&
+          (!orderData.services || orderData.services.length === 0)) {
+      throw new Error('Se requiere al menos un producto o servicio');
+    }
+
+    // Validar que no se especifiquen clientId y clientInfo simultáneamente
+    if (orderData.clientId && orderData.clientInfo) {
+      throw new Error('No se puede especificar clientId y clientInfo simultáneamente');
+    }
+
     try {
       const token = localStorage.getItem("auth_token");
 
-      // Validar que al menos se proporcione clientId o clientInfo
-      if (!orderData.clientId && !orderData.clientInfo) {
-        throw new Error('Se requiere clientId o clientInfo');
-      }
-
-      // Validar que se proporcione al menos un producto o servicio
-      if ((!orderData.products || orderData.products.length === 0) &&
-          (!orderData.services || orderData.services.length === 0)) {
-        throw new Error('Se requiere al menos un producto o servicio');
-      }
-
-      // Build the order data object
-      const orderDataToSend = {
-        ...(orderData.clientInfo && {
-          clientInfo: {
-            name: orderData.clientInfo.name || 'Cliente Ocasional',
-            ...(orderData.clientInfo.email && { email: orderData.clientInfo.email }),
-            ...(orderData.clientInfo.phone && { phone: orderData.clientInfo.phone }),
-            ...(orderData.clientInfo.address && { address: orderData.clientInfo.address }),
-            dni: orderData.clientInfo.dni,
-            ...(orderData.clientInfo.ruc && { ruc: orderData.clientInfo.ruc })
-          }
-        }),
+      // ✅ Preparar los datos para la solicitud (sin status, lo maneja el backend)
+      const requestData = {
         ...(orderData.clientId && { clientId: orderData.clientId }),
-        ...(orderData.products && orderData.products.length > 0 && {
-          products: orderData.products.map(p => ({
-            productId: p.productId,
-            quantity: p.quantity
-          }))
+        ...(orderData.clientInfo && { clientInfo: orderData.clientInfo }),
+        ...(orderData.products && { 
+          products: orderData.products.map(p => {
+            const productData: {
+              productId: string;
+              quantity: number;
+              price?: number; // ✅ Ahora se usa como customPrice
+              payments?: Array<{
+                type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+                amount: number;
+              }>;
+            } = {
+              productId: p.productId,
+              quantity: p.quantity
+            };
+            
+            // ✅ Incluir price si existe (el backend lo convertirá a customPrice)
+            if (p.price !== undefined) {
+              productData.price = p.price;
+            }
+            
+            // Incluir payments si existen
+            if (p.payments && p.payments.length > 0) {
+              // Validar montos positivos
+              for (const payment of p.payments) {
+                if (payment.amount <= 0) {
+                  throw new Error('El monto de pago debe ser mayor a cero');
+                }
+              }
+              productData.payments = p.payments;
+            }
+            
+            return productData;
+          }) 
         }),
-        ...(orderData.services && orderData.services.length > 0 && {
-          services: orderData.services.map(s => ({
-            name: s.name,
-            ...(s.description && { description: s.description }),
-            price: s.price,
-            type: s.type,
-            ...(s.photoUrls && s.photoUrls.length > 0 && { photoUrls: s.photoUrls })
-          }))
+        ...(orderData.services && { 
+          services: orderData.services.map(s => {
+            const serviceData: {
+              name: string;
+              description?: string;
+              price: number;
+              type: 'REPAIR' | 'WARRANTY';
+              photoUrls?: string[];
+              payments?: Array<{
+                type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+                amount: number;
+              }>;
+            } = {
+              name: s.name,
+              price: s.price,
+              type: s.type
+            };
+            
+            // Incluir description si existe
+            if (s.description) {
+              serviceData.description = s.description;
+            }
+            
+            // Incluir photoUrls si existen
+            if (s.photoUrls && s.photoUrls.length > 0) {
+              serviceData.photoUrls = s.photoUrls;
+            }
+            
+            // ✅ Incluir payments si existen (adelantos)
+            if (s.payments && s.payments.length > 0) {
+              // Validar montos positivos
+              for (const payment of s.payments) {
+                if (payment.amount <= 0) {
+                  throw new Error('El monto de pago debe ser mayor a cero');
+                }
+              }
+              serviceData.payments = s.payments;
+            }
+            
+            return serviceData;
+          })
         }),
-        status: orderData.status || 'PENDING'
+        cashSessionId: orderData.cashSessionId // ✅ OBLIGATORIO
       };
 
       console.group('Sending Order Data to Backend');
       console.log('Endpoint:', 'orders/create');
       console.log('Method:', 'POST');
-      console.log('Request Data:', JSON.stringify(orderDataToSend, null, 2));
+      console.log('Request Data:', JSON.stringify(requestData, null, 2));
       console.groupEnd();
 
-      const response = await api.post<Order>(
-        "orders/create",
-        orderDataToSend,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`
-          }
+      const response = await api.post<Order>('orders/create', requestData, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` })
         }
-      );
+      });
 
       console.group("Order Created Successfully");
       console.log("Response Status:", response.status);
@@ -184,11 +293,34 @@ export const orderService = {
         if ('response' in error && error.response) {
           const response = error.response as {
             status?: number;
-            data?: unknown;
+            data?: {
+              message?: string;
+              error?: string;
+              code?: string;
+              statusCode?: number;
+            };
           };
 
           console.error("Response Status:", response.status);
           console.error("Response Data:", response.data);
+
+          // Extraer el mensaje de error del backend
+          if (response.data?.message) {
+            const errorMessage = response.data.message;
+            const errorCode = response.data.code;
+            
+            // Crear un error personalizado con el mensaje del backend
+            interface CustomError extends Error {
+              code?: string;
+              statusCode?: number;
+            }
+            
+            const customError: CustomError = new Error(errorMessage);
+            customError.code = errorCode;
+            customError.statusCode = response.data.statusCode || response.status;
+            
+            throw customError;
+          }
         }
       } else {
         console.error("Unknown error occurred:", error);
@@ -198,13 +330,14 @@ export const orderService = {
     }
   },
 
+  // ✅ ACTUALIZADO: Obtener todas las órdenes (solo ADMIN)
   async getOrders(): Promise<Order[]> {
     try {
       const token = localStorage.getItem("auth_token");
-      const response = await api.get<Order[]>("orders/all", {
+      const response = await api.get<Order[]>("orders", {
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}` 
         }
       });
       return response.data;
@@ -214,13 +347,14 @@ export const orderService = {
     }
   },
 
+  // ✅ ACTUALIZADO: Obtener orden por ID
   async getOrderById(id: string): Promise<Order> {
     try {
       const token = localStorage.getItem("auth_token");
-      const response = await api.get<Order>(`orders/get/${id}`, {
+      const response = await api.get<Order>(`orders/${id}`, {
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}` 
         }
       });
       return response.data;
@@ -230,44 +364,14 @@ export const orderService = {
     }
   },
 
-  async updateOrder(id: string, updateData: Partial<CreateOrderDto>): Promise<Order> {
-    try {
-      const token = localStorage.getItem("auth_token");
-      const response = await api.patch<Order>(`orders/update/${id}`, updateData, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        }
-      });
-      return response.data;
-    } catch (error) {
-      console.error(`Error al actualizar la orden ${id}:`, error);
-      throw error;
-    }
-  },
-
-  async deleteOrder(id: string): Promise<void> {
-    try {
-      const token = localStorage.getItem("auth_token");
-      await api.delete(`orders/remove/${id}`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        }
-      });
-    } catch (error) {
-      console.error(`Error al eliminar la orden ${id}:`, error);
-      throw error;
-    }
-  },
-
+  // ✅ ACTUALIZADO: Obtener órdenes de usuario (solo ADMIN)
   async getUserOrders(userId: string): Promise<Order[]> {
     try {
       const token = localStorage.getItem("auth_token");
       const response = await api.get<Order[]>(`orders/user/${userId}`, {
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}` 
         }
       });
       return response.data;
@@ -275,5 +379,73 @@ export const orderService = {
       console.error(`Error al obtener las órdenes del usuario ${userId}:`, error);
       throw error;
     }
-  }
+  },
+
+  // ✅ ACTUALIZADO: Cancelar orden (ya no necesita credenciales)
+  async cancelOrder(id: string): Promise<Order> {
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await api.patch<Order>(`orders/${id}/cancel`, {}, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}` 
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Error al cancelar la orden ${id}:`, error);
+      throw error;
+    }
+  },
+
+  // ✅ NUEVO: Obtener órdenes del usuario autenticado
+  async getMyOrders(): Promise<Order[]> {
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await api.get<Order[]>("orders/me", {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}` 
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Error al obtener mis órdenes:", error);
+      throw error;
+    }
+  },
+
+  // ✅ NUEVO: Obtener órdenes por tienda
+  async getOrdersByStore(storeId: string): Promise<Order[]> {
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await api.get<Order[]>(`/orders/store/${storeId}`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}` 
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Error al obtener las órdenes de la tienda ${storeId}:`, error);
+      throw error;
+    }
+  },
+
+  // ✅ NUEVO: Obtener detalles completos de una orden para PDF y visualización
+  async getOrderDetails(id: string): Promise<any> {
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await api.get<any>(`orders/details/${id}`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Error al obtener detalles de la orden ${id}:`, error);
+      throw error;
+    }
+  },
 };

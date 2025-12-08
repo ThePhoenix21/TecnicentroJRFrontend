@@ -1,5 +1,8 @@
 // src/services/dashboard.service.ts
 import { api } from '@/services/api';
+import { storeProductService } from '@/services/store-product.service';
+import { serviceService } from '@/services/service.service';
+import { StoreProduct } from '@/types/store-product.types';
 
 // Definir tipos para respuestas de API
 interface Order {
@@ -55,25 +58,6 @@ interface Client {
   updatedAt: string;
 }
 
-interface Product {
-  id: string;
-  name: string;
-  price: number;
-  stock: number;
-  description?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface Service {
-  id: string;
-  name: string;
-  price: number;
-  description?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
 interface SalesSummary {
   total: number;
   count: number;
@@ -115,6 +99,11 @@ interface TopProduct {
   description?: string;
 }
 
+// Para el dashboard solo necesitamos el nombre y la longitud del arreglo de servicios
+interface DashboardServiceInfo {
+  name: string;
+}
+
 export interface DashboardStats {
   salesSummary: SalesSummary;
   productsSummary: ProductsSummary;
@@ -125,21 +114,41 @@ export interface DashboardStats {
 }
 
 export const dashboardService = {
-  async getDashboardStats(): Promise<DashboardStats> {
+  async getDashboardStats(currentStore?: { id: string }): Promise<DashboardStats> {
     try {
 
-      // Obtener datos en paralelo
-      const [ordersRes, clientsRes, productsRes, servicesRes] = await Promise.all([
+      // Obtener datos en paralelo usando los servicios que funcionan
+      const [ordersRes, clientsRes, productsData, servicesData] = await Promise.all([
         api.get('/orders/all').catch(() => ({ data: [] })),
         api.get('/clientes').catch(() => ({ data: { data: [] } })),
-        api.get('/products/all').catch(() => ({ data: [] })),
-        api.get('/services/findAll').catch(() => ({ data: [] })) // ✅ Corregido: usar /services/findAll
+        // Usar el nuevo storeProductService si hay tienda actual, sino array vacío
+        currentStore ? storeProductService.getStoreProducts(currentStore.id, 1, 100).catch(() => []) : Promise.resolve([]),
+        serviceService.getServicesWithClients().catch(() => [])
       ]);
+
+      console.log('📊 Dashboard data responses:', {
+        orders: ordersRes.data,
+        clients: clientsRes.data,
+        products: productsData,
+        services: servicesData
+      });
 
       // Extraer datos correctamente basado en la estructura de respuesta
       const orders: Order[] = ordersRes.data || [];
-      const products: Product[] = productsRes.data || [];
-      const services: Service[] = servicesRes.data || [];
+
+      // productsData puede ser [] (en caso de error/catch) o un objeto paginado con { data: StoreProduct[], ... }
+      let products: StoreProduct[] = [];
+      if (Array.isArray(productsData)) {
+        products = productsData;
+      } else if (productsData && Array.isArray((productsData as any).data)) {
+        products = (productsData as any).data;
+      }
+
+      // servicesData puede ser [] o un arreglo de objetos con al menos `name`
+      let services: DashboardServiceInfo[] = [];
+      if (Array.isArray(servicesData)) {
+        services = servicesData as DashboardServiceInfo[];
+      }
 
       // Manejar datos de clientes con más cuidado
       let clients: Client[] = [];
@@ -169,9 +178,9 @@ export const dashboardService = {
       const salesCount = completedOrders.length;
       const salesAverage = salesCount > 0 ? salesTotal / salesCount : 0;
 
-      // Calcular resumen de productos
+      // Calcular resumen de productos (usando StoreProduct)
       const lowStockThreshold = 10;
-      const lowStockCount = products.filter((p: Product) => p.stock <= lowStockThreshold).length;
+      const lowStockCount = products.filter((p: StoreProduct) => p.stock <= lowStockThreshold).length;
 
       // Calcular resumen de clientes
       const currentMonth = new Date().getMonth();
@@ -186,9 +195,9 @@ export const dashboardService = {
         .sort((a: Order, b: Order) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
         .slice(0, 5);
 
-      // Obtener productos principales (por stock)
+      // Obtener productos principales (por stock) - usando StoreProduct
       const topProducts = products
-        .sort((a: Product, b: Product) => b.stock - a.stock)
+        .sort((a: StoreProduct, b: StoreProduct) => b.stock - a.stock)
         .slice(0, 5);
 
       // Obtener servicio más popular
@@ -230,12 +239,12 @@ export const dashboardService = {
             createdAt: sale.createdAt,
           };
         }),
-        topProducts: topProducts.map((product: Product) => ({
+        topProducts: topProducts.map((product: StoreProduct) => ({
           id: product.id,
-          name: product.name,
+          name: product.product.name, // Acceder al nombre del producto anidado
           value: product.stock,
           price: product.price,
-          description: product.description,
+          description: product.product.description || undefined,
         })),
       };
     } catch (error) {

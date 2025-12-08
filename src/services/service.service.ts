@@ -1,203 +1,361 @@
 // src/services/service.service.ts
 import { api } from './api';
 import { AxiosError } from 'axios';
-import { Service as ServiceType, CreateServiceDto, UpdateServiceDto, ServiceWithClient } from '@/types/service.types';
 import { clientService } from './client.service';
+
+// Enums del backend - COMPLETOS
+export enum ServiceStatus {
+  PENDING = 'PENDING',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+  DELIVERED = 'DELIVERED',
+  PAID = 'PAID',
+  ANNULLATED = 'ANNULLATED',
+}
+
+export enum ServiceType {
+  REPAIR = 'REPAIR',
+  MAINTENANCE = 'MAINTENANCE',
+  INSPECTION = 'INSPECTION',
+  WARRANTY = 'WARRANTY',
+  CUSTOM = 'CUSTOM',
+}
+
+// Interfaces basadas en el modelo Prisma
+export interface Service {
+  id: string;
+  type: ServiceType;
+  status: ServiceStatus;
+  name: string;
+  description?: string;
+  photoUrls: string[];
+  price: number;
+  createdAt: string;
+  updatedAt: string;
+  orderId: string;
+}
+
+export interface CreateServiceDto {
+  type: ServiceType;
+  status: ServiceStatus;
+  name: string;
+  description?: string;
+  photoUrls?: string[];
+  price: number;
+  orderId: string;
+}
+
+export interface UpdateServiceDto {
+  type?: ServiceType;
+  status?: ServiceStatus;
+  name?: string;
+  description?: string;
+  photoUrls?: string[];
+  price?: number;
+}
+
+export interface ServiceWithClient extends Service {
+  client?: {
+    id: string;
+    name: string;
+    email: string;
+    phone: string;
+    address?: string;
+    dni: string;
+    createdAt: string;
+  };
+  store?: {  
+    id: string;
+    name: string;
+    address: string | null;
+    phone: string | null;
+    createdAt: string;
+    updatedAt: string;
+    createdById: string | null;
+  };
+  order?: {
+    id: string;
+    clientId: string;
+    storeId?: string;
+    totalAmount: number;
+    status: string;
+    createdAt: string;
+  };
+}
 
 interface IServiceService {
   getServicesWithClients(
-    status?: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED',
-    search?: string
+    status?: ServiceStatus,
+    type?: ServiceType,
+    storeId?: string
   ): Promise<ServiceWithClient[]>;
   getServices(
-    status?: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED',
-    search?: string
-  ): Promise<ServiceType[]>;
-  getServiceById(id: string): Promise<ServiceType>;
-  createService(serviceData: CreateServiceDto): Promise<ServiceType>;
-  updateService(id: string, serviceData: UpdateServiceDto): Promise<ServiceType>;
+    status?: ServiceStatus,
+    type?: ServiceType
+  ): Promise<Service[]>;
+  getServiceById(id: string): Promise<Service>;
+  createService(serviceData: CreateServiceDto): Promise<Service>;
+  updateService(id: string, serviceData: UpdateServiceDto): Promise<Service>;
   deleteService(id: string): Promise<void>;
-  updateServiceStatus(
-    id: string, 
-    status: string
-  ): Promise<ServiceType & { allServicesCompleted?: boolean; orderId?: string }>;
+  updateServiceStatus(id: string, status: ServiceStatus): Promise<Service>;
 }
 
-const serviceService: IServiceService = {
-  async getServicesWithClients(status, search) {
+class ServiceService implements IServiceService {
+  private baseUrl = '/services';
+
+  // Obtener servicios con clientes y tiendas (usando nuevo endpoint del backend)
+  async getServicesWithClients(
+    status?: ServiceStatus,
+    type?: ServiceType,
+    storeId?: string
+  ): Promise<ServiceWithClient[]> {
     try {
-      // First, get the services
-      const services = await this.getServices(status, search);
-      
-      // Then, enrich each service with client information
-      const servicesWithClients = await Promise.all(
-        services.map(async (service) => {
-          if (service.order?.clientId) {
-            try {
-              const client = await clientService.getClientById(service.order.clientId);
-              return {
-                ...service,
-                client // Add client information to the service
-              } as ServiceWithClient;
-            } catch (error) {
-              console.error(`Error fetching client for service ${service.id}:`, error);
-              return service as ServiceWithClient; // Return service without client info if there's an error
-            }
-          }
-          return service as ServiceWithClient; // Return service as is if no clientId is available
-        })
-      );
-      
-      console.log('Services with clients:', servicesWithClients);
-      return servicesWithClients;
+      const params = new URLSearchParams();
+      if (status) params.append('status', status);
+      if (type) params.append('type', type);
+      if (storeId) params.append('storeId', storeId);
+
+      const url = params.toString() 
+        ? `${this.baseUrl}/findAllWithClients?${params.toString()}` 
+        : `${this.baseUrl}/findAllWithClients`;
+
+      const response = await api.get<ServiceWithClient[]>(url);
+      return response.data;
     } catch (error) {
-      console.error('Error in getServicesWithClients:', error);
+      console.error('Error en getServicesWithClients:', error);
       throw error;
     }
-  },
-  
-  async getServices(status, search) {
+  }
+
+  async getServices(
+    status?: ServiceStatus,
+    type?: ServiceType
+  ): Promise<Service[]> {
     try {
-      console.log('Fetching services with params:', { status, search });
-      
-      const response = await api.get<ServiceType[]>('/services/findAll', {
+      const response = await api.get<Service[]>(`${this.baseUrl}/findAll`, {
         params: {
           ...(status && { status }),
-          ...(search && { search })
+          ...(type && { type })
         }
       });
       
-      console.log('Services response:', response);
       return response.data;
     } catch (error) {
       const axiosError = error as AxiosError<{ message?: string }>;
       console.error('Error fetching services:', {
-        message: axiosError.message,
+        error: axiosError.message,
         response: axiosError.response?.data,
-        status: axiosError.response?.status,
-        statusText: axiosError.response?.statusText,
-        config: {
-          url: axiosError.config?.url,
-          method: axiosError.config?.method,
-          params: axiosError.config?.params
-        }
+        status: axiosError.response?.status
       });
-      throw new Error(axiosError.response?.data?.message || 'No se pudieron cargar los servicios. Por favor, verifique su conexión e intente nuevamente.');
+      throw new Error(axiosError.response?.data?.message || 'No se pudieron cargar los servicios.');
     }
-  },
-  
-  async getServiceById(id: string) {
+  }
+
+  async getServiceById(id: string): Promise<Service> {
     try {
-      const response = await api.get<ServiceType>(`/services/findOne/${id}`);
+      const response = await api.get<Service>(`${this.baseUrl}/findOne/${id}`);
       return response.data;
     } catch (error) {
       const axiosError = error as AxiosError<{ message?: string }>;
       console.error('Error in getServiceById:', {
-        message: axiosError.message,
-        url: axiosError.config?.url,
-        status: axiosError.response?.status,
+        id,
+        error: axiosError.message,
         response: axiosError.response?.data
       });
       throw new Error(axiosError.response?.data?.message || 'No se pudo cargar el servicio.');
     }
-  },
-  
-  async createService(serviceData: CreateServiceDto) {
+  }
+
+  async createService(serviceData: CreateServiceDto): Promise<Service> {
     try {
-      const response = await api.post<ServiceType>('/services', serviceData);
+      // Validaciones obligatorias según el backend
+      if (!serviceData.type) {
+        throw new Error('El tipo de servicio es obligatorio');
+      }
+      if (!serviceData.status) {
+        throw new Error('El estado del servicio es obligatorio');
+      }
+      if (!serviceData.name) {
+        throw new Error('El nombre del servicio es obligatorio');
+      }
+      if (!serviceData.price) {
+        throw new Error('El precio del servicio es obligatorio');
+      }
+      if (!serviceData.orderId) {
+        throw new Error('El ID de la orden es obligatorio');
+      }
+      
+      const response = await api.post<Service>(`${this.baseUrl}/create`, serviceData);
       return response.data;
     } catch (error) {
       const axiosError = error as AxiosError<{ message?: string }>;
+      console.error('Error creating service:', {
+        error: axiosError.message,
+        response: axiosError.response?.data,
+        requestData: serviceData
+      });
       throw new Error(axiosError.response?.data?.message || 'No se pudo crear el servicio.');
     }
-  },
-  
-  async updateService(id: string, serviceData: UpdateServiceDto) {
+  }
+
+  async updateService(id: string, serviceData: UpdateServiceDto): Promise<Service> {
     try {
-      const response = await api.patch<ServiceType>(`/services/${id}`, serviceData);
+      const response = await api.patch<Service>(`${this.baseUrl}/update/${id}`, serviceData);
       return response.data;
     } catch (error) {
       const axiosError = error as AxiosError<{ message?: string }>;
+      console.error('Error updating service:', {
+        id,
+        error: axiosError.message,
+        response: axiosError.response?.data,
+        requestData: serviceData
+      });
       throw new Error(axiosError.response?.data?.message || 'No se pudo actualizar el servicio.');
     }
-  },
-  
-  async deleteService(id: string) {
+  }
+
+  async deleteService(id: string): Promise<void> {
     try {
-      await api.delete(`/services/${id}`);
+      await api.delete(`${this.baseUrl}/remove/${id}`);
     } catch (error) {
       const axiosError = error as AxiosError<{ message?: string }>;
-      throw new Error(axiosError.response?.data?.message || 'No se pudo eliminar el servicio.');
-    }
-  },
-  
-  async updateServiceStatus(id: string, status: string) {
-    try {
-      console.log('Updating service status:', { id, status });
+      console.error('Error deleting service:', {
+        id,
+        error: axiosError.message,
+        response: axiosError.response?.data
+      });
       
-      // First, get the current service to check the orderId
-      const currentService = await this.getServiceById(id);
-      console.log('Current service:', { orderId: currentService.orderId, currentStatus: currentService.status });
+      let errorMessage = 'No se pudo eliminar el servicio. ';
       
-      const orderId = currentService.orderId;
-      
-      try {
-        // Update the service status using the correct endpoint
-        console.log('Sending PATCH to:', `/services/update/${id}`);
-        const response = await api.patch<ServiceType>(`/services/update/${id}`, { status });
-        console.log('Service update response:', response.data);
-        
-        // If the service was marked as completed, check if we need to update the order status
-        if (status === 'COMPLETED' && orderId) {
-          try {
-            console.log('Checking if we need to update order status for order:', orderId);
-            // Get all services for this order
-            const services = await this.getServices();
-            const orderServices = services.filter(s => s.orderId === orderId);
-            console.log(`Found ${orderServices.length} services for order ${orderId}`);
-            
-            // Check if all services are completed
-            const allServicesCompleted = orderServices.every(service => 
-              service.id === id || service.status === 'COMPLETED'
-            );
-            
-            console.log('All services completed:', allServicesCompleted);
-            
-            if (allServicesCompleted && orderServices.length > 0) {
-              console.log('Updating order status to COMPLETED');
-              // Update the order status to COMPLETED using the correct endpoint
-              const orderResponse = await api.patch(`/orders/status/${orderId}`, { status: 'COMPLETED' });
-              console.log('Order status update response:', orderResponse.data);
-              return { ...response.data, allServicesCompleted: true, orderId };
-            }
-          } catch (saleUpdateError) {
-            console.error('Error updating order status:', saleUpdateError);
-            // Don't fail the service update if we can't update the order status
-            return { ...response.data, orderUpdateError: 'No se pudo actualizar el estado de la orden' };
-          }
+      if (axiosError.response) {
+        if (axiosError.response.status === 404) {
+          errorMessage = 'El servicio no fue encontrado o ya fue eliminado.';
+        } else if (axiosError.response.status === 403) {
+          errorMessage = 'No tienes permiso para eliminar este servicio (solo ADMIN puede eliminar).';
+        } else if (axiosError.response.status === 409) {
+          errorMessage = 'No se puede eliminar el servicio porque tiene registros asociados.';
+        } else if (axiosError.response.data?.message) {
+          errorMessage += `Error: ${axiosError.response.data.message}`;
+        } else {
+          errorMessage += `Error del servidor (${axiosError.response.status}).`;
         }
-        
-        return response.data;
-      } catch (updateError) {
-        const axiosUpdateError = updateError as AxiosError<{ message?: string }>;
-        console.error('Error updating service status:', {
-          message: axiosUpdateError.message,
-          response: axiosUpdateError.response?.data,
-          status: axiosUpdateError.response?.status,
-          config: {
-            url: axiosUpdateError.config?.url,
-            method: axiosUpdateError.config?.method,
-            data: axiosUpdateError.config?.data,
-          },
-        });
-        throw new Error(axiosUpdateError.response?.data?.message || 'No se pudo actualizar el estado del servicio.');
       }
-    } catch (error) {
-      console.error('Error in updateServiceStatus:', error);
-      throw error; // Re-throw to be handled by the caller
+      
+      throw new Error(errorMessage);
     }
-  },
-};
+  }
 
-export { serviceService };
-export type { ServiceType as Service };
+  // ✅ SIMPLIFICADO: Solo actualiza el estado del servicio, sin lógica de orden
+  async updateServiceStatus(id: string, status: ServiceStatus): Promise<Service> {
+    try {
+      // Validar que el estado sea uno de los permitidos por el backend
+      const allowedStatuses: ServiceStatus[] = [
+        ServiceStatus.IN_PROGRESS,
+        ServiceStatus.COMPLETED,
+        ServiceStatus.DELIVERED,
+        ServiceStatus.PAID,
+        ServiceStatus.ANNULLATED
+      ];
+      
+      if (!allowedStatuses.includes(status)) {
+        throw new Error(`Estado no válido. Los estados permitidos son: ${allowedStatuses.join(', ')}`);
+      }
+      
+      // Usar el endpoint específico para actualizar solo el estado
+      const response = await api.patch<Service>(`${this.baseUrl}/status/${id}`, { status });
+      return response.data;
+    } catch (error) {
+      const axiosError = error as AxiosError<{ message?: string }>;
+      console.error('Error updating service status:', {
+        id,
+        status,
+        error: axiosError.message,
+        response: axiosError.response?.data
+      });
+      
+      // Manejar errores específicos del backend
+      if (axiosError.response?.status === 404) {
+        throw new Error('Servicio no encontrado');
+      } else if (axiosError.response?.status === 403) {
+        throw new Error('No tienes permisos para cambiar el estado de este servicio');
+      } else if (axiosError.response?.status === 400) {
+        const backendMessage = axiosError.response.data?.message;
+        if (backendMessage?.includes('Estado no válido')) {
+          throw new Error('Estado no válido. Los estados permitidos son: IN_PROGRESS, COMPLETED, DELIVERED, PAID, ANNULLATED');
+        }
+        throw new Error(backendMessage || 'Datos inválidos');
+      }
+      
+      throw new Error(axiosError.response?.data?.message || 'No se pudo actualizar el estado del servicio');
+    }
+  }
+
+  // ✅ NUEVO: Obtener monto pendiente de pago de un servicio
+  async getServicePendingPayment(id: string): Promise<{
+    serviceId: string;
+    serviceName: string;
+    servicePrice: number;
+    totalPaid: number;
+    pendingAmount: number;
+    isFullyPaid: boolean;
+    paymentBreakdown: Array<{
+      id: string;
+      type: string;
+      amount: number;
+      createdAt: string;
+    }>;
+  }> {
+    try {
+      const response = await api.get(`${this.baseUrl}/${id}/pending-payment`);
+      return response.data;
+    } catch (error) {
+      const axiosError = error as AxiosError<{ message?: string }>;
+      console.error('Error getting service pending payment:', {
+        id,
+        error: axiosError.message,
+        response: axiosError.response?.data,
+        status: axiosError.response?.status
+      });
+      
+      // Manejar errores específicos del backend
+      if (axiosError.response?.status === 404) {
+        throw new Error('Servicio no encontrado');
+      } else if (axiosError.response?.status === 403) {
+        throw new Error('No tienes permisos para ver el estado de pago de este servicio');
+      } else if (axiosError.response?.status === 400) {
+        const backendMessage = axiosError.response.data?.message;
+        if (backendMessage?.includes('Validation failed')) {
+          throw new Error('ID de servicio inválido');
+        }
+        throw new Error(backendMessage || 'Datos inválidos');
+      }
+      
+      throw new Error(axiosError.response?.data?.message || 'No se pudo obtener el estado de pago del servicio');
+    }
+  }
+
+  // ✅ NUEVO: Método helper para verificar si un servicio está pagado
+  async isServiceFullyPaid(id: string): Promise<boolean> {
+    try {
+      const paymentInfo = await this.getServicePendingPayment(id);
+      return paymentInfo.isFullyPaid;
+    } catch (error) {
+      console.error('Error checking if service is fully paid:', error);
+      return false; // Asumir que no está pagado si hay error
+    }
+  }
+
+  // ✅ NUEVO: Método helper para obtener solo el monto pendiente
+  async getServicePendingAmount(id: string): Promise<number> {
+    try {
+      const paymentInfo = await this.getServicePendingPayment(id);
+      return paymentInfo.pendingAmount;
+    } catch (error) {
+      console.error('Error getting service pending amount:', error);
+      return 0; // Retornar 0 si hay error
+    }
+  }
+}
+
+export const serviceService = new ServiceService();

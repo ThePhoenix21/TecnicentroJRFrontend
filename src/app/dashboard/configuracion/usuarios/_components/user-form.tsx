@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useState, useEffect } from 'react';
+import { useForm, type Control } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { toast } from 'sonner';
@@ -23,6 +23,10 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select';
+import { authService } from '@/services/auth';
+import { Checkbox } from '@/components/ui/checkbox';
+import { userService, type CreateUserRegularDto, type UpdateUserDto } from '@/services/user.service';
+import { adminRegisterService, type CreateAdminData } from '@/services/admin-register';
 
 const UserRole = z.enum(['ADMIN', 'USER']);
 type UserRoleType = z.infer<typeof UserRole>;
@@ -34,7 +38,7 @@ const userFormSchema = z.object({
   }),
   username: z.string().min(3, {
     message: 'El nombre de usuario debe tener al menos 3 caracteres.',
-  }),
+  }).optional(),
   email: z.string().email({
     message: 'Por favor ingresa un correo electrónico válido.',
   }),
@@ -42,37 +46,60 @@ const userFormSchema = z.object({
     message: 'El número de teléfono debe tener al menos 8 dígitos.',
   }),
   role: UserRole,
-  password: z.string()
-    .min(8, {
-      message: 'La contraseña debe tener al menos 8 caracteres.',
-    })
-    .regex(/[A-Z]/, {
-      message: 'La contraseña debe tener al menos una mayúscula.',
-    })
-    .regex(/[0-9]/, {
-      message: 'La contraseña debe tener al menos un número.',
-    })
-    .regex(/[*@!#%&?]/, {
-      message: 'La contraseña debe tener al menos un carácter especial (*, @, !, #, %, &, ?).',
-    })
-    .optional(),
+  password: z.string().optional(),
   confirmPassword: z.string().optional(),
-}).superRefine((data, ctx) => {
-  if (data.password && data.password !== data.confirmPassword) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Las contraseñas no coinciden.',
-      path: ['confirmPassword']
-    });
+  storeId: z.string().optional(),
+  permissions: z.array(z.string()).default([]),
+}).refine((data) => {
+  // Solo validar contraseña si estamos creando (no hay id)
+  if (!data.id && data.password && !data.confirmPassword) {
+    return false;
   }
-
+  if (!data.id && data.password && data.confirmPassword && data.password !== data.confirmPassword) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Las contraseñas no coinciden",
+  path: ["confirmPassword"],
+}).refine((data) => {
+  // Si es USER y estamos creando, requiere storeId
+  if (!data.id && data.role === 'USER' && !data.storeId) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Los usuarios tipo USER deben seleccionar una tienda",
+  path: ["storeId"],
+}).refine((data) => {
+  // En creación, la contraseña es requerida
   if (!data.id && !data.password) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'La contraseña es requerida',
-      path: ['password']
-    });
+    return false;
   }
+  return true;
+}, {
+  message: "La contraseña es requerida para crear usuarios",
+  path: ["password"],
+}).refine((data) => {
+  // Si hay contraseña, validar formato (solo en creación)
+  if (!data.id && data.password) {
+    if (data.password.length < 8) return false;
+    if (!/[A-Z]/.test(data.password)) return false;
+    if (!/[a-z]/.test(data.password)) return false;
+    if (!/[0-9]/.test(data.password)) return false;
+  }
+  return true;
+}, {
+  message: "La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula y un número",
+  path: ["password"],
+}).refine((data) => {
+  // Si es USER y estamos creando, el username es opcional (se genera automáticamente)
+  // Si es ADMIN y estamos creando, el username también es opcional
+  // No validar username requerido en creación
+  return true;
+}, {
+  message: "El nombre de usuario es opcional",
+  path: ["username"],
 });
 
 const validatePasswordRequirement = (password: string, requirement: string): boolean => {
@@ -98,270 +125,258 @@ const passwordRequirements = [
 ];
 
 type UserFormValues = z.infer<typeof userFormSchema>;
+type UserFormControl = Control<UserFormValues>;
+
+const DEFAULT_USER_PERMISSIONS = [
+  'VIEW_INVENTORY',
+  'VIEW_PRODUCTS',
+  'MANAGE_PRODUCTS',
+  'VIEW_SERVICES',
+  'MANAGE_SERVICES',
+  'VIEW_ORDERS',
+  'MANAGE_ORDERS',
+  'VIEW_CASH',
+  'MANAGE_CASH',
+];
+
+const formatPermissionLabel = (permission: string): string => {
+  if (!permission) return '';
+
+  const normalized = permission
+    .replace(/[\s]+/g, '')
+    .trim()
+    .toLowerCase();
+
+  if (!normalized) return permission;
+
+  // Separar por separadores comunes de scopes: users.read, ventas_crear, etc.
+  const tokens = permission
+    .toLowerCase()
+    .split(/[.:/_-]+/)
+    .filter(Boolean);
+
+  const dictionary: Record<string, string> = {
+    // módulos / recursos
+    users: 'Usuarios',
+    user: 'Usuario',
+    roles: 'Roles',
+    role: 'Rol',
+    permissions: 'Permisos',
+    permission: 'Permiso',
+    products: 'Productos',
+    product: 'Producto',
+    services: 'Servicios',
+    service: 'Servicio',
+    orders: 'Órdenes',
+    order: 'Orden',
+    sales: 'Ventas',
+    sale: 'Venta',
+    inventory: 'Inventario',
+    stores: 'Tiendas',
+    store: 'Tienda',
+    dashboard: 'Dashboard',
+    reports: 'Reportes',
+    report: 'Reporte',
+    clients: 'Clientes',
+    client: 'Cliente',
+    prices: 'Precios',
+    price: 'Precio',
+    cash: 'Caja',
+    caja: 'Caja',
+
+    // acciones
+    read: 'Ver',
+    view: 'Ver',
+    list: 'Listar',
+    create: 'Crear',
+    add: 'Agregar',
+    update: 'Editar',
+    edit: 'Editar',
+    delete: 'Eliminar',
+    remove: 'Eliminar',
+    manage: 'Gestionar',
+    export: 'Exportar',
+    print: 'Imprimir',
+    approve: 'Aprobar',
+    close: 'Cerrar',
+  };
+
+  const translated = tokens.map((token) => {
+    const key = token.toLowerCase();
+    if (dictionary[key]) return dictionary[key];
+
+    // Fallback: capitalizar en español sin traducir
+    return key.charAt(0).toUpperCase() + key.slice(1);
+  });
+
+  // Si hay dos partes, normalmente es Recurso + Acción → "Usuarios · Ver"
+  if (translated.length === 2) {
+    return `${translated[0]} · ${translated[1]}`;
+  }
+
+  return translated.join(' · ');
+};
 
 interface UserFormProps {
   onSuccess?: () => void;
-  initialData?: Omit<UserFormValues, 'password' | 'confirmPassword'> & {
+  initialData?: Partial<UserFormValues> & {
     id?: string;
     password?: string;
+    permissions?: string[];
   };
 }
 
 export function UserForm({ onSuccess, initialData }: UserFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
+  const [isLoadingStores, setIsLoadingStores] = useState(true);
+  const [availablePermissions, setAvailablePermissions] = useState<string[]>([]);
+  const [isLoadingPermissions, setIsLoadingPermissions] = useState(true);
 
   const form = useForm<UserFormValues>({
-    resolver: zodResolver(userFormSchema),
+    resolver: zodResolver(userFormSchema) as any,
     defaultValues: {
+      id: initialData?.id || '',
       name: initialData?.name || '',
       username: initialData?.username || '',
       email: initialData?.email || '',
       phone: initialData?.phone || '',
       role: (initialData?.role as UserRoleType) || 'USER',
-      password: '',
+      password: initialData?.password || '',
       confirmPassword: '',
+      storeId: initialData?.storeId || '',
+      permissions: initialData?.permissions || [],
     },
   });
 
+    // Pre-poblar permisos básicos cuando se selecciona USER en creación
+  const currentRole = form.watch('role');
+
+  useEffect(() => {
+    // Solo aplicar en modo creación (sin ID) y cuando ya se cargaron los permisos disponibles
+    if (!initialData?.id && currentRole === 'USER' && availablePermissions.length > 0) {
+      const currentPermissions = form.getValues('permissions');
+
+      // Si no tiene permisos seleccionados, aplicar los por defecto
+      if (currentPermissions.length === 0) {
+        const validDefaults = DEFAULT_USER_PERMISSIONS.filter(p =>
+          availablePermissions.includes(p)
+        );
+
+        if (validDefaults.length > 0) {
+          form.setValue('permissions', validDefaults);
+        }
+      }
+    }
+  }, [currentRole, availablePermissions, initialData?.id, form]);
+
+  // Cargar tiendas y permisos al montar
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setIsLoadingStores(true);
+        setIsLoadingPermissions(true);
+        
+        // Cargar tiendas
+        const users = await userService.getAllUsers();
+        const uniqueStores = new Map<string, string>();
+        
+        users.forEach(user => {
+          user.stores.forEach(store => {
+            if (!uniqueStores.has(store.id)) {
+              uniqueStores.set(store.id, store.name);
+            }
+          });
+        });
+        
+        const storesArray = Array.from(uniqueStores.entries()).map(([id, name]) => ({ id, name }));
+        setStores(storesArray);
+        
+        // Cargar permisos
+        const permissions = await authService.getPermissions();
+        setAvailablePermissions(permissions);
+        
+      } catch (error) {
+        console.error('Error loading data:', error);
+      } finally {
+        setIsLoadingStores(false);
+        setIsLoadingPermissions(false);
+      }
+    };
+    loadData();
+  }, []);
+
+
   const onSubmit = async (data: UserFormValues) => {
+    console.log('🚀 onSubmit se ejecutó con datos:', data);
     try {
       setIsSubmitting(true);
 
       console.log('=== DEBUG: Datos del formulario ===');
       console.log('initialData:', initialData);
-      console.log('data.role:', data.role);
       console.log('initialData?.id:', initialData?.id);
-
-      const roleChangedToAdmin = initialData && initialData.role !== 'ADMIN' && data.role === 'ADMIN';
-      const emailChanged = initialData && initialData.email !== data.email;
 
       if (initialData?.id) {
         console.log(' Ejecutando flujo de ACTUALIZACIÓN');
+        
+        // Para actualizaciones, solo enviar campos permitidos
+        const updateUserData: UpdateUserDto = {
+          name: data.name,
+          username: data.username || '', // Fallback para undefined
+          email: data.email,
+          phone: data.phone,
+          // Solo incluir storeId si es USER
+          ...(initialData.role === 'USER' && data.storeId && { storeId: data.storeId }),
+          permissions: data.permissions,
+        };
 
-        const token = localStorage.getItem(process.env.NEXT_PUBLIC_TOKEN_KEY || 'auth_token');
-
-        // Crear número secuencial pequeño (últimos 4 dígitos del timestamp)
-        const shortTimestamp = (Date.now() % 10000).toString().padStart(4, '0'); // 0001-9999
-
-        // Crear email único con número secuencial pequeño
-        const emailParts = data.email.split('@');
-        const baseEmail = emailParts[0];
-        const domainEmail = emailParts[1];
-        const uniqueEmail = `${baseEmail}${shortTimestamp}@${domainEmail}`; // vitabarmartin1234@gmail.com
-
-        if (roleChangedToAdmin || emailChanged) {
-          console.log(` Cambiando ${roleChangedToAdmin ? 'rol a ADMIN' : 'email'} - usando estrategia crear + eliminar`);
-
-          const newUserData = {
-            name: data.name,
-            username: `${data.username || data.name.toLowerCase().replace(/\s+/g, '')}${shortTimestamp}`, // Username con mismo número
-            email: uniqueEmail, // ✅ Email único con número secuencial pequeño
-            password: data.password || 'TempPass123!',
-            phone: data.phone,
-          };
-
-          console.log(' Datos enviados:', JSON.stringify(newUserData, null, 2));
-
-          const endpoint = roleChangedToAdmin ? '/auth/register' : '/users/create';
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${endpoint}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-            },
-            body: JSON.stringify(newUserData),
-          });
-
-          console.log(`📥 Respuesta de ${endpoint}: ${response.status} ${response.statusText}`);
-
-          if (response.ok) {
-            console.log(`✅ ${roleChangedToAdmin ? 'Admin' : 'Usuario'} creado exitosamente`);
-
-            try {
-              const deleteResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/${initialData.id}`, {
-                method: 'DELETE',
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                },
-              });
-
-              if (deleteResponse.ok) {
-                console.log('✅ Usuario anterior eliminado');
-              } else {
-                console.warn('⚠️ No se pudo eliminar usuario anterior (restricciones SQL)');
-              }
-            } catch (deleteError) {
-              console.warn('⚠️ Error en eliminación:', deleteError);
-            }
-          } else {
-            const errorText = await response.text();
-            console.log(`❌ Error en ${endpoint} (${response.status}):`, errorText);
-
-            // Si falla el endpoint principal, intentar con el alternativo
-            if (roleChangedToAdmin) {
-              console.log('🔄 Fallback: intentando con /users/create...');
-              try {
-                const fallbackResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/create`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                  },
-                  body: JSON.stringify(newUserData), // ✅ Usar el mismo email único
-                });
-
-                if (fallbackResponse.ok) {
-                  console.log('✅ Usuario creado via fallback, eliminando anterior...');
-                  await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/${initialData.id}`, {
-                    method: 'DELETE',
-                    headers: {
-                      'Authorization': `Bearer ${token}`,
-                    },
-                  });
-                } else {
-                  const fallbackErrorText = await fallbackResponse.text();
-                  console.log(`❌ Error en fallback (${fallbackResponse.status}):`, fallbackErrorText);
-                  throw new Error('No se pudo crear el usuario con ningún endpoint');
-                }
-              } catch (fallbackError) {
-                console.error('❌ Error en fallback:', fallbackError);
-                let errorMessage = `Error al ${roleChangedToAdmin ? 'cambiar rol' : 'actualizar'}`;
-                try {
-                  const errorData = JSON.parse(errorText);
-                  errorMessage = errorData.message || errorMessage;
-                } catch {
-                  errorMessage = errorText || errorMessage;
-                }
-                throw new Error(errorMessage);
-              }
-            } else {
-              // Para cambios de email, si falla /users/create, no hay fallback
-              let errorMessage = `Error al ${roleChangedToAdmin ? 'cambiar rol' : 'actualizar'}`;
-              try {
-                const errorData = JSON.parse(errorText);
-                errorMessage = errorData.message || errorMessage;
-              } catch {
-                errorMessage = errorText || errorMessage;
-              }
-              throw new Error(errorMessage);
-            }
-          }
-        } else {
-          console.log('📝 Cambios menores - intentando PUT...');
-          try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/${initialData.id}`, {
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-              },
-              body: JSON.stringify({
-                name: data.name,
-                email: uniqueEmail, // ✅ Usar email único también para cambios menores
-                role: data.role,
-                ...(data.password && { password: data.password }),
-              }),
-            });
-
-            if (response.ok) {
-              console.log('✅ Usuario actualizado correctamente');
-            } else {
-              throw new Error(`Error: ${response.status}`);
-            }
-          } catch (putError) {
-            console.warn('⚠️ PUT falló, usando crear + eliminar:', putError);
-            const userData = {
-              name: data.name,
-              username: `${data.username || data.name.toLowerCase().replace(/\s+/g, '')}${shortTimestamp}`,
-              email: uniqueEmail,
-              phone: data.phone,
-              password: data.password || 'TempPass123!',
-            };
-
-            const fallbackResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/create`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-              },
-              body: JSON.stringify(userData),
-            });
-
-            if (fallbackResponse.ok) {
-              console.log('✅ Usuario actualizado via fallback');
-            } else {
-              const fallbackErrorText = await fallbackResponse.text();
-              console.log(`❌ Error en fallback (${fallbackResponse.status}):`, fallbackErrorText);
-              let errorMessage = 'Error al actualizar el usuario';
-              try {
-                const errorData = JSON.parse(fallbackErrorText);
-                errorMessage = errorData.message || errorMessage;
-              } catch {
-                errorMessage = fallbackErrorText || errorMessage;
-              }
-              throw new Error(errorMessage);
-            }
-          }
-        }
+        console.log('📝 Datos para actualización:', updateUserData);
+        const updatedUser = await userService.updateUser(initialData.id, updateUserData);
+        console.log('✅ Usuario actualizado correctamente:', updatedUser);
       } else {
-        console.log(' Ejecutando flujo de CREACIÓN');
+        console.log('🚀 Ejecutando flujo de CREACIÓN');
         if (!data.password) {
           throw new Error('La contraseña es requerida');
         }
 
-        const token = localStorage.getItem(process.env.NEXT_PUBLIC_TOKEN_KEY || 'auth_token');
-        const isAdmin = data.role === 'ADMIN';
-        const endpoint = isAdmin ? '/auth/register' : '/users/create';
+        if (data.role === 'ADMIN') {
+          // Crear administrador usando adminRegisterService
+          const adminData: CreateAdminData = {
+            name: data.name,
+            email: data.email,
+            phone: data.phone,
+            password: data.password,
+            username: data.username, // Opcional para admin
+            permissions: data.permissions,
+          };
 
-        const userData = isAdmin
-          ? {
-              name: data.name,
-              username: data.username,
-              email: data.email, // ✅ Email original para usuarios nuevos
-              password: data.password,
-              phone: data.phone
-            }
-          : {
-              name: data.name,
-              username: data.username,
-              email: data.email, // ✅ Email original para usuarios nuevos
-              phone: data.phone,
-              password: data.password
-            };
+          console.log('🔐 Creando administrador:', adminData);
+          const createdAdmin = await adminRegisterService.createAdmin(adminData);
+          console.log('✅ Administrador creado exitosamente:', createdAdmin);
+        } else {
+          // Crear usuario regular usando userService
+          const userData: CreateUserRegularDto = {
+            name: data.name,
+            email: data.email,
+            phone: data.phone,
+            password: data.password,
+            storeId: data.storeId!, // Obligatorio para USER
+            username: data.username, // Opcional, se genera automáticamente si no se proporciona
+            permissions: data.permissions,
+          };
 
-        console.log(`Creando usuario ${isAdmin ? 'ADMIN' : 'regular'}:`, userData);
-
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${endpoint}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify(userData),
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('❌ Error creación:', errorText);
-          let errorMessage = 'Error al crear el usuario';
-          try {
-            const errorData = JSON.parse(errorText);
-            errorMessage = errorData.message || errorMessage;
-          } catch {
-            errorMessage = errorText || errorMessage;
-          }
-          throw new Error(errorMessage);
+          console.log('👤 Creando usuario regular:', userData);
+          const createdUser = await userService.createUser(userData);
+          console.log('✅ Usuario creado exitosamente:', createdUser);
         }
       }
 
       toast.success(
         initialData
-          ? (roleChangedToAdmin
-              ? 'Usuario promovido a administrador correctamente (email actualizado con número 4 dígitos)'
-              : emailChanged
-                ? 'Usuario actualizado con nuevo email correctamente'
-                : 'Usuario actualizado correctamente')
-          : 'Usuario creado correctamente'
+          ? 'Usuario actualizado correctamente'
+          : data.role === 'ADMIN' 
+            ? 'Administrador creado correctamente'
+            : 'Usuario creado correctamente'
       );
       onSuccess?.();
     } catch (error) {
@@ -374,10 +389,20 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form
+        onSubmit={form.handleSubmit(onSubmit as any)}
+        className="space-y-6"
+      >
+        {/* Loading state for stores */}
+        {isLoadingStores && (
+          <div className="flex items-center justify-center py-8">
+            <div className="text-sm text-muted-foreground">Cargando tiendas...</div>
+          </div>
+        )}
+        
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <FormField
-            control={form.control}
+            control={form.control as UserFormControl}
             name="name"
             render={({ field }) => (
               <FormItem>
@@ -391,13 +416,13 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
           />
 
           <FormField
-            control={form.control}
+            control={form.control as UserFormControl}
             name="username"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Nombre de usuario</FormLabel>
                 <FormControl>
-                  <Input placeholder="nombredeusuario" {...field} />
+                  <Input placeholder="nombre_usuario" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -405,7 +430,7 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
           />
 
           <FormField
-            control={form.control}
+            control={form.control as UserFormControl}
             name="email"
             render={({ field }) => (
               <FormItem>
@@ -419,7 +444,7 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
           />
 
           <FormField
-            control={form.control}
+            control={form.control as UserFormControl}
             name="phone"
             render={({ field }) => (
               <FormItem>
@@ -432,55 +457,157 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
             )}
           />
 
-          <FormField
-            control={form.control}
-            name="role"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Rol</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecciona un rol" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="ADMIN">Administrador</SelectItem>
-                    <SelectItem value="USER">Usuario</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {/* Campo de rol solo visible en creación */}
+          {!initialData?.id && (
+            <FormField
+              control={form.control as UserFormControl}
+              name="role"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Rol</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona un rol" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="ADMIN">Administrador</SelectItem>
+                      <SelectItem value="USER">Usuario</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
 
-          <FormField
-            control={form.control}
-            name="password"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Contraseña</FormLabel>
-                <FormControl>
-                  <Input type="password" placeholder="••••••••" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {/* Selector de tienda visible para USER en creación, o para edición de USER */}
+          {((!initialData?.id && form.watch('role') === 'USER') || 
+            (initialData?.id && initialData.role === 'USER')) && (
+            <FormField
+              control={form.control as UserFormControl}
+              name="storeId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tienda asignada</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona una tienda" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {stores.map((store) => (
+                        <SelectItem key={store.id} value={store.id}>
+                          {store.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
 
-          <FormField
-            control={form.control}
-            name="confirmPassword"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Confirmar contraseña</FormLabel>
-                <FormControl>
-                  <Input type="password" placeholder="••••••••" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {/* Sección de Permisos */}
+          {form.watch('role') === 'USER' && (
+            <div className="md:col-span-2 space-y-4 border rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-medium">Permisos</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Selecciona los permisos que tendrá este usuario
+                  </p>
+                </div>
+              </div>
+              
+              {isLoadingPermissions ? (
+                <div className="text-sm text-muted-foreground">Cargando permisos...</div>
+              ) : (
+                <FormField
+                  control={form.control as UserFormControl}
+                  name="permissions"
+                  render={() => (
+                    <FormItem>
+                      <div className="max-h-64 overflow-y-auto pr-1">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {availablePermissions.map((permission) => (
+                          <FormField
+                            key={permission}
+                            control={form.control as UserFormControl}
+                            name="permissions"
+                            render={({ field }) => {
+                              return (
+                                <FormItem
+                                  key={permission}
+                                  className="flex flex-row items-start space-x-3 space-y-0"
+                                >
+                                  <FormControl>
+                                    <Checkbox
+                                      checked={field.value?.includes(permission)}
+                                      onCheckedChange={(checked) => {
+                                        return checked
+                                          ? field.onChange([...field.value, permission])
+                                          : field.onChange(
+                                              field.value?.filter(
+                                                (value) => value !== permission
+                                              )
+                                            )
+                                      }}
+                                    />
+                                  </FormControl>
+                                  <FormLabel className="font-normal text-sm cursor-pointer">
+                                    {formatPermissionLabel(permission)}
+                                  </FormLabel>
+                                </FormItem>
+                              )
+                            }}
+                          />
+                        ))}
+                        </div>
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+            </div>
+          )}
+
+          {/* Campos de contraseña solo visibles en creación */}
+          {!initialData?.id && (
+            <>
+              <FormField
+                control={form.control as UserFormControl}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contraseña</FormLabel>
+                    <FormControl>
+                      <Input type="password" placeholder="••••••••" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control as UserFormControl}
+                name="confirmPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Confirmar contraseña</FormLabel>
+                    <FormControl>
+                      <Input type="password" placeholder="••••••••" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </>
+          )}
 
           {form.watch('password') && (
             <div className="md:col-span-2 mt-4">
@@ -536,6 +663,7 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
           >
             Cancelar
           </Button>
+          
           <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? 'Guardando...' : 'Guardar usuario'}
           </Button>

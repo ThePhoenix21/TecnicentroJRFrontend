@@ -2,9 +2,12 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { orderService, type Order } from "@/services/order.service";
-import { productService, type Product } from "@/services/product.service";
+import { storeProductService } from "@/services/store-product.service";
+import { type StoreProduct } from "@/types/store-product.types";
+import { type Product } from "@/types/product.types";
 import { SaleForm } from "./sale-form-component";
 import type { SaleData } from '@/types/sale.types';
+import { useAuth } from "@/contexts/auth-context";
 
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -21,11 +24,12 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Search, Plus, X, Info, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
-import { OrderDetailsDialog } from "@/components/orders/OrderDetailsDialog";
+import OrderDetailsDialog from "@/components/orders/OrderDetailsDialog";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export default function VentasPage() {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<StoreProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
@@ -33,8 +37,14 @@ export default function VentasPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10); // Mostrar 10 elementos por página
+  const [hideOutsideCashSession, setHideOutsideCashSession] = useState(false);
 
-  const handleViewOrder = (orderId: string) => {
+  // Obtener currentStore y permisos del contexto
+  const { currentStore, hasPermission, isAdmin } = useAuth();
+
+  const canManageOrders = isAdmin || hasPermission?.("MANAGE_ORDERS");
+
+  const handleViewOrder = (orderId: string) => {    
     const order = orders.find(o => o.id === orderId);
     if (order) {
       setSelectedOrder(order);
@@ -43,26 +53,16 @@ export default function VentasPage() {
   };
 
   const handleOrderUpdate = (updatedOrder: Order) => {
-    setOrders(prevOrders => {
-      const orderExists = prevOrders.some(order => order.id === updatedOrder.id);
-      
-      if (orderExists) {
-        // Actualizar orden existente
-        return prevOrders.map(order => 
-          order.id === updatedOrder.id ? updatedOrder : order
-        );
-      } else {
-        // Si por alguna razón la orden no está en la lista, la agregamos
-        return [updatedOrder, ...prevOrders];
-      }
-    });
-    
+    setOrders(prevOrders => 
+      prevOrders.map(order => 
+        order.id === updatedOrder.id ? updatedOrder : order
+      )
+    );
     // Actualizar la orden seleccionada si es la misma
     if (selectedOrder?.id === updatedOrder.id) {
       setSelectedOrder(updatedOrder);
     }
-    
-    // Cerrar el diálogo si se completó la orden
+    // Cerrar el diálogo de detalles si la orden se completa
     if (updatedOrder?.status === 'COMPLETED') {
       setIsDetailsOpen(false);
     }
@@ -71,12 +71,21 @@ export default function VentasPage() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const productsResponse = await productService.getProducts(1, 100);
-      setProducts(productsResponse.data || []);
+      
+      // Usar storeProductService para obtener productos de la tienda actual
+      if (currentStore) {
+        const productsResponse = await storeProductService.getStoreProducts(currentStore.id, 1, 100);
+        const productsArray = productsResponse.data || [];
+        setProducts(productsArray);
 
-      const ordersData = await orderService.getOrders();
-      // No filtrar aquí, lo haremos localmente
-      setOrders(ordersData);
+        // Cargar órdenes solo de la tienda actual
+        const ordersData = await orderService.getOrdersByStore(currentStore.id);
+        setOrders(ordersData);
+      } else {
+        setProducts([]);
+        setOrders([]);
+      }
+
       setCurrentPage(1); // Resetear a la primera página cuando cambian los datos
     } catch (error) {
       console.error("Error al cargar datos:", error);
@@ -84,29 +93,41 @@ export default function VentasPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentStore]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  // Función de filtrado local para búsqueda en tiempo real
+  // Función de filtrado local para búsqueda en tiempo real y ordenamiento
   const filteredOrders = useMemo(() => {
-    if (!searchTerm.trim()) {
-      return orders;
+    let result = [...orders]; // Crear una copia para no mutar el estado original
+
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(
+        (order) =>
+          order.id?.toLowerCase().includes(term) ||
+          order.paymentMethod?.toLowerCase().includes(term) ||
+          order.client?.name?.toLowerCase().includes(term) ||
+          order.client?.phone?.toLowerCase().includes(term) ||
+          order.client?.email?.toLowerCase().includes(term) ||
+          order.client?.dni?.toLowerCase().includes(term)
+      );
     }
 
-    const term = searchTerm.toLowerCase();
-    return orders.filter(
-      (order) =>
-        order.id?.toLowerCase().includes(term) ||
-        order.paymentMethod?.toLowerCase().includes(term) ||
-        order.client?.name?.toLowerCase().includes(term) ||
-        order.client?.phone?.toLowerCase().includes(term) ||
-        order.client?.email?.toLowerCase().includes(term) ||
-        order.client?.dni?.toLowerCase().includes(term)
-    );
-  }, [orders, searchTerm]);
+    // Filtrar por sesión de caja si está activo el checkbox
+    if (hideOutsideCashSession) {
+      result = result.filter((order) => order.cashSession?.status === "OPEN");
+    }
+
+    // Ordenar por fecha de creación (más reciente primero)
+    return result.sort((a, b) => {
+      const dateA = new Date(a.createdAt || 0).getTime();
+      const dateB = new Date(b.createdAt || 0).getTime();
+      return dateB - dateA;
+    });
+  }, [orders, searchTerm, hideOutsideCashSession]);
 
   // Lógica de paginación basada en los datos filtrados
   const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
@@ -123,9 +144,36 @@ export default function VentasPage() {
     setCurrentPage(1); // Resetear a la primera página al limpiar búsqueda
   };
 
+  const isOrderFromOpenCashSession = (order: Order) => {
+    return order.cashSession?.status === "OPEN";
+  };
+
+  // Transformar StoreProduct[] a Product[] para compatibilidad con SaleForm
+  const transformStoreProductsToProducts = useCallback((storeProducts: StoreProduct[]): Product[] => {
+    const transformed = storeProducts.map(sp => ({
+      id: sp.productId,
+      storeProductId: sp.id, // Agregar el ID del store-product para que SaleForm lo use
+      name: sp.product.name,
+      description: sp.product.description || '',
+      buycost: sp.product.buyCost || 0,
+      createdById: sp.product.createdById || '',
+      isDeleted: sp.product.isDeleted || false,
+      createdAt: sp.product.createdAt || new Date().toISOString(),
+      updatedAt: sp.product.updatedAt || new Date().toISOString(),
+      // Campos adicionales que necesita SaleForm
+      price: sp.price,
+      stock: sp.stock,
+      stockThreshold: sp.stockThreshold,
+      basePrice: sp.product.basePrice || 0,
+    }));
+    return transformed;
+  }, []);
+
   const handleCreateOrder = async (orderData: SaleData) => {
     try {
-      console.log('Datos recibidos del formulario:', orderData);
+      if (!canManageOrders) {
+        throw new Error('No tienes permisos para crear órdenes (MANAGE_ORDERS requerido)');
+      }
       
       // Asegurarse de que los productos y servicios sean arrays
       const products = Array.isArray(orderData.products) ? orderData.products : [];
@@ -136,6 +184,10 @@ export default function VentasPage() {
             price: number;
             type: 'REPAIR' | 'WARRANTY';
             photoUrls?: string[];
+            payments?: Array<{
+              type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+              amount: number;
+            }>;
           }> 
         : [];
 
@@ -143,6 +195,11 @@ export default function VentasPage() {
       const getValidServiceType = (type?: string) => {
         return type === 'WARRANTY' ? 'WARRANTY' : 'REPAIR';
       };
+
+      // Validar que se tenga cashSessionId (obligatorio según el nuevo servicio)
+      if (!orderData.cashSessionId) {
+        throw new Error('El ID de la sesión de caja es obligatorio para crear una orden');
+      }
 
       // Transformar los datos al formato esperado por el backend
       const orderDataForBackend: {
@@ -157,6 +214,11 @@ export default function VentasPage() {
         products?: Array<{
           productId: string;
           quantity: number;
+          price?: number;
+          payments?: Array<{
+            type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+            amount: number;
+          }>;
         }>;
         services?: Array<{
           name: string;
@@ -164,8 +226,12 @@ export default function VentasPage() {
           price: number;
           type: 'REPAIR' | 'WARRANTY';
           photoUrls?: string[];
+          payments?: Array<{
+            type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+            amount: number;
+          }>;
         }>;
-        status?: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'PAID';
+        cashSessionId: string;
       } = {
         clientInfo: {
           name: orderData.clientInfo?.name || 'Cliente Ocasional',
@@ -175,39 +241,96 @@ export default function VentasPage() {
           dni: orderData.clientInfo?.dni || '11111111',
           ...(orderData.clientInfo?.ruc && { ruc: orderData.clientInfo.ruc })
         },
-        status: 'PENDING' as const
+        cashSessionId: orderData.cashSessionId
       };
 
       // Agregar productos si existen
       if (products.length > 0) {
-        orderDataForBackend.products = products.map(product => ({
-          productId: product.productId,
-          quantity: product.quantity || 1
-        }));
+        orderDataForBackend.products = products.map((product, index) => {
+          // Validar y transformar métodos de pago al nuevo formato
+          const validPayments = product.payments?.filter(payment => {
+            const validTypes = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'YAPE', 'PLIN', 'OTRO'];
+            return validTypes.includes(payment.type) && payment.amount > 0;
+          }) || [];
+
+          // Crear el objeto base del producto
+          const productData: {
+            productId: string;
+            quantity: number;
+            price?: number;
+            payments?: Array<{
+              type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+              amount: number;
+            }>;
+          } = {
+            productId: product.productId,
+            quantity: product.quantity || 1
+          };
+          
+          // Si hay un precio personalizado, lo usamos como precio final
+          if (product.customPrice !== undefined && product.customPrice > 0 && product.customPrice !== product.price) {
+            productData.price = product.customPrice;
+          } else if (product.price !== undefined) {
+            productData.price = product.price;
+          }
+
+          // Incluir métodos de pago validados si existen
+          if (validPayments.length > 0) {
+            productData.payments = validPayments;
+          }
+          
+          return productData;
+        });
       }
 
       // Agregar servicios si existen
       if (services.length > 0) {
-        orderDataForBackend.services = services.map(service => ({
-          name: service.name || 'Servicio sin nombre',
-          ...(service.description && { description: service.description }),
-          price: service.price || 0,
-          type: getValidServiceType(service.type),
-          ...(service.photoUrls && service.photoUrls.length > 0 && { photoUrls: service.photoUrls })
-        }));
+        orderDataForBackend.services = services.map(service => {
+          // Para servicios, los pagos son opcionales y se consideran adelantos
+          // Solo incluir si hay pagos válidos (adelantos)
+          const validPayments = service.payments?.filter(payment => {
+            const validTypes = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'YAPE', 'PLIN', 'OTRO'];
+            return validTypes.includes(payment.type) && payment.amount > 0;
+          }) || [];
+
+          const serviceData: {
+            name: string;
+            description?: string;
+            price: number;
+            type: "REPAIR" | "WARRANTY";
+            photoUrls?: string[];
+            payments?: Array<{
+              type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+              amount: number;
+            }>;
+          } = {
+            name: service.name || 'Servicio sin nombre',
+            ...(service.description && { description: service.description }),
+            price: service.price || 0,
+            type: getValidServiceType(service.type) as "REPAIR" | "WARRANTY",
+            ...(service.photoUrls && service.photoUrls.length > 0 && { photoUrls: service.photoUrls })
+          };
+
+          // Incluir pagos solo si existen (adelantos)
+          // Si no hay pagos, el backend creará la orden en PENDING sin movimiento de caja
+          if (validPayments.length > 0) {
+            serviceData.payments = validPayments;
+          }
+
+          return serviceData;
+        });
       }
 
-      console.log('Enviando datos al servicio de órdenes:', orderDataForBackend);
-      
       const newOrder = await orderService.createOrder(orderDataForBackend);
       setOrders(prevOrders => [newOrder, ...prevOrders]);
       // No cerrar el modal aquí, dejar que el componente hijo maneje el cierre
       toast.success('Orden registrada exitosamente');
-      return { success: true, orderId: newOrder.id, orderNumber: newOrder.orderNumber };
+      return { success: true, orderId: newOrder.id, orderNumber: newOrder.orderNumber, orderData: newOrder };
     } catch (error) {
       console.error('Error al crear la orden:', error);
-      toast.error(`Error al crear la orden: ${error instanceof Error ? error.message : 'Error desconocido'}`);
-      return { success: false };
+      // No mostrar toast aquí, dejar que el componente hijo maneje el error
+      // Propagar el error para que sea manejado por el componente hijo
+      throw error;
     }
   };
 
@@ -269,17 +392,18 @@ export default function VentasPage() {
               </div>
               
               <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                <Button 
-                  onClick={() => setIsFormOpen(true)}
-                  className="w-full sm:w-auto bg-primary hover:bg-primary/90 transition-colors"
-                  size="sm"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  <span className="font-medium">Nueva Venta</span>
-                </Button>
+                {canManageOrders && (
+                  <Button 
+                    onClick={() => setIsFormOpen(true)}
+                    className="w-full sm:w-auto bg-primary hover:bg-primary/90 transition-colors"
+                    size="sm"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    <span className="font-medium">Nueva Venta</span>
+                  </Button>
+                )}
               </div>
             </div>
-            
             <div className="space-y-3">
               <div className="w-full">
                 <div className="relative max-w-2xl">
@@ -304,6 +428,23 @@ export default function VentasPage() {
                 </div>
               </div>
               
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Checkbox
+                  id="hide-outside-cash-session-orders"
+                  checked={hideOutsideCashSession}
+                  onCheckedChange={(checked) => {
+                    setHideOutsideCashSession(Boolean(checked));
+                    setCurrentPage(1);
+                  }}
+                />
+                <label
+                  htmlFor="hide-outside-cash-session-orders"
+                  className="cursor-pointer select-none"
+                >
+                  Mostrar solo órdenes de la sesión de caja abierta
+                </label>
+              </div>
+
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Info className="h-3.5 w-3.5" />
                 <span>
@@ -334,9 +475,10 @@ export default function VentasPage() {
               <Table className="w-full">
                 <TableHeader className="bg-muted/50">
                   <TableRow>
-                    <TableHead className="w-[80px] px-2 text-center hidden sm:table-cell">ID</TableHead>
+                    <TableHead className="w-[80px] px-2 text-center hidden sm:table-cell">Order #</TableHead>
                     <TableHead className="w-[90px] px-2 text-center">Fecha</TableHead>
                     <TableHead className="min-w-[120px] px-2 text-center">Cliente</TableHead>
+                    <TableHead className="w-[110px] px-2 text-center">Vendedor</TableHead>
                     <TableHead className="w-[100px] px-2 text-center hidden md:table-cell">Productos</TableHead>
                     <TableHead className="w-[100px] px-2 text-center hidden md:table-cell">Servicios</TableHead>
                     <TableHead className="w-[110px] px-2 text-center">Estado</TableHead>
@@ -346,47 +488,85 @@ export default function VentasPage() {
                 </TableHeader>
                 <TableBody>
                   {paginatedOrders.length > 0 ? (
-                    paginatedOrders.map((order) => {
+                    paginatedOrders.map((order, index) => {
                       const shortDate = order.createdAt
                         ? format(new Date(order.createdAt), 'dd/MM/yy')
                         : 'N/A';
-                      
+
                       const statusConfig = {
                         COMPLETED: {
                           text: 'Completado',
                           class: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-                          icon: '✓'
+                          icon: '✓',
                         },
                         PENDING: {
                           text: 'Pendiente',
                           class: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
-                          icon: '⏳'
+                          icon: '⏳',
                         },
                         CANCELLED: {
-                          text: 'Cancelado',
+                          text: 'Anulado',
                           class: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
-                          icon: '✕'
-                        }
+                          icon: '✕',
+                        },
                       };
-                      
-                      const status = statusConfig[order.status as keyof typeof statusConfig] || statusConfig.PENDING;
-                        
+
+                      // Inicializar con el estado actual de la orden
+                      let calculatedStatus = order.status;
+
+                      // Si la orden está cancelada en la base de datos, mantener ese estado
+                      if (order.status === 'CANCELLED') {
+                        calculatedStatus = 'CANCELLED';
+                      }
+                      // Solo aplicar la lógica de servicios si la orden no está cancelada
+                      else if (order.services && order.services.length > 0) {
+                        const nonCanceledServices = order.services.filter(
+                          (service) => service.status !== 'ANNULLATED'
+                        );
+
+                        if (nonCanceledServices.length > 0) {
+                          calculatedStatus = nonCanceledServices.every(
+                            (service) => service.status === 'COMPLETED'
+                          )
+                            ? 'COMPLETED'
+                            : 'PENDING';
+                        } else {
+                          calculatedStatus = 'CANCELLED';
+                        }
+                      }
+
+                      const status =
+                        statusConfig[
+                          calculatedStatus as keyof typeof statusConfig
+                        ] || statusConfig.PENDING;
+
                       const clientName = order.client?.name || 'Sin cliente';
                       const productCount = order.orderProducts?.length || 0;
                       const serviceCount = order.services?.length || 0;
-                      
+
+                      const fromOpenSession = isOrderFromOpenCashSession(order);
                       return (
-                        <TableRow key={order.id} className="hover:bg-muted/50 group">
+                        <TableRow
+                          key={order.id || order.orderNumber || index}
+                          className={`hover:bg-muted/50 group ${!fromOpenSession ? "opacity-60 bg-muted/40" : ""}`}
+                        >
                           <TableCell className="px-2 py-3 text-center hidden sm:table-cell">
-                            <div className="text-xs font-mono font-medium text-muted-foreground" title={order.id}>
-                              {order.id.substring(0, 6)}...
+                            <div
+                              className="text-xs font-mono font-medium text-muted-foreground"
+                              title={order.orderNumber}
+                            >
+                              {order.orderNumber || 'N/A'}
                             </div>
                           </TableCell>
                           <TableCell className="px-2 py-3 text-center">
                             <div className="flex flex-col items-center">
-                              <span className="text-xs sm:text-sm font-medium">{shortDate}</span>
+                              <span className="text-xs sm:text-sm font-medium">
+                                {shortDate}
+                              </span>
                               <span className="text-xs text-muted-foreground">
-                                {order.createdAt ? format(new Date(order.createdAt), 'HH:mm') : '-'}
+                                {order.createdAt
+                                  ? format(new Date(order.createdAt), 'HH:mm')
+                                  : '-'}
                               </span>
                             </div>
                           </TableCell>
@@ -396,13 +576,25 @@ export default function VentasPage() {
                                 {clientName}
                               </span>
                               {order.client?.phone && (
-                                <a 
+                                <a
                                   href={`tel:${order.client.phone}`}
                                   className="text-xs text-muted-foreground hover:text-primary transition-colors truncate max-w-[120px] sm:max-w-[180px] mx-auto"
                                   title={`Llamar a ${clientName}`}
                                 >
                                   {order.client.phone}
                                 </a>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-2 py-3">
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-sm font-medium truncate max-w-[120px] sm:max-w-[180px] mx-auto">
+                                {order.user?.name || 'Sistema'}
+                              </span>
+                              {order.user?.email && (
+                                <span className="text-xs text-muted-foreground truncate max-w-[120px] sm:max-w-[180px] mx-auto">
+                                  {order.user.email}
+                                </span>
                               )}
                             </div>
                           </TableCell>
@@ -425,8 +617,8 @@ export default function VentasPage() {
                             )}
                           </TableCell>
                           <TableCell className="px-2 py-3">
-                            <div className="flex items-center justify-center">
-                              <span 
+                            <div className="flex flex-col items-center justify-center">
+                              <span
                                 className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-medium ${status.class} whitespace-nowrap`}
                                 title={status.text}
                               >
@@ -458,22 +650,29 @@ export default function VentasPage() {
                     })
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
-                        <div className="flex flex-col items-center gap-2">
-                          <Search className="h-8 w-8 text-muted-foreground/50" />
-                          <div className="text-center">
-                            <p className="font-medium">
-                              {searchTerm
-                                ? `No se encontraron ventas que coincidan con "${searchTerm}"`
-                                : 'No se encontraron ventas'
-                              }
-                            </p>
-                            {searchTerm && (
-                              <p className="text-sm mt-1">
-                                Intenta con otros términos como ID, nombre del cliente, teléfono, email o DNI
-                              </p>
-                            )}
-                          </div>
+                      <TableCell colSpan={10} className="text-center py-12">
+                        <div className="flex flex-col items-center justify-center text-center">
+                          <ShoppingCart className="h-12 w-12 text-muted-foreground/50 mb-4" />
+                          <h3 className="text-lg font-medium text-muted-foreground">
+                            {searchTerm
+                              ? 'No se encontraron ventas'
+                              : 'No hay ventas registradas'}
+                          </h3>
+                          <p className="text-sm text-muted-foreground mt-1 max-w-md">
+                            {searchTerm
+                              ? `No se encontraron ventas que coincidan con "${searchTerm}". Intenta con otros términos de búsqueda.`
+                              : 'Comienza creando tu primera venta haciendo clic en el botón "Nueva Venta"'}
+                          </p>
+                          {!searchTerm && canManageOrders && (
+                            <Button
+                              onClick={() => setIsFormOpen(true)}
+                              className="mt-4"
+                              size="sm"
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              Crear venta
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -536,31 +735,6 @@ export default function VentasPage() {
               </div>
             </div>
           )}
-          
-          {filteredOrders.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <ShoppingCart className="h-12 w-12 text-muted-foreground/50 mb-4" />
-              <h3 className="text-lg font-medium text-muted-foreground">
-                {searchTerm ? 'No se encontraron ventas' : 'No hay ventas registradas'}
-              </h3>
-              <p className="text-sm text-muted-foreground mt-1 max-w-md">
-                {searchTerm
-                  ? `No se encontraron ventas que coincidan con "${searchTerm}". Intenta con otros términos de búsqueda.`
-                  : 'Comienza creando tu primera venta haciendo clic en el botón "Nueva Venta"'
-                }
-              </p>
-              {!searchTerm && (
-                <Button
-                  onClick={() => setIsFormOpen(true)}
-                  className="mt-4"
-                  size="sm"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Crear primera venta
-                </Button>
-              )}
-            </div>
-          )}
         </CardContent>
       </Card>
 
@@ -580,21 +754,22 @@ export default function VentasPage() {
           // Recargar la lista después de cerrar el modal para asegurarse de que la nueva venta aparezca
           loadData();
         }}
-        onSubmit={async (data) => {
+        onSubmit={async (data: SaleData) => {
           const transformedData: SaleData = {
             ...data,
             clientInfo: data.clientInfo ? {
               ...data.clientInfo,
               dni: data.clientInfo.dni || '11111111'
             } : undefined,
-            products: data.products.map(p => ({
+            products: data.products?.map(p => ({
               ...p,
-            }))
+            })) || [],
+            cashSessionId: data.cashSessionId || ''
           };
           const result = await handleCreateOrder(transformedData);
           return result;
         }}
-        products={products}
+        products={transformStoreProductsToProducts(products)}
       />
     </div>
   );

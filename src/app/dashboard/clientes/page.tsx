@@ -18,8 +18,7 @@ import {
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
-import { clientService } from '@/services/client.service';
-import { Client } from '@/types/client.types';
+import { clientService, Client } from '@/services/client.service';
 import { EditClientModal } from '@/components/modals/EditClientModal';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -206,6 +205,7 @@ function ClientesContent() {
                               >
                                 <Pencil className="h-4 w-4" />
                               </Button>
+                              {/*desactivado temporalmente
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -233,6 +233,7 @@ function ClientesContent() {
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
+                              */}
                             </div>
                           </TableCell>
                         </TableRow>

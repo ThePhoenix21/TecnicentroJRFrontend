@@ -82,9 +82,10 @@ export const productService = {
       let userData: { id?: string; role?: string; [key: string]: unknown } = {};
       try {
         userData = JSON.parse(userJson);
-        if (userData.role !== 'ADMIN') {
-          throw new Error('No tienes permisos para crear productos');
-        }
+        // ✅ Permitir que tanto USER como ADMIN puedan crear productos
+        // if (userData.role !== 'ADMIN') {
+        //   throw new Error('No tienes permisos para crear productos');
+        // }
       } catch (e) {
         console.error('Error al verificar permisos:', e);
         throw new Error('Error al verificar los permisos. Intente nuevamente.');
