@@ -1634,12 +1634,12 @@ export function SaleForm({
   }
 
   const businessInfo: BusinessInfo = {
-    name: "Tecnicentro JR",
-    address: "Av. Ejemplo 123, Lima, Perú",
-    phone: "+51 987 654 321",
-    email: "contacto@tecnicentrojr.com",
+    name: orderResponse?.businessName || "TECNICENTRO JR",
+    address: orderResponse?.address || "Jr Chanchamayo 650, puesto 1 y 2",
+    phone: orderResponse?.phone || "+51 993 485 170",
+    email: "tecnicentrojrcajamarca@gmail.com",
     ruc: "20123456789",
-    cuit: "20-12345678-9",
+    cuit: "",
     footerText: "Gracias por su compra. Vuelva pronto.",
     logo: ""
   };
