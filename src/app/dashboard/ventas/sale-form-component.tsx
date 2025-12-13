@@ -576,8 +576,45 @@ export function SaleForm({
         setSearchTerm("");
       }
 
-      if (name === "quantity" && type === "number" && parseInt(value) < 1) {
-        newState.quantity = "1";
+      if (name === "quantity" && type === "number") {
+        const parsedQuantity = parseInt(value);
+
+        // Asegurar que la cantidad mínima sea 1
+        newState.quantity = isNaN(parsedQuantity) || parsedQuantity < 1
+          ? "1"
+          : parsedQuantity.toString();
+
+        // Si es un producto, actualizar automáticamente el monto del primer método de pago
+        if (prev.type === "product") {
+          const effectiveQuantity = parseInt(newState.quantity) || 1;
+
+          // Determinar el precio unitario efectivo: precio personalizado si existe, sino precio base del producto
+          let unitPrice = 0;
+
+          if (prev.price) {
+            const customPrice = parseFloat(prev.price);
+            if (!isNaN(customPrice) && customPrice >= 0) {
+              unitPrice = customPrice;
+            }
+          }
+
+          if (unitPrice === 0) {
+            const product = products.find((p) => p.id === prev.id);
+            if (product) {
+              unitPrice = product.price;
+            }
+          }
+
+          if (unitPrice > 0 && newState.paymentMethods && newState.paymentMethods.length > 0) {
+            const total = unitPrice * effectiveQuantity;
+
+            newState.paymentMethods = newState.paymentMethods.map((pm, index) =>
+              index === 0
+                ? { ...pm, amount: total }
+                : pm
+            );
+          }
+        }
       }
 
       if (name === "name" && prev.type === "product") {
@@ -1884,6 +1921,37 @@ export function SaleForm({
                     const selectedProduct = isProduct && products.find(p => p.id === newItem.id);
                     const basePrice = selectedProduct ? selectedProduct.price : 0;
 
+                    // Calcular siempre el total esperado de la compra según cantidad y precio
+                    const quantityNumber = (() => {
+                      const q = parseInt(newItem.quantity as string, 10);
+                      return isNaN(q) || q < 1 ? 1 : q;
+                    })();
+
+                    let expectedTotal = 0;
+
+                    if (isProduct) {
+                      // Para productos: usar precio personalizado si se ingresó, sino el precio base
+                      let unitPrice = 0;
+
+                      if (newItem.price) {
+                        const customPrice = parseFloat(newItem.price as string);
+                        if (!isNaN(customPrice) && customPrice >= 0) {
+                          unitPrice = customPrice;
+                        }
+                      }
+
+                      if (unitPrice === 0) {
+                        unitPrice = basePrice;
+                      }
+
+                      expectedTotal = unitPrice * quantityNumber;
+                    } else {
+                      // Para servicios y personalizados: usar el precio ingresado y la cantidad (1 para servicio)
+                      const unitPrice = parseFloat(newItem.price as string) || 0;
+                      const qty = showQuantity ? quantityNumber : 1;
+                      expectedTotal = unitPrice * qty;
+                    }
+
                     return (
                       <>
                         {/* Campos de precio y cantidad en una fila */}
@@ -1984,9 +2052,9 @@ export function SaleForm({
                             ))}
                           </div>
                           
-                          {/* Total de métodos de pago */}
+                          {/* Total esperado de la compra según cantidad y precio */}
                           <div className="text-xs text-muted-foreground text-right">
-                            Total métodos de pago: S/{newItem.paymentMethods.reduce((sum, pm) => sum + pm.amount, 0).toFixed(2)}
+                            Total a pagar: S/{expectedTotal.toFixed(2)}
                           </div>
                         </div>
                       </>

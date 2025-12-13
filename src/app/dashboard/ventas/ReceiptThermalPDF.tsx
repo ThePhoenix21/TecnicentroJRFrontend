@@ -100,6 +100,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     width: 20,
   },
+  itemUnitPrice: {
+    fontSize: 8,
+    textAlign: 'right',
+    width: 35,
+  },
   itemPrice: {
     fontSize: 8,
     textAlign: 'right',
@@ -323,26 +328,36 @@ const ReceiptThermalPDF: React.FC<ReceiptThermalPDFProps> = ({ saleData, busines
               <View style={[styles.row, { marginBottom: 2 }]}> 
                 <Text style={[styles.textBold, { width: 20 }]}>Cant</Text>
                 <Text style={[styles.textBold, { flex: 1, marginLeft: 4 }]}>Descripción</Text>
+                <Text style={[styles.textBold, { width: 35, textAlign: 'right' }]}>P. Unit</Text>
                 <Text style={[styles.textBold, { width: 40, textAlign: 'right' }]}>Importe</Text>
               </View>
-              {productos.map((item: any, index: number) => (
-                <View key={index} style={{ marginBottom: 2 }}>
-                  <View style={styles.row}>
-                    <Text style={styles.itemQty}>{item.cantidad || item.quantity || 1}</Text>
-                    <Text style={[styles.itemName, { flex: 1, marginLeft: 4 }]}> 
-                      {item.nombre || item.name}
-                    </Text>
-                    <Text style={styles.itemPrice}>
-                      {formatCurrency((item.precioUnitario || item.price || 0) * (item.cantidad || item.quantity || 1))}
-                    </Text>
+              {productos.map((item: any, index: number) => {
+                const cantidad = item.cantidad || item.quantity || 1;
+                const unitPrice = item.precioUnitario || item.price || 0;
+                const total = unitPrice * cantidad;
+
+                return (
+                  <View key={index} style={{ marginBottom: 2 }}>
+                    <View style={styles.row}>
+                      <Text style={styles.itemQty}>{cantidad}</Text>
+                      <Text style={[styles.itemName, { flex: 1, marginLeft: 4 }]}> 
+                        {item.nombre || item.name}
+                      </Text>
+                      <Text style={styles.itemUnitPrice}>
+                        {formatCurrency(unitPrice)}
+                      </Text>
+                      <Text style={styles.itemPrice}>
+                        {formatCurrency(total)}
+                      </Text>
+                    </View>
+                    {item.descuento > 0 && (
+                      <Text style={[styles.textSmall, { marginLeft: 24, marginBottom: 2 }]}> 
+                        Descuento: {formatCurrency(item.descuento)}
+                      </Text>
+                    )}
                   </View>
-                  {item.descuento > 0 && (
-                    <Text style={[styles.textSmall, { marginLeft: 24, marginBottom: 2 }]}> 
-                      Descuento: {formatCurrency(item.descuento)}
-                    </Text>
-                  )}
-                </View>
-              ))}
+                );
+              })}
             </View>
           )}
 
