@@ -162,6 +162,7 @@ export function SaleForm({
   const [searchTerm, setSearchTerm] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState<CartItem[]>([]);
+  const [editedProductPrices, setEditedProductPrices] = useState<Record<string, string>>({});
   const [showServiceSheet, setShowServiceSheet] = useState(false); // Para la hoja de servicio
   const [isDniValid, setIsDniValid] = useState(false);
   const [isSearchingClient, setIsSearchingClient] = useState(false);
@@ -393,7 +394,7 @@ export function SaleForm({
     // Reset newItem form
     setNewItem({
       id: "",
-      type: "",
+      type: newItem.type, // Mantener el tipo seleccionado
       name: "",
       price: "",
       quantity: "1",
@@ -690,7 +691,11 @@ export function SaleForm({
         serviceType: "REPAIR", // Reset service type
         productId: "",
         unitPrice: 0,
-        paymentMethods: [], // Reset payment methods
+        paymentMethods: [{
+          id: "1",
+          type: PaymentType.EFECTIVO,
+          amount: 0
+        }]
       });
       return;
     }
@@ -2171,13 +2176,31 @@ export function SaleForm({
                       {selectedItems.map((item) => {
                         // Para servicios, siempre usar el precio total del servicio
                         // Para productos y personalizados, usar el precio personalizado si existe
-                        const finalPrice = item.type === "service" 
-                          ? item.price 
-                          : item.customPrice || item.price;
+                        const itemKey = `${item.type}-${item.id}`;
+                        const baseUnitPrice = item.price;
+                        const currentUnitPrice = item.customPrice ?? item.price;
+
+                        const editedUnitPriceStr = item.type === "product"
+                          ? (editedProductPrices[itemKey] ?? currentUnitPrice.toString())
+                          : currentUnitPrice.toString();
+
+                        const parsedEditedUnitPrice = item.type === "product" && editedUnitPriceStr !== ""
+                          ? Number(editedUnitPriceStr)
+                          : undefined;
+
+                        const finalUnitPrice = item.type === "service"
+                          ? item.price
+                          : item.type === "product"
+                            ? (parsedEditedUnitPrice ?? 0)
+                            : currentUnitPrice;
+
+                        const isUnitPriceModified = item.type === "product" && (
+                          editedUnitPriceStr === "" ||
+                          (parsedEditedUnitPrice !== undefined && parsedEditedUnitPrice !== baseUnitPrice)
+                        );
                         
-                        // Usar finalPrice en el cálculo para evitar la advertencia
-                        const originalTotal = item.price * item.quantity;
-                        const finalTotal = finalPrice * item.quantity;
+                        const originalTotal = baseUnitPrice * item.quantity;
+                        const finalTotal = finalUnitPrice * item.quantity;
                         
                         return (
                           <div
@@ -2187,9 +2210,53 @@ export function SaleForm({
                             <div>
                               <div className="font-medium">{item.name}</div>
                               <div className="text-sm text-gray-500">
-                                S/{finalPrice.toFixed(2)} x {item.quantity} = S/
+                                {item.type === "product" ? (
+                                  <>
+                                    S/
+                                    <input
+                                      type="number"
+                                      value={editedUnitPriceStr}
+                                      onChange={(e) => {
+                                        const value = e.target.value;
+
+                                        setEditedProductPrices((prev) => ({
+                                          ...prev,
+                                          [itemKey]: value,
+                                        }));
+
+                                        setSelectedItems((prev) =>
+                                          prev.map((i) => {
+                                            if (i.type !== "product" || i.id !== item.id) return i;
+
+                                            if (value === "") {
+                                              return { ...i, customPrice: undefined };
+                                            }
+
+                                            const parsed = Number(value);
+                                            if (!Number.isFinite(parsed)) {
+                                              return i;
+                                            }
+
+                                            if (parsed === i.price) {
+                                              return { ...i, customPrice: undefined };
+                                            }
+
+                                            return { ...i, customPrice: parsed };
+                                          })
+                                        );
+                                      }}
+                                      onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                                      className="w-20 px-1 border rounded text-sm text-right"
+                                      min="0"
+                                      step="0.01"
+                                    />
+                                  </>
+                                ) : (
+                                  <>S/{finalUnitPrice.toFixed(2)}</>
+                                )}
+                                {" "}x {item.quantity} = S/
                                 {finalTotal.toFixed(2)}
-                                {item.customPrice !== undefined && (
+                                {isUnitPriceModified && (
                                   <span className="text-xs text-muted-foreground ml-2 line-through">
                                     S/{originalTotal.toFixed(2)}
                                   </span>
