@@ -1998,64 +1998,9 @@ export function SaleForm({
                           )}
                         </div>
 
-                        {/* Métodos de pago */}
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium">Métodos de pago</label>
-                            <button
-                              type="button"
-                              onClick={addPaymentMethod}
-                              className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-                            >
-                              <Plus className="w-3 h-3" />
-                              Agregar método
-                            </button>
-                          </div>
-                          
-                          <div className="space-y-2">
-                            {newItem.paymentMethods.map((paymentMethod, index) => (
-                              <div key={paymentMethod.id} className="flex gap-2">
-                                <select
-                                  value={paymentMethod.type}
-                                  onChange={(e) => updatePaymentMethod(paymentMethod.id, 'type', e.target.value as PaymentType)}
-                                  className="flex-1 p-2 border rounded text-sm text-[#a3a3a3]"
-                                >
-                                  <option value={PaymentType.EFECTIVO}>Efectivo</option>
-                                  <option value={PaymentType.TARJETA}>Tarjeta</option>
-                                  <option value={PaymentType.TRANSFERENCIA}>Transferencia</option>
-                                  <option value={PaymentType.YAPE}>Yape</option>
-                                  <option value={PaymentType.PLIN}>Plin</option>
-                                  <option value={PaymentType.OTRO}>Otro</option>
-                                </select>
-                                
-                                <input
-                                  type="number"
-                                  value={paymentMethod.amount}
-                                  onChange={(e) => updatePaymentMethod(paymentMethod.id, 'amount', parseFloat(e.target.value) || 0)}
-                                  onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                                  className="w-24 p-2 border rounded text-sm"
-                                  placeholder="Monto"
-                                  min="0"
-                                  step="0.01"
-                                />
-                                
-                                {newItem.paymentMethods.length > 1 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => removePaymentMethod(paymentMethod.id)}
-                                    className="p-2 text-red-500 hover:bg-red-50 rounded transition-colors"
-                                  >
-                                    <Minus className="w-4 h-4" />
-                                  </button>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                          
-                          {/* Total esperado de la compra según cantidad y precio */}
-                          <div className="text-xs text-muted-foreground text-right">
-                            Total a pagar: S/{expectedTotal.toFixed(2)}
-                          </div>
+                        {/* Total esperado de la compra según cantidad y precio */}
+                        <div className="text-xs text-muted-foreground text-right">
+                          Total a pagar: S/{expectedTotal.toFixed(2)}
                         </div>
                       </>
                     );
