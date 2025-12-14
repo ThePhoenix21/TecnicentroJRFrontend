@@ -163,6 +163,13 @@ export function SaleForm({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState<CartItem[]>([]);
   const [editedProductPrices, setEditedProductPrices] = useState<Record<string, string>>({});
+  const [isOrderPaymentsModalOpen, setIsOrderPaymentsModalOpen] = useState(false);
+  const [orderPaymentMethods, setOrderPaymentMethods] = useState<PaymentMethod[]>([
+    { id: "1", type: PaymentType.EFECTIVO, amount: 0 },
+  ]);
+  const [orderPaymentMethodsDraft, setOrderPaymentMethodsDraft] = useState<PaymentMethod[]>([
+    { id: "1", type: PaymentType.EFECTIVO, amount: 0 },
+  ]);
   const [showServiceSheet, setShowServiceSheet] = useState(false); // Para la hoja de servicio
   const [isDniValid, setIsDniValid] = useState(false);
   const [isSearchingClient, setIsSearchingClient] = useState(false);
@@ -514,36 +521,32 @@ export function SaleForm({
   };
 
   // Funciones para manejar métodos de pago
-  const addPaymentMethod = () => {
-    setNewItem(prev => ({
+  const addOrderPaymentMethod = () => {
+    setOrderPaymentMethodsDraft((prev) => ([
       ...prev,
-      paymentMethods: [
-        ...prev.paymentMethods,
-        {
-          id: Date.now().toString(),
-          type: PaymentType.EFECTIVO,
-          amount: 0
-        }
-      ]
-    }));
+      {
+        id: Date.now().toString(),
+        type: PaymentType.EFECTIVO,
+        amount: 0,
+      },
+    ]));
   };
 
-  const removePaymentMethod = (id: string) => {
-    if (newItem.paymentMethods.length > 1) {
-      setNewItem(prev => ({
-        ...prev,
-        paymentMethods: prev.paymentMethods.filter(pm => pm.id !== id)
-      }));
-    }
+  const removeOrderPaymentMethod = (id: string) => {
+    setOrderPaymentMethodsDraft((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((pm) => pm.id !== id);
+    });
   };
 
-  const updatePaymentMethod = (id: string, field: 'type' | 'amount', value: PaymentType | number) => {
-    setNewItem(prev => ({
-      ...prev,
-      paymentMethods: prev.paymentMethods.map(pm => 
-        pm.id === id ? { ...pm, [field]: value } : pm
-      )
-    }));
+  const updateOrderPaymentMethod = (
+    id: string,
+    field: "type" | "amount",
+    value: PaymentType | number
+  ) => {
+    setOrderPaymentMethodsDraft((prev) =>
+      prev.map((pm) => (pm.id === id ? { ...pm, [field]: value } : pm))
+    );
   };
 
   // Eliminar ítem del carrito
@@ -2245,7 +2248,9 @@ export function SaleForm({
                                           })
                                         );
                                       }}
-                                      onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                                      onWheel={(e: React.WheelEvent<HTMLInputElement>) =>
+                                        (e.target as HTMLInputElement).blur()
+                                      }
                                       className="w-20 px-1 border rounded text-sm text-right"
                                       min="0"
                                       step="0.01"
@@ -2254,8 +2259,7 @@ export function SaleForm({
                                 ) : (
                                   <>S/{finalUnitPrice.toFixed(2)}</>
                                 )}
-                                {" "}x {item.quantity} = S/
-                                {finalTotal.toFixed(2)}
+                                {" "}x {item.quantity} = S/{finalTotal.toFixed(2)}
                                 {isUnitPriceModified && (
                                   <span className="text-xs text-muted-foreground ml-2 line-through">
                                     S/{originalTotal.toFixed(2)}
@@ -2263,67 +2267,67 @@ export function SaleForm({
                                 )}
                               </div>
                               {item.notes && (
-                                <div className="text-xs text-gray-500 mt-1">
-                                  {item.notes}
-                                </div>
+                                <div className="text-xs text-gray-500 mt-1">{item.notes}</div>
                               )}
                             </div>
+
                             <div className="flex items-center space-x-2">
-                            {item.type !== "service" && (
-                              <>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() =>
-                                    setSelectedItems((prev) =>
-                                      prev.map((i) =>
-                                        i.id === item.id && i.type === item.type
-                                          ? {
-                                              ...i,
-                                              quantity: Math.max(1, i.quantity - 1),
-                                            }
-                                          : i
+                              {item.type !== "service" && (
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                      setSelectedItems((prev) =>
+                                        prev.map((i) =>
+                                          i.id === item.id && i.type === item.type
+                                            ? {
+                                                ...i,
+                                                quantity: Math.max(1, i.quantity - 1),
+                                              }
+                                            : i
+                                        )
                                       )
-                                    )
-                                  }
-                                >
-                                  <Minus className="h-3 w-3" />
-                                </Button>
-                                <span className="w-8 text-center">
+                                    }
+                                  >
+                                    <Minus className="h-3 w-3" />
+                                  </Button>
+                                  <span className="w-8 text-center">{item.quantity}</span>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                      setSelectedItems((prev) =>
+                                        prev.map((i) =>
+                                          i.id === item.id && i.type === item.type
+                                            ? { ...i, quantity: i.quantity + 1 }
+                                            : i
+                                        )
+                                      )
+                                    }
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                  </Button>
+                                </>
+                              )}
+
+                              {item.type === "service" && (
+                                <span className="w-8 text-center text-muted-foreground">
                                   {item.quantity}
                                 </span>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() =>
-                                    setSelectedItems((prev) =>
-                                      prev.map((i) =>
-                                        i.id === item.id && i.type === item.type
-                                          ? { ...i, quantity: i.quantity + 1 }
-                                          : i
-                                      )
-                                    )
-                                  }
-                                >
-                                  <Plus className="h-3 w-3" />
-                                </Button>
-                              </>
-                            )}
-                            {item.type === "service" && (
-                              <span className="w-8 text-center text-muted-foreground">
-                                {item.quantity}
-                              </span>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeItem(item.id)}
-                            >
-                              <Trash2 className="h-4 w-4 text-red-500" />
-                            </Button>
+                              )}
+
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeItem(item.id)}
+                              >
+                                <Trash2 className="h-4 w-4 text-red-500" />
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                      )})}
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -2408,6 +2412,7 @@ export function SaleForm({
 
                                 <div className="mt-4 space-y-2">
                                   <Button
+                                    type="button"
                                     variant="default"
                                     size="sm"
                                     className="w-full"
@@ -2513,7 +2518,10 @@ export function SaleForm({
                         <Button
                           className="w-full"
                           size="lg"
-                          onClick={handleSubmit}
+                          onClick={() => {
+                            setOrderPaymentMethodsDraft(orderPaymentMethods);
+                            setIsOrderPaymentsModalOpen(true);
+                          }}
                           disabled={selectedItems.length === 0 || uploadStatus.inProgress || !currentCashSession}
                         >
                           <ShoppingCart className="h-4 w-4 mr-2" />
@@ -2549,6 +2557,107 @@ export function SaleForm({
         expectedTotal={paymentConfirmation.expectedTotal}
         paymentTotal={paymentConfirmation.paymentTotal}
       />
+
+      {/* Modal de métodos de pago (a nivel orden) */}
+      <Dialog
+        open={isOrderPaymentsModalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsOrderPaymentsModalOpen(false);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Métodos de pago</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">Agregar métodos</label>
+              <button
+                type="button"
+                onClick={addOrderPaymentMethod}
+                className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+              >
+                <Plus className="w-3 h-3" />
+                Agregar método
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {orderPaymentMethodsDraft.map((paymentMethod) => (
+                <div key={paymentMethod.id} className="flex gap-2">
+                  <select
+                    value={paymentMethod.type}
+                    onChange={(e) =>
+                      updateOrderPaymentMethod(
+                        paymentMethod.id,
+                        "type",
+                        e.target.value as PaymentType
+                      )
+                    }
+                    className="flex-1 p-2 border rounded text-sm text-[#a3a3a3]"
+                  >
+                    <option value={PaymentType.EFECTIVO}>Efectivo</option>
+                    <option value={PaymentType.TARJETA}>Tarjeta</option>
+                    <option value={PaymentType.TRANSFERENCIA}>Transferencia</option>
+                    <option value={PaymentType.YAPE}>Yape</option>
+                    <option value={PaymentType.PLIN}>Plin</option>
+                    <option value={PaymentType.OTRO}>Otro</option>
+                  </select>
+
+                  <input
+                    type="number"
+                    value={paymentMethod.amount}
+                    onChange={(e) =>
+                      updateOrderPaymentMethod(
+                        paymentMethod.id,
+                        "amount",
+                        parseFloat(e.target.value) || 0
+                      )
+                    }
+                    onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                    className="w-28 p-2 border rounded text-sm"
+                    placeholder="Monto"
+                    min="0"
+                    step="0.01"
+                  />
+
+                  {orderPaymentMethodsDraft.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeOrderPaymentMethod(paymentMethod.id)}
+                      className="p-2 text-red-500 hover:bg-red-50 rounded transition-colors"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsOrderPaymentsModalOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                setOrderPaymentMethods(orderPaymentMethodsDraft);
+                setIsOrderPaymentsModalOpen(false);
+              }}
+            >
+              Aceptar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
