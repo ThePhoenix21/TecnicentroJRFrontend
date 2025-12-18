@@ -1016,7 +1016,7 @@ export function SaleForm({
   };
 
   // Manejar envío del formulario
-  const handleSubmit = async () => {
+  const handleSubmit = async (paymentMethodsOverride?: PaymentMethod[]) => {
     if (selectedItems.length === 0) {
       toast.error("No hay ítems en la venta");
       return;
@@ -1138,11 +1138,19 @@ export function SaleForm({
 
       console.log("existe productsData:", productsData);
 
-      // Calcular el totalAmount basado en la suma de métodos de pago de todos los ítems
-      const totalAmount = selectedItems.reduce((sum, item) => {
-        const itemPaymentTotal = item.paymentMethods.reduce((paymentSum, pm) => paymentSum + pm.amount, 0);
-        return sum + itemPaymentTotal;
-      }, 0);
+      const orderPaymentMethodsToUse = (paymentMethodsOverride ?? orderPaymentMethods)
+        .filter((pm) => pm.amount > 0)
+        .map((pm) => ({
+          type: pm.type,
+          amount: pm.amount,
+        }));
+
+      if (orderPaymentMethodsToUse.length === 0) {
+        toast.error("Debe registrar al menos un método de pago");
+        return;
+      }
+
+      const totalAmount = orderPaymentMethodsToUse.reduce((sum, pm) => sum + pm.amount, 0);
 
       // Validar que haya una sesión de caja activa
       if (!currentCashSession) {
@@ -1154,6 +1162,7 @@ export function SaleForm({
         clientInfo,
         products: productsData,
         services: servicesData,
+        paymentMethods: orderPaymentMethodsToUse,
         totalAmount, // Agregar el monto total confirmado
         cashSessionId: currentCashSession, // Usar sesión de caja real
       };
@@ -2514,18 +2523,38 @@ export function SaleForm({
                             </div>
                           )}
                         </div>
-                        
+
                         <Button
                           className="w-full"
                           size="lg"
                           onClick={() => {
-                            setOrderPaymentMethodsDraft(orderPaymentMethods);
+                            const orderTotal = selectedItems.reduce((sum, item) => {
+                              const itemPrice = item.type === "service"
+                                ? item.price
+                                : item.customPrice !== undefined
+                                  ? item.customPrice
+                                  : item.price;
+                              return sum + (itemPrice * item.quantity);
+                            }, 0);
+
+                            const baseMethods = orderPaymentMethods.length > 0
+                              ? orderPaymentMethods
+                              : [{ id: "1", type: PaymentType.EFECTIVO, amount: 0 }];
+
+                            const shouldPrefill = baseMethods.every((m) => m.amount === 0);
+
+                            setOrderPaymentMethodsDraft(
+                              shouldPrefill
+                                ? baseMethods.map((m, idx) => (idx === 0 ? { ...m, amount: orderTotal } : m))
+                                : baseMethods
+                            );
+
                             setIsOrderPaymentsModalOpen(true);
                           }}
                           disabled={selectedItems.length === 0 || uploadStatus.inProgress || !currentCashSession}
                         >
                           <ShoppingCart className="h-4 w-4 mr-2" />
-                          {uploadStatus.inProgress ? 'Procesando...' : 'Finalizar Venta'}
+                          {uploadStatus.inProgress ? "Procesando..." : "Finalizar Venta"}
                         </Button>
                       </div>
                       <Button
@@ -2533,8 +2562,8 @@ export function SaleForm({
                         className="w-full"
                         onClick={() => {
                           console.log("🚫 Cancelando venta - limpiando componente");
-                          resetSaleState(); // Limpiar todo el estado del componente
-                          onClose(); // Cerrar el modal
+                          resetSaleState();
+                          onClose();
                         }}
                       >
                         Cancelar
@@ -2651,6 +2680,7 @@ export function SaleForm({
               onClick={() => {
                 setOrderPaymentMethods(orderPaymentMethodsDraft);
                 setIsOrderPaymentsModalOpen(false);
+                handleSubmit(orderPaymentMethodsDraft);
               }}
             >
               Aceptar

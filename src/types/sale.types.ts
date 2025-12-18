@@ -62,6 +62,10 @@ export interface SaleData {
     dni?: string;  // Changed from 'string' to 'string | undefined' to match component usage
     ruc?: string;
   };
+  paymentMethods?: Array<{
+    type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+    amount: number;
+  }>;
   products?: Array<{
     productId: string;
     quantity: number;

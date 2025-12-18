@@ -211,6 +211,10 @@ export default function VentasPage() {
           dni: string;
           ruc?: string;
         };
+        paymentMethods?: Array<{
+          type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+          amount: number;
+        }>;
         products?: Array<{
           productId: string;
           quantity: number;
@@ -241,6 +245,7 @@ export default function VentasPage() {
           dni: orderData.clientInfo?.dni || '11111111',
           ...(orderData.clientInfo?.ruc && { ruc: orderData.clientInfo.ruc })
         },
+        ...(orderData.paymentMethods && { paymentMethods: orderData.paymentMethods }),
         cashSessionId: orderData.cashSessionId
       };
 

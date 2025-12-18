@@ -133,6 +133,10 @@ export const orderService = {
       dni: string;
       ruc?: string;
     };
+    paymentMethods?: Array<{
+      type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+      amount: number;
+    }>;
     products?: Array<{
       productId: string;
       quantity: number;
@@ -151,7 +155,7 @@ export const orderService = {
       payments?: Array<{
         type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
         amount: number;
-      }>; // Ahora permite adelantos
+      }>;
     }>;
     cashSessionId: string; // ✅ OBLIGATORIO
   }): Promise<Order> {
@@ -186,6 +190,7 @@ export const orderService = {
       const requestData = {
         ...(orderData.clientId && { clientId: orderData.clientId }),
         ...(orderData.clientInfo && { clientInfo: orderData.clientInfo }),
+        ...(orderData.paymentMethods && { paymentMethods: orderData.paymentMethods }),
         ...(orderData.products && { 
           products: orderData.products.map(p => {
             const productData: {
