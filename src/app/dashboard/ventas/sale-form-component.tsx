@@ -1025,6 +1025,7 @@ export function SaleForm({
     // Verificar si hay servicios o productos en la venta
     const hasServices = selectedItems.some((item) => item.type === "service");
     const hasProducts = selectedItems.some((item) => item.type === "product");
+    const isServiceOnlySale = hasServices && !hasProducts;
 
     // Si hay servicios o productos, validar formulario
     if (hasServices || hasProducts) {
@@ -1139,7 +1140,8 @@ export function SaleForm({
       console.log("existe productsData:", productsData);
 
       const orderPaymentMethodsToUse = (paymentMethodsOverride ?? orderPaymentMethods)
-        .filter((pm) => pm.amount > 0)
+        .filter((pm) => Number.isFinite(pm.amount) && pm.amount >= 0)
+        .filter((pm) => (isServiceOnlySale ? true : pm.amount > 0))
         .map((pm) => ({
           type: pm.type,
           amount: pm.amount,

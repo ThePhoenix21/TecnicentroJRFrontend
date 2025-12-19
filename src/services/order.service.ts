@@ -213,13 +213,10 @@ export const orderService = {
             
             // Incluir payments si existen
             if (p.payments && p.payments.length > 0) {
-              // Validar montos positivos
-              for (const payment of p.payments) {
-                if (payment.amount <= 0) {
-                  throw new Error('El monto de pago debe ser mayor a cero');
-                }
+              const validPayments = p.payments.filter((payment) => payment.amount > 0);
+              if (validPayments.length > 0) {
+                productData.payments = validPayments;
               }
-              productData.payments = p.payments;
             }
             
             return productData;
@@ -255,13 +252,10 @@ export const orderService = {
             
             // ✅ Incluir payments si existen (adelantos)
             if (s.payments && s.payments.length > 0) {
-              // Validar montos positivos
-              for (const payment of s.payments) {
-                if (payment.amount <= 0) {
-                  throw new Error('El monto de pago debe ser mayor a cero');
-                }
+              const validPayments = s.payments.filter((payment) => payment.amount > 0);
+              if (validPayments.length > 0) {
+                serviceData.payments = validPayments;
               }
-              serviceData.payments = s.payments;
             }
             
             return serviceData;

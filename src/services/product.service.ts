@@ -5,43 +5,43 @@ import { Product, ProductsResponse } from '@/types/product.types';
 
 export const productService = {
   async getProducts(page: number = 1, limit: number = 10, search?: string): Promise<ProductsResponse> {
-  try {
-    const response = await api.get<ProductsResponse>('/products/all', {
-      params: { 
-        page, 
-        limit, 
-        ...(search && { search })
-      },
-    });
+    try {
+      const response = await api.get<ProductsResponse>('/products/all', {
+        params: { 
+          page, 
+          limit, 
+          ...(search && { search })
+        },
+      });
 
-    // If the response is an array (legacy format), transform it to the expected format
-    if (Array.isArray(response.data)) {
-      const items = response.data;
-      return {
-        data: items,
-        total: items.length,
-        meta: {
-          totalItems: items.length,
-          itemCount: items.length,
-          itemsPerPage: limit,
-          totalPages: Math.ceil(items.length / limit),
-          currentPage: page
-        }
-      };
+      // If the response is an array (legacy format), transform it to the expected format
+      if (Array.isArray(response.data)) {
+        const items = response.data;
+        return {
+          data: items,
+          total: items.length,
+          meta: {
+            totalItems: items.length,
+            itemCount: items.length,
+            itemsPerPage: limit,
+            totalPages: Math.ceil(items.length / limit),
+            currentPage: page
+          }
+        };
+      }
+
+      // If the response is already in the expected format, return it directly
+      return response.data;
+    } catch (error: unknown) {
+      const axiosError = error as AxiosError<{ message?: string }>;
+      console.error('Error fetching products:', {
+        message: axiosError.message,
+        config: axiosError.config,
+        response: axiosError.response?.data,
+      });
+      throw new Error(axiosError.response?.data?.message || 'No se pudieron cargar los productos. Por favor, verifique su conexión e intente nuevamente.');
     }
-
-    // If the response is already in the expected format, return it directly
-    return response.data;
-  } catch (error: unknown) {
-    const axiosError = error as AxiosError<{ message?: string }>;
-    console.error('Error fetching products:', {
-      message: axiosError.message,
-      config: axiosError.config,
-      response: axiosError.response?.data,
-    });
-    throw new Error(axiosError.response?.data?.message || 'No se pudieron cargar los productos. Por favor, verifique su conexión e intente nuevamente.');
-  }
-},
+  },
 
   async getProductById(id: string): Promise<Product> {
     try {
