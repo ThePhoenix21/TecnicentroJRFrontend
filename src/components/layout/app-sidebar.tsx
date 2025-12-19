@@ -19,6 +19,13 @@ import {
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from '@/contexts/auth-context';
 import { AuthStore } from '@/contexts/auth-context';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type SidebarItem = {
   name: string;
@@ -153,7 +160,7 @@ const getSidebarItems = (
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { user, logout, currentStore, hasPermission } = useAuth();
+  const { user, logout, currentStore, hasPermission, selectStore, isAdmin } = useAuth();
   const userRole = (user?.role || 'USER').toUpperCase();
   const sidebarItems = getSidebarItems(userRole || 'USER', hasPermission);
 
@@ -179,7 +186,30 @@ export function AppSidebar() {
               <Building className="h-5 w-5 text-primary" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Tienda</p>
-                <p className="text-sm font-semibold text-foreground truncate">{currentStore.name}</p>
+                {isAdmin ? (
+                  <Select
+                    value={currentStore.id}
+                    onValueChange={(storeId) => {
+                      const nextStore = user?.stores?.find((s) => s.id === storeId);
+                      if (nextStore) {
+                        selectStore(nextStore as AuthStore);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-8 px-2 text-sm font-semibold">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(user?.stores || []).map((store) => (
+                        <SelectItem key={store.id} value={store.id}>
+                          {store.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm font-semibold text-foreground truncate">{currentStore.name}</p>
+                )}
               </div>
             </div>
           </div>
