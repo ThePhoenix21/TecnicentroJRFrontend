@@ -56,6 +56,7 @@ export interface UpdateServiceDto {
 }
 
 export interface ServiceWithClient extends Service {
+  hasPendingPayment?: boolean;
   client?: {
     id: string;
     name: string;

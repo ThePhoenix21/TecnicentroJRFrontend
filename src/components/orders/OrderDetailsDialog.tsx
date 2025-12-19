@@ -12,7 +12,6 @@ import ReceiptThermalPDF from "@/app/dashboard/ventas/ReceiptThermalPDF";
 import { CancelOrderDialog } from "./CancelOrderDialog";
 import { Order, OrderProduct } from '@/services/order.service';
 import { storeProductService } from '@/services/store-product.service';
-import { productService } from '@/services/product.service';
 import { orderService } from '@/services/order.service';
 import { SaleData } from '@/types/sale.types';
 import { useAuth } from '@/contexts/auth-context';
@@ -136,28 +135,8 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
     try {
       // 1. Cancelar la orden (nuevo método sin credenciales)
       const updatedOrder = await orderService.cancelOrder(order.id);
-      
-      // 2. Restaurar el stock de los productos
-      if (order.orderProducts && order.orderProducts.length > 0) {
-        const updatePromises = order.orderProducts.map(async (item) => {
-          try {
-            // Obtener el producto actual
-            const product = await productService.getProductById(item.productId);
-            // Calcular el nuevo stock
-            const newStock = (product.stock || 0) + item.quantity;
-            // Actualizar el stock del producto
-            await productService.updateProduct(item.productId, { stock: newStock });
-          } catch (error) {
-            console.error(`Error al actualizar el stock del producto ${item.productId}:`, error);
-            // No lanzamos el error para no interumpir el flujo, pero lo registramos
-          }
-        });
-        
-        // Esperar a que todas las actualizaciones de stock se completen
-        await Promise.all(updatePromises);
-      }
-      
-      // 3. Actualizar el estado local de la orden
+
+      // 2. Actualizar el estado local de la orden
       if (onOrderUpdate) {
         onOrderUpdate({
           ...order,

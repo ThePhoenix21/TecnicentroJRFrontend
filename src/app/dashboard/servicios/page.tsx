@@ -146,9 +146,11 @@ export default function ServiciosPage() {
     setIsModalOpen(true);
   };
 
-  
+  const hasPendingPayment = (service: ServiceWithClient) => {
+    return service.status === ServiceStatus.COMPLETED && service.hasPendingPayment === true;
+  };
 
-  const getStatusBadge = (status?: ServiceStatus) => {
+  const getStatusBadge = (status?: ServiceStatus, pendingPayment?: boolean) => {
     if (!status) return "bg-gray-100 text-gray-800";
 
     switch (status) {
@@ -158,7 +160,7 @@ export default function ServiciosPage() {
       return "bg-orange-300 text-orange-900 font-bold";
 
       case ServiceStatus.COMPLETED:
-      return "bg-green-600 text-white font-bold";
+      return pendingPayment ? "bg-orange-500 text-white font-bold" : "bg-green-600 text-white font-bold";
       case ServiceStatus.CANCELLED:
         return "bg-gray-100 text-gray-800";
       case ServiceStatus.DELIVERED:
@@ -348,10 +350,11 @@ export default function ServiciosPage() {
                     <TableBody>
                       {paginatedServices.map((service) => {
                         const fromOpenSession = isServiceFromOpenCashSession(service);
+                        const pending = hasPendingPayment(service);
                         return (
                         <TableRow
                           key={service.id}
-                          className={`cursor-pointer hover:bg-accent/50 ${!fromOpenSession ? "opacity-60 bg-muted/40" : ""}`}
+                          className={`cursor-pointer hover:bg-accent/50 ${pending ? "bg-orange-50/60" : ""} ${!fromOpenSession ? "opacity-60 bg-muted/40" : ""}`}
                           onClick={() => handleServiceClick(service)}
                         >
                           <TableCell className="font-medium">
@@ -366,7 +369,8 @@ export default function ServiciosPage() {
                           <TableCell>
                             <span
                               className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getStatusBadge(
-                                service.status
+                                service.status,
+                                pending
                               )}`}
                             >
                               {translateStatus(service.status)}
@@ -405,10 +409,11 @@ export default function ServiciosPage() {
               <div className="md:hidden space-y-3">
                 {paginatedServices.map((service) => {
                   const fromOpenSession = isServiceFromOpenCashSession(service);
+                  const pending = hasPendingPayment(service);
                   return (
                   <Card 
                     key={service.id} 
-                    className={`overflow-hidden hover:shadow-md transition-shadow cursor-pointer ${!fromOpenSession ? "opacity-60 bg-muted/40" : ""}`}
+                    className={`overflow-hidden hover:shadow-md transition-shadow cursor-pointer ${pending ? "bg-orange-50/60" : ""} ${!fromOpenSession ? "opacity-60 bg-muted/40" : ""}`}
                     onClick={() => handleServiceClick(service)}
                   >
                     <div className="p-4">
@@ -421,7 +426,8 @@ export default function ServiciosPage() {
                         </div>
                         <span
                           className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadge(
-                            service.status
+                            service.status,
+                            pending
                           )}`}
                         >
                           {translateStatus(service.status)}
