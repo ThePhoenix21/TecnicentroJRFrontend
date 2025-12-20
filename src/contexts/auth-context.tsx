@@ -7,6 +7,7 @@ import { authService, api } from '@/services/auth';
 import { userService } from '@/services/user.service';
 import { storeService } from '@/services/store.service';
 import { Store } from '@/types/store';
+import { tenantService, TENANT_FEATURES_STORAGE_KEY, type TenantFeature } from '@/services/tenant.service';
 
 // Interfaz simplificada para el contexto de autenticación
 export interface AuthStore {
@@ -43,6 +44,8 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   currentStore: AuthStore | null;
+  tenantFeatures: TenantFeature[];
+  tenantFeaturesLoaded: boolean;
   login: (email: string, password: string) => Promise<User | null>;
   logout: () => void;
   selectStore: (store: AuthStore) => void;
@@ -59,9 +62,34 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [currentStore, setCurrentStore] = useState<AuthStore | null>(null);
+  const [tenantFeatures, setTenantFeatures] = useState<TenantFeature[]>([]);
+  const [tenantFeaturesLoaded, setTenantFeaturesLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+
+  const loadTenantFeatures = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const features = await tenantService.getTenantFeatures();
+      setTenantFeatures(features);
+      localStorage.setItem(TENANT_FEATURES_STORAGE_KEY, JSON.stringify(features));
+    } catch (e) {
+      // Fallback a cache local para no romper la UI si el endpoint falla temporalmente
+      try {
+        const cached = localStorage.getItem(TENANT_FEATURES_STORAGE_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) setTenantFeatures(parsed as TenantFeature[]);
+        }
+      } catch {
+        // ignorar
+      }
+    } finally {
+      setTenantFeaturesLoaded(true);
+    }
+  }, []);
 
   const logout = useCallback((redirect: boolean = true) => {
     console.log('Logging out...');
@@ -71,6 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('user');
     localStorage.removeItem('current_store'); // Limpiar tienda seleccionada
     localStorage.removeItem('stores_cache'); // Limpiar cache de tiendas
+    localStorage.removeItem(TENANT_FEATURES_STORAGE_KEY);
     
     // Clear axios default headers
     if (api?.defaults?.headers?.common) {
@@ -80,6 +109,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Resetear el estado del usuario y tienda
     setUser(null);
     setCurrentStore(null);
+    setTenantFeatures([]);
+    setTenantFeaturesLoaded(false);
     setError(null);
     
     if (redirect) {
@@ -225,6 +256,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       setUser(userData);
       localStorage.setItem('user', JSON.stringify(userData));
+
+      // Cargar features del tenant después de login
+      await loadTenantFeatures();
       
       if (response.refresh_token) {
         localStorage.setItem('refresh_token', response.refresh_token);
@@ -248,6 +282,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem('user');
       localStorage.removeItem('current_store');
       localStorage.removeItem('stores_cache');
+      localStorage.removeItem(TENANT_FEATURES_STORAGE_KEY);
       
       // Handle different error types
       if (err && typeof err === 'object') {
@@ -296,6 +331,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!token) {
       console.log('No token found, user is not authenticated');
       setUser(null);
+      setTenantFeatures([]);
+      setTenantFeaturesLoaded(false);
       setLoading(false);
       return false;
     }
@@ -411,6 +448,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('📊 UserData role:', userData.role);
         setUser(userData);
 
+        // Cargar features del tenant al restaurar sesión
+        await loadTenantFeatures();
+
         // Recuperar tienda seleccionada del localStorage
         const savedStore = localStorage.getItem('current_store');
         if (savedStore) {
@@ -472,6 +512,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = {
     user,
     currentStore,
+    tenantFeatures,
+    tenantFeaturesLoaded,
     login,
     logout,
     selectStore,

@@ -33,11 +33,14 @@ type SidebarItem = {
   icon: React.ComponentType<any>;
   roles: string[];
   requiredPermissions?: string[];
+  requiredTenantFeatures?: string[];
 };
 
 const getSidebarItems = (
   userRole: string,
-  hasPermission?: (permission: string) => boolean
+  hasPermission?: (permission: string) => boolean,
+  tenantFeatures?: string[],
+  tenantFeaturesLoaded?: boolean
 ) => {
   const baseItems: SidebarItem[] = [
     {
@@ -45,6 +48,7 @@ const getSidebarItems = (
       href: "/dashboard",
       icon: LayoutDashboard,
       roles: ["ADMIN", "USER"],
+      requiredTenantFeatures: ["DASHBOARD"],
       requiredPermissions: [
         // Permisos antiguos
         "dashboard.view",
@@ -57,12 +61,14 @@ const getSidebarItems = (
       href: "/dashboard/tiendas",
       icon: Building,
       roles: ["ADMIN"],
+      requiredTenantFeatures: ["STORE", "STORES"],
     },
     {
       name: "Caja",
       href: "/dashboard/caja",
       icon: DollarSign,
       roles: ["ADMIN", "USER"],
+      requiredTenantFeatures: ["CASH"],
       requiredPermissions: [
         // Caja (ver y gestionar)
         "VIEW_CASH",
@@ -74,6 +80,7 @@ const getSidebarItems = (
       href: "/dashboard/ventas",
       icon: ShoppingCart,
       roles: ["ADMIN", "USER"],
+      requiredTenantFeatures: ["SALES", "ORDERS"],
       requiredPermissions: [
         // Ventas / Órdenes (ver y gestionar)
         "VIEW_ORDERS",
@@ -85,6 +92,7 @@ const getSidebarItems = (
       href: "/dashboard/servicios",
       icon: FileText,
       roles: ["ADMIN", "USER"],
+      requiredTenantFeatures: ["SERVICES"],
       requiredPermissions: [
         // Servicios (ver/gestionar)
         "services.read", // compatibilidad antigua
@@ -97,6 +105,7 @@ const getSidebarItems = (
       href: "/dashboard/productos",
       icon: Package,
       roles: ["ADMIN", "USER"],
+      requiredTenantFeatures: ["PRODUCTS"],
       requiredPermissions: [
         // Productos (ver/gestionar)
         "products.read",
@@ -109,6 +118,7 @@ const getSidebarItems = (
       href: "/dashboard/inventario",
       icon: ClipboardCheck,
       roles: ["ADMIN", "USER"],
+      requiredTenantFeatures: ["INVENTORY"],
       requiredPermissions: [
         // Inventario (ver/gestionar)
         "inventory.read",
@@ -121,6 +131,7 @@ const getSidebarItems = (
       href: "/dashboard/clientes",
       icon: Users,
       roles: ["ADMIN", "USER"],
+      requiredTenantFeatures: ["CLIENTS"],
       requiredPermissions: [
         // Clientes (ver/gestionar)
         "clients.read",
@@ -133,14 +144,26 @@ const getSidebarItems = (
       href: "/dashboard/configuracion/usuarios",
       icon: Users,
       roles: ["ADMIN"],
+      requiredTenantFeatures: ["CONFIG", "SETTINGS"],
       // Acceso solo por rol ADMIN; no depende de permisos específicos
     },
   ];
+
+  const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
+  const hasTenantFeature = (required?: string[]) => {
+    if (!tenantFeaturesLoaded) return true;
+    if (!required || required.length === 0) return true;
+    if (normalizedTenantFeatures.length === 0) return false;
+    return required.some((f) => normalizedTenantFeatures.includes(String(f).toUpperCase()));
+  };
 
   // Filtrado por rol + permisos
   return baseItems.filter((item) => {
     // 1) Rol
     if (!item.roles.includes(userRole)) return false;
+
+    // 1.1) Tenant features (aplica para ADMIN y USER)
+    if (!hasTenantFeature(item.requiredTenantFeatures)) return false;
 
     // 2) Admin ve todo lo que su rol permite
     if (userRole === 'ADMIN') return true;
@@ -160,9 +183,9 @@ const getSidebarItems = (
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { user, logout, currentStore, hasPermission, selectStore, isAdmin } = useAuth();
+  const { user, logout, currentStore, hasPermission, selectStore, isAdmin, tenantFeatures, tenantFeaturesLoaded } = useAuth();
   const userRole = (user?.role || 'USER').toUpperCase();
-  const sidebarItems = getSidebarItems(userRole || 'USER', hasPermission);
+  const sidebarItems = getSidebarItems(userRole || 'USER', hasPermission, tenantFeatures, tenantFeaturesLoaded);
 
   console.log('🔍 Sidebar Debug:', {
     user,
@@ -170,7 +193,9 @@ export function AppSidebar() {
     sidebarItems,
     currentStore,
     storeName: currentStore?.name,
-    storeId: currentStore?.id
+    storeId: currentStore?.id,
+    tenantFeaturesLoaded,
+    tenantFeatures
   });
   
   return (

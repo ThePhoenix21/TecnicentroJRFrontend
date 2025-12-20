@@ -16,7 +16,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   const [authChecked, setAuthChecked] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, loading, user, hasStoreSelected, hasPermission } = useAuth();
+  const { isAuthenticated, loading, user, hasStoreSelected, hasPermission, tenantFeatures, tenantFeaturesLoaded } = useAuth();
 
   const publicRoutes = ["/login", "/register", "/forgot-password"];
   
@@ -32,7 +32,9 @@ export function MainLayout({ children }: MainLayoutProps) {
         isPublicRoute,
         loading,
         userRole: user?.role,
-        hasStoreSelected
+        hasStoreSelected,
+        tenantFeaturesLoaded,
+        tenantFeatures
       });
       
       setIsClient(true);
@@ -59,6 +61,12 @@ export function MainLayout({ children }: MainLayoutProps) {
           return;
         }
 
+        // Esperar a que carguen los features del tenant antes de decidir navegación
+        if (!tenantFeaturesLoaded) {
+          console.log('⏳ Esperando tenantFeaturesLoaded...');
+          return;
+        }
+
         // Verificar si hay tienda seleccionada (excepto para store-selection y rutas USER)
         if (!hasStoreSelected && pathname !== '/store-selection' && user.role?.toUpperCase() !== 'USER') {
           console.log('❌ No hay tienda seleccionada, redirigiendo a store-selection');
@@ -72,16 +80,60 @@ export function MainLayout({ children }: MainLayoutProps) {
 
         const userRole = user.role?.toUpperCase() || 'USER';
 
+        const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
+        const hasTenantFeature = (required?: string[]) => {
+          if (!tenantFeaturesLoaded) return true;
+          if (!required || required.length === 0) return true;
+          if (normalizedTenantFeatures.length === 0) return false;
+          return required.some((f) => normalizedTenantFeatures.includes(String(f).toUpperCase()));
+        };
+
+        const routeFeatureRequirements: Array<{ prefix: string; requiredTenantFeatures: string[] }> = [
+          { prefix: '/dashboard/tiendas', requiredTenantFeatures: ['STORE', 'STORES'] },
+          { prefix: '/dashboard/caja', requiredTenantFeatures: ['CASH'] },
+          { prefix: '/dashboard/ventas', requiredTenantFeatures: ['SALES', 'ORDERS'] },
+          { prefix: '/dashboard/servicios', requiredTenantFeatures: ['SERVICES'] },
+          { prefix: '/dashboard/productos', requiredTenantFeatures: ['PRODUCTS'] },
+          { prefix: '/dashboard/inventario', requiredTenantFeatures: ['INVENTORY'] },
+          { prefix: '/dashboard/clientes', requiredTenantFeatures: ['CLIENTS'] },
+          { prefix: '/dashboard/configuracion', requiredTenantFeatures: ['CONFIG', 'SETTINGS'] },
+          { prefix: '/dashboard', requiredTenantFeatures: ['DASHBOARD'] },
+        ];
+
+        const isRouteAllowedByTenant = (path: string) => {
+          // store-selection / login etc no dependen de features
+          if (path === '/store-selection' || path.startsWith('/store-selection/')) return true;
+          const rule = routeFeatureRequirements.find((r) => path === r.prefix || path.startsWith(`${r.prefix}/`));
+          if (!rule) return true;
+          return hasTenantFeature(rule.requiredTenantFeatures);
+        };
+
         // Helper: ruta por defecto según permisos (solo para USER)
         const getDefaultUserRoute = () => {
-          if (hasPermission("VIEW_DASHBOARD")) return "/dashboard";
-          if (hasPermission("VIEW_ORDERS") || hasPermission("MANAGE_ORDERS")) return "/dashboard/ventas";
-          if (hasPermission("VIEW_CASH") || hasPermission("MANAGE_CASH")) return "/dashboard/caja";
-          if (hasPermission("VIEW_INVENTORY") || hasPermission("MANAGE_INVENTORY")) return "/dashboard/inventario";
-          if (hasPermission("VIEW_PRODUCTS") || hasPermission("MANAGE_PRODUCTS")) return "/dashboard/productos";
-          if (hasPermission("VIEW_CLIENTS") || hasPermission("MANAGE_CLIENTS")) return "/dashboard/clientes";
+          if (hasPermission("VIEW_DASHBOARD") && isRouteAllowedByTenant('/dashboard')) return "/dashboard";
+          if ((hasPermission("VIEW_ORDERS") || hasPermission("MANAGE_ORDERS")) && isRouteAllowedByTenant('/dashboard/ventas')) return "/dashboard/ventas";
+          if ((hasPermission("VIEW_CASH") || hasPermission("MANAGE_CASH")) && isRouteAllowedByTenant('/dashboard/caja')) return "/dashboard/caja";
+          if ((hasPermission("VIEW_INVENTORY") || hasPermission("MANAGE_INVENTORY")) && isRouteAllowedByTenant('/dashboard/inventario')) return "/dashboard/inventario";
+          if ((hasPermission("VIEW_PRODUCTS") || hasPermission("MANAGE_PRODUCTS")) && isRouteAllowedByTenant('/dashboard/productos')) return "/dashboard/productos";
+          if ((hasPermission("VIEW_CLIENTS") || hasPermission("MANAGE_CLIENTS")) && isRouteAllowedByTenant('/dashboard/clientes')) return "/dashboard/clientes";
           // Fallback: dashboard genérico
-          return "/dashboard";
+          return isRouteAllowedByTenant('/dashboard') ? "/dashboard" : "/dashboard/ventas";
+        };
+
+        const getDefaultAdminRoute = () => {
+          const candidates = [
+            '/dashboard',
+            '/dashboard/ventas',
+            '/dashboard/caja',
+            '/dashboard/servicios',
+            '/dashboard/productos',
+            '/dashboard/inventario',
+            '/dashboard/clientes',
+            '/dashboard/tiendas',
+            '/dashboard/configuracion/usuarios',
+          ];
+          const match = candidates.find((r) => isRouteAllowedByTenant(r));
+          return match || '/dashboard';
         };
 
         // Rutas permitidas para usuarios USER (incluimos /dashboard como válido)
@@ -107,6 +159,14 @@ export function MainLayout({ children }: MainLayoutProps) {
           router.push(target);
           return;
         }
+
+        // Guard adicional: si la ruta está bloqueada por features del tenant, redirigir
+        if (!isPublicRoute && !isRouteAllowedByTenant(pathname)) {
+          const target = userRole === 'ADMIN' ? getDefaultAdminRoute() : getDefaultUserRoute();
+          console.log('Ruta no permitida por tenant features, redirigiendo a:', target);
+          router.push(target);
+          return;
+        }
       }
       
       // Si llegamos aquí, la verificación de autenticación está completa
@@ -115,7 +175,7 @@ export function MainLayout({ children }: MainLayoutProps) {
     };
 
     checkAuth();
-  }, [pathname, isAuthenticated, isPublicRoute, loading, router, user, hasStoreSelected]);
+  }, [pathname, isAuthenticated, isPublicRoute, loading, router, user, hasStoreSelected, tenantFeaturesLoaded, tenantFeatures, hasPermission]);
 
   // Mostrar spinner de carga mientras se verifica la autenticación
   if (!isClient || loading || !authChecked) {
