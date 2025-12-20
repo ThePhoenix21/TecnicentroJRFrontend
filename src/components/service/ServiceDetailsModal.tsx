@@ -5,9 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Service, ServiceStatus, ServiceType, ServiceWithClient } from '@/services/service.service';
+import { ServiceStatus, ServiceType, ServiceWithClient, serviceService } from '@/services/service.service';
 import { useState, useEffect } from 'react';
-import { serviceService } from '@/services/service.service';
 import { orderService } from '@/services/order.service';
 import { cashService } from '@/services/cash.service';
 import { format } from 'date-fns';
@@ -60,6 +59,7 @@ const translateServiceType = (type: ServiceType | undefined): string => {
     [ServiceType.WARRANTY]: 'Garantía',
     [ServiceType.MAINTENANCE]: 'Mantenimiento',
     [ServiceType.INSPECTION]: 'Inspección',
+    [ServiceType.MISELANEOUS]: 'Misceláneo',
     [ServiceType.CUSTOM]: 'Personalizado',
   };
 

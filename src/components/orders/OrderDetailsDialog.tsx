@@ -67,6 +67,7 @@ const translateServiceType = (type: string | undefined): string => {
   const translations: Record<string, string> = {
     'REPAIR': 'Reparación',
     'WARRANTY': 'Garantía',
+    'MISELANEOUS': 'Misceláneo',
     'MAINTENANCE': 'Mantenimiento',
     'INSTALLATION': 'Instalación',
     'DIAGNOSTIC': 'Diagnóstico',

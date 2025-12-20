@@ -182,7 +182,7 @@ export default function VentasPage() {
             name: string;
             description?: string;
             price: number;
-            type: 'REPAIR' | 'WARRANTY';
+            type: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS';
             photoUrls?: string[];
             payments?: Array<{
               type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
@@ -193,7 +193,9 @@ export default function VentasPage() {
 
       // Función para asegurar que el tipo de servicio sea válido
       const getValidServiceType = (type?: string) => {
-        return type === 'WARRANTY' ? 'WARRANTY' : 'REPAIR';
+        if (type === 'WARRANTY') return 'WARRANTY';
+        if (type === 'MISELANEOUS') return 'MISELANEOUS';
+        return 'REPAIR';
       };
 
       // Validar que se tenga cashSessionId (obligatorio según el nuevo servicio)
@@ -228,7 +230,7 @@ export default function VentasPage() {
           name: string;
           description?: string;
           price: number;
-          type: 'REPAIR' | 'WARRANTY';
+          type: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS';
           photoUrls?: string[];
           payments?: Array<{
             type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
@@ -302,7 +304,7 @@ export default function VentasPage() {
             name: string;
             description?: string;
             price: number;
-            type: "REPAIR" | "WARRANTY";
+            type: "REPAIR" | "WARRANTY" | "MISELANEOUS";
             photoUrls?: string[];
             payments?: Array<{
               type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
@@ -312,7 +314,7 @@ export default function VentasPage() {
             name: service.name || 'Servicio sin nombre',
             ...(service.description && { description: service.description }),
             price: service.price || 0,
-            type: getValidServiceType(service.type) as "REPAIR" | "WARRANTY",
+            type: getValidServiceType(service.type) as "REPAIR" | "WARRANTY" | "MISELANEOUS",
             ...(service.photoUrls && service.photoUrls.length > 0 && { photoUrls: service.photoUrls })
           };
 

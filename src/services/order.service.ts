@@ -37,7 +37,7 @@ interface Client {
 
 interface Service {
   id: string;
-  type: 'REPAIR' | 'WARRANTY';
+  type: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS';
   status: 'IN_PROGRESS' | 'COMPLETED' | 'DELIVERED' | 'PAID' | 'ANNULLATED';
   name: string;
   description?: string;
@@ -150,7 +150,7 @@ export const orderService = {
       name: string;
       description?: string;
       price: number;
-      type: 'REPAIR' | 'WARRANTY';
+      type: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS';
       photoUrls?: string[];
       payments?: Array<{
         type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
@@ -228,7 +228,7 @@ export const orderService = {
               name: string;
               description?: string;
               price: number;
-              type: 'REPAIR' | 'WARRANTY';
+              type: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS';
               photoUrls?: string[];
               payments?: Array<{
                 type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';

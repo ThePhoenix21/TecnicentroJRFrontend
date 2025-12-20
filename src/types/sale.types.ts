@@ -21,7 +21,7 @@ export interface ServiceOrderItem {
   name: string;
   price: number;
   description?: string;
-  type: 'REPAIR' | 'WARRANTY'; // Updated to match backend specification
+  type: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS'; // Updated to match backend specification
   photoUrls?: string[];
 }
 
@@ -80,7 +80,7 @@ export interface SaleData {
     name: string;
     description?: string;
     price: number;
-    type: 'REPAIR' | 'WARRANTY'; // Updated to match backend
+    type: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS'; // Updated to match backend
     photoUrls?: string[];
     payments?: Array<{
       type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
@@ -139,7 +139,7 @@ export type ServiceStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'DELIVERED
 
 export interface ServiceOrder {
   id: string;
-  type: 'REPAIR' | 'WARRANTY';
+  type: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS';
   status: ServiceStatus;
   name: string;
   description: string | null;

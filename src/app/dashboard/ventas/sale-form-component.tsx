@@ -102,7 +102,7 @@ type CartItem = {
   type: "product" | "service";
   notes?: string;
   images?: File[];
-  serviceType?: 'REPAIR' | 'WARRANTY'; // Added service type field
+  serviceType?: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS'; // Added service type field
   // Add these to match ProductOrder
   productId?: string;
   storeProductId?: string; // ID del store-product para enviar al backend
@@ -119,7 +119,7 @@ interface NewItemForm {
   quantity: string;
   notes: string;
   images: File[];
-  serviceType?: 'REPAIR' | 'WARRANTY'; // Added service type field
+  serviceType?: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS'; // Added service type field
   // Add these to match ProductOrder
   productId?: string;
   unitPrice?: number;
@@ -230,7 +230,7 @@ export function SaleForm({
       notes: string;
       quantity: number;
       images: File[];
-      serviceType?: 'REPAIR' | 'WARRANTY';
+      serviceType?: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS';
       customPrice?: number;
       paymentMethods: PaymentMethod[];
     } | null;
@@ -859,7 +859,7 @@ export function SaleForm({
     notes: string = "",
     quantity: number = 1,
     images: File[] = [],
-    serviceType?: 'REPAIR' | 'WARRANTY', // Added serviceType parameter
+    serviceType?: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS', // Added serviceType parameter
     customPrice?: number, // Precio personalizado opcional
     paymentMethods: PaymentMethod[] = [] // Métodos de pago del formulario
   ): void => {
@@ -1110,7 +1110,7 @@ export function SaleForm({
             return {
               name: item.name,              
               price: typeof item.price === "string" ? parseFloat(item.price) : item.price,
-              type: (item.serviceType as 'REPAIR' | 'WARRANTY' || "REPAIR"),
+              type: (item.serviceType as 'REPAIR' | 'WARRANTY' | 'MISELANEOUS' || "REPAIR"),
               description: item.notes,
               photoUrls,
               payments
@@ -2041,6 +2041,7 @@ export function SaleForm({
                       >
                         <option value="REPAIR">Reparación</option>
                         <option value="WARRANTY">Garantía</option>
+                        <option value="MISELANEOUS">Misceláneo</option>
                       </select>
                     </div>
 
