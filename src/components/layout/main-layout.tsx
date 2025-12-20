@@ -91,7 +91,7 @@ export function MainLayout({ children }: MainLayoutProps) {
         const routeFeatureRequirements: Array<{ prefix: string; requiredTenantFeatures: string[] }> = [
           { prefix: '/dashboard/tiendas', requiredTenantFeatures: ['STORE', 'STORES'] },
           { prefix: '/dashboard/caja', requiredTenantFeatures: ['CASH'] },
-          { prefix: '/dashboard/ventas', requiredTenantFeatures: ['SALES', 'ORDERS'] },
+          { prefix: '/dashboard/ventas', requiredTenantFeatures: ['SALES', 'ORDERS', 'SALESOFPRODUCTS', 'SALESOFSERVICES'] },
           { prefix: '/dashboard/servicios', requiredTenantFeatures: ['SERVICES'] },
           { prefix: '/dashboard/productos', requiredTenantFeatures: ['PRODUCTS'] },
           { prefix: '/dashboard/inventario', requiredTenantFeatures: ['INVENTORY'] },

@@ -99,7 +99,7 @@ type CartItem = {
   name: string;
   price: number;
   quantity: number;
-  type: "product" | "service" | "custom";
+  type: "product" | "service";
   notes?: string;
   images?: File[];
   serviceType?: 'REPAIR' | 'WARRANTY'; // Added service type field
@@ -113,7 +113,7 @@ type CartItem = {
 
 interface NewItemForm {
   id: string;
-  type: "product" | "service" | "custom" | "";
+  type: "product" | "service" | "";
   name: string;
   price: string;
   quantity: string;
@@ -158,7 +158,7 @@ export function SaleForm({
   products,
   services,
 }: SaleFormProps) {
-  const { currentStore } = useAuth();
+  const { currentStore, tenantFeatures, tenantFeaturesLoaded } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState<CartItem[]>([]);
@@ -177,6 +177,14 @@ export function SaleForm({
   const [orders, setOrders] = useState<Order[]>([]);
   const [currentCashSession, setCurrentCashSession] = useState<string | null>(null);
   const [isLoadingCashSession, setIsLoadingCashSession] = useState(false);
+
+  const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
+  const hasSalesOfProducts = normalizedTenantFeatures.includes('SALESOFPRODUCTS');
+  const hasSalesOfServices = normalizedTenantFeatures.includes('SALESOFSERVICES');
+  const hasSalesFeatureGate = hasSalesOfProducts || hasSalesOfServices;
+
+  const canSellProducts = !tenantFeaturesLoaded || !hasSalesFeatureGate || hasSalesOfProducts;
+  const canSellServices = !tenantFeaturesLoaded || !hasSalesFeatureGate || hasSalesOfServices;
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
@@ -254,6 +262,43 @@ export function SaleForm({
       amount: 0
     }]
   });
+
+  useEffect(() => {
+    if (!tenantFeaturesLoaded) return;
+    if (!hasSalesFeatureGate) return;
+
+    const nextType = canSellProducts && !canSellServices
+      ? 'product'
+      : canSellServices && !canSellProducts
+        ? 'service'
+        : null;
+
+    setNewItem((prev) => {
+      const isCurrentTypeBlocked =
+        (prev.type === 'product' && !canSellProducts) ||
+        (prev.type === 'service' && !canSellServices);
+
+      if (!isCurrentTypeBlocked && !nextType) return prev;
+
+      const typeToUse = (nextType ?? prev.type) as NewItemForm['type'];
+      if (!typeToUse) return { ...prev, type: '' };
+
+      return {
+        ...prev,
+        id: "",
+        type: typeToUse,
+        name: "",
+        price: "",
+        quantity: "1",
+        notes: "",
+        serviceType: "REPAIR",
+      };
+    });
+
+    setSearchTerm("");
+    setIsDropdownOpen(false);
+  }, [tenantFeaturesLoaded, hasSalesFeatureGate, canSellProducts, canSellServices]);
+
   const onDrop = useCallback((acceptedFiles: File[]) => {
     setNewItem((prev) => {
       const existingFiles = prev.images || [];
@@ -644,6 +689,19 @@ export function SaleForm({
     e.preventDefault();
     if (!newItem.type || !newItem.name || !newItem.price) return;
 
+    const canSellProducts = !tenantFeaturesLoaded || !hasSalesFeatureGate || hasSalesOfProducts;
+    const canSellServices = !tenantFeaturesLoaded || !hasSalesFeatureGate || hasSalesOfServices;
+
+    if (newItem.type === 'product' && !canSellProducts) {
+      toast.error('Tu plan no permite vender productos');
+      return;
+    }
+
+    if (newItem.type === 'service' && !canSellServices) {
+      toast.error('Tu plan no permite vender servicios');
+      return;
+    }
+
     const quantity = Math.max(
       1,
       isNaN(parseInt(newItem.quantity)) ? 1 : parseInt(newItem.quantity)
@@ -703,7 +761,7 @@ export function SaleForm({
       return;
     }
 
-    // Si los montos no coinciden, mostrar modal de confirmación (solo para productos y personalizados)
+    // Si los montos no coinciden, mostrar modal de confirmación (solo para productos)
     if (expectedTotal !== paymentTotal) {
       // Preparar el ítem pendiente para confirmación
       let pendingItem;
@@ -727,19 +785,7 @@ export function SaleForm({
           paymentMethods: newItem.paymentMethods,
         };
       } else {
-        // Ítem personalizado
-        pendingItem = {
-          item: {
-            id: `custom-${Date.now()}`,
-            name: newItem.name,
-            price: price,
-          },
-          type: "custom" as const,
-          notes,
-          quantity,
-          images,
-          paymentMethods: newItem.paymentMethods,
-        };
+        return;
       }
 
       // Mostrar modal de confirmación
@@ -780,21 +826,7 @@ export function SaleForm({
         newItem.paymentMethods // Pasar métodos de pago del formulario
       );
     } else {
-      // Para ítems personalizados
-      handleAddItem(
-        {
-          id: `custom-${Date.now()}`,
-          name: newItem.name,
-          price: price,
-        },
-        "custom",
-        notes,
-        quantity,
-        [],
-        undefined, // serviceType no aplica para personalizados
-        undefined,
-        newItem.paymentMethods // Pasar métodos de pago del formulario
-      );
+      return;
     }
 
     // Reiniciar formulario
@@ -885,7 +917,9 @@ export function SaleForm({
 
       const cartItem: CartItem = {
         ...item,
-        id: item.id || `temp-${Date.now()}`,
+        id: item.id || `temp-${Date.now()}-${Math.random()
+          .toString(36)
+          .substr(2, 9)}`,
         price: item.price, // Mantener siempre el precio original
         quantity: quantityToAdd,
         type,
@@ -935,35 +969,8 @@ export function SaleForm({
         confirmedPrice, // Precio personalizado confirmado
         pendingItem.paymentMethods
       );
-    } else if (pendingItem.type === "service") {
-      handleAddItem(
-        {
-          ...pendingItem.item,
-          price: confirmedPrice, // Para servicios, reemplazar el precio
-        },
-        pendingItem.type,
-        pendingItem.notes,
-        pendingItem.quantity,
-        pendingItem.images,
-        pendingItem.serviceType,
-        confirmedPrice, // Precio confirmado
-        pendingItem.paymentMethods
-      );
     } else {
-      // Ítem personalizado
-      handleAddItem(
-        {
-          ...pendingItem.item,
-          price: confirmedPrice, // Reemplazar el precio
-        },
-        pendingItem.type,
-        pendingItem.notes,
-        pendingItem.quantity,
-        pendingItem.images,
-        undefined,
-        confirmedPrice, // Precio confirmado
-        pendingItem.paymentMethods
-      );
+      return;
     }
 
     // Cerrar modal y reiniciar formulario
@@ -1862,9 +1869,8 @@ export function SaleForm({
                     required
                   >
                     <option value="">Seleccionar tipo</option>
-                    <option value="product">Producto</option>
-                    <option value="service">Servicio</option>
-                    <option value="custom">Personalizado</option>
+                    {canSellProducts && <option value="product">Producto</option>}
+                    {canSellServices && <option value="service">Servicio</option>}
                   </select>
                 </div>
 
@@ -1876,8 +1882,6 @@ export function SaleForm({
                           return "Buscar producto";
                         case "service":
                           return "Nombre del servicio";
-                        case "custom":
-                          return "Nombre del ítem personalizado";
                         default:
                           return "Nombre del ítem";
                       }
@@ -1898,8 +1902,6 @@ export function SaleForm({
                               return "Buscar producto...";
                             case "service":
                               return "Nombre del servicio";
-                            case "custom":
-                              return "Nombre del ítem personalizado";
                             default:
                               return "Nombre del ítem";
                           }
@@ -1934,7 +1936,7 @@ export function SaleForm({
                 {/* Campos de precio y cantidad con métodos de pago */}
                 <div className="space-y-4">
                   {(() => {
-                    const showPrice = newItem.type === "service" || newItem.type === "custom";
+                    const showPrice = newItem.type === "service";
                     const showQuantity = newItem.type !== "service";
                     const isProduct = newItem.type === "product";
                     const selectedProduct = isProduct && products.find(p => p.id === newItem.id);
@@ -1965,7 +1967,7 @@ export function SaleForm({
 
                       expectedTotal = unitPrice * quantityNumber;
                     } else {
-                      // Para servicios y personalizados: usar el precio ingresado y la cantidad (1 para servicio)
+                      // Para servicios: usar el precio ingresado y la cantidad (1 para servicio)
                       const unitPrice = parseFloat(newItem.price as string) || 0;
                       const qty = showQuantity ? quantityNumber : 1;
                       expectedTotal = unitPrice * qty;
@@ -2025,20 +2027,6 @@ export function SaleForm({
                     );
                   })()}
                 </div>
-
-                {newItem.type === "custom" && (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Notas/Detalles del ítem</label>
-                    <textarea
-                      name="notes"
-                      value={newItem.notes}
-                      onChange={handleNewItemChange}
-                      className="w-full p-2 border rounded resize-none"
-                      placeholder="Detalles adicionales del ítem personalizado..."
-                      rows={2}
-                    />
-                  </div>
-                )}
 
                 {newItem.type === "service" && (
                   <>

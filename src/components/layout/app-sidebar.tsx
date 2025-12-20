@@ -80,7 +80,7 @@ const getSidebarItems = (
       href: "/dashboard/ventas",
       icon: ShoppingCart,
       roles: ["ADMIN", "USER"],
-      requiredTenantFeatures: ["SALES", "ORDERS"],
+      requiredTenantFeatures: ["SALES", "ORDERS", "SALESOFPRODUCTS", "SALESOFSERVICES"],
       requiredPermissions: [
         // Ventas / Órdenes (ver y gestionar)
         "VIEW_ORDERS",
