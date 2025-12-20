@@ -44,13 +44,17 @@ enum PaymentType {
   TRANSFERENCIA = 'TRANSFERENCIA',
   YAPE = 'YAPE',
   PLIN = 'PLIN',
+  DATAPHONE = 'DATAPHONE',
+  BIZUM = 'BIZUM',
   OTRO = 'OTRO'
 }
+
+type PaymentTypeValue = (typeof PaymentType)[keyof typeof PaymentType];
 
 // Tipo para método de pago individual
 type PaymentMethod = {
   id: string;
-  type: PaymentType;
+  type: PaymentTypeValue;
   amount: number;
 };
 
@@ -158,7 +162,7 @@ export function SaleForm({
   products,
   services,
 }: SaleFormProps) {
-  const { currentStore, tenantFeatures, tenantFeaturesLoaded } = useAuth();
+  const { currentStore, tenantFeatures, tenantFeaturesLoaded, tenantDefaultService, tenantDefaultServiceLoaded } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState<CartItem[]>([]);
@@ -247,13 +251,13 @@ export function SaleForm({
 
   const [newItem, setNewItem] = useState<NewItemForm>({
     id: "",
-    type: "",
+    type: canSellProducts ? "product" : canSellServices ? "service" : "",
     name: "",
     price: "",
     quantity: "1",
     notes: "",
     images: [],
-    serviceType: "REPAIR", // Default service type
+    serviceType: tenantDefaultServiceLoaded ? tenantDefaultService : undefined,
     productId: "",
     unitPrice: 0,
     paymentMethods: [{
@@ -291,13 +295,24 @@ export function SaleForm({
         price: "",
         quantity: "1",
         notes: "",
-        serviceType: "REPAIR",
+        serviceType: typeToUse === 'service' ? (tenantDefaultServiceLoaded ? tenantDefaultService : undefined) : undefined,
       };
     });
 
     setSearchTerm("");
     setIsDropdownOpen(false);
   }, [tenantFeaturesLoaded, hasSalesFeatureGate, canSellProducts, canSellServices]);
+
+  useEffect(() => {
+    if (!tenantDefaultServiceLoaded) return;
+    if (newItem.type !== 'service') return;
+    if (newItem.serviceType) return;
+
+    setNewItem((prev) => ({
+      ...prev,
+      serviceType: tenantDefaultService,
+    }));
+  }, [tenantDefaultService, tenantDefaultServiceLoaded, newItem.type, newItem.serviceType]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     setNewItem((prev) => {
@@ -452,7 +467,7 @@ export function SaleForm({
       quantity: "1",
       notes: "",
       images: [],
-      serviceType: "REPAIR", // Reset service type
+      serviceType: tenantDefaultServiceLoaded ? tenantDefaultService : undefined,
       productId: "",
       unitPrice: 0,
       paymentMethods: [{
@@ -587,7 +602,7 @@ export function SaleForm({
   const updateOrderPaymentMethod = (
     id: string,
     field: "type" | "amount",
-    value: PaymentType | number
+    value: PaymentTypeValue | number
   ) => {
     setOrderPaymentMethodsDraft((prev) =>
       prev.map((pm) => (pm.id === id ? { ...pm, [field]: value } : pm))
@@ -621,7 +636,7 @@ export function SaleForm({
         newState.price = "";
         newState.quantity = "1";
         newState.notes = "";
-        newState.serviceType = "REPAIR"; // Reset service type
+        newState.serviceType = value === 'service' ? (tenantDefaultServiceLoaded ? tenantDefaultService : undefined) : undefined;
         setSearchTerm("");
       }
 
@@ -704,7 +719,7 @@ export function SaleForm({
 
     const quantity = Math.max(
       1,
-      isNaN(parseInt(newItem.quantity)) ? 1 : parseInt(newItem.quantity)
+      isNaN(parseInt(newItem.quantity as string, 10)) ? 1 : parseInt(newItem.quantity as string, 10)
     );
 
     const price = parseFloat(newItem.price) || 0;
@@ -735,7 +750,7 @@ export function SaleForm({
         notes,
         finalQuantity,
         images,
-        newItem.serviceType || "REPAIR", // serviceType del formulario
+        newItem.serviceType || (tenantDefaultServiceLoaded ? tenantDefaultService : "REPAIR"),
         undefined,
         newItem.paymentMethods // Pasar métodos de pago del formulario (pueden estar vacíos)
       );
@@ -749,7 +764,7 @@ export function SaleForm({
         quantity: "1",
         notes: "",
         images: [],
-        serviceType: "REPAIR", // Reset service type
+        serviceType: tenantDefaultServiceLoaded ? tenantDefaultService : undefined,
         productId: "",
         unitPrice: 0,
         paymentMethods: [{
@@ -838,7 +853,7 @@ export function SaleForm({
       quantity: "1",
       notes: "",
       images: [],
-      serviceType: "REPAIR",
+      serviceType: tenantDefaultServiceLoaded ? tenantDefaultService : undefined,
       productId: "",
       unitPrice: 0,
       paymentMethods: [{
@@ -905,7 +920,7 @@ export function SaleForm({
 
           // Update serviceType if this is a service
           if (type === "service") {
-            (updatedItem as CartItem & { serviceType: string }).serviceType = serviceType || "REPAIR";
+            (updatedItem as CartItem & { serviceType: string }).serviceType = serviceType || (tenantDefaultServiceLoaded ? tenantDefaultService : "REPAIR");
           }
 
           return updatedItem as CartItem;
@@ -934,7 +949,7 @@ export function SaleForm({
           })
         }),
         ...(type === "service" && { images }),
-        ...(type === "service" && { serviceType: serviceType || "REPAIR" }),
+        ...(type === "service" && { serviceType: serviceType || (tenantDefaultServiceLoaded ? tenantDefaultService : "REPAIR") }),
       } as CartItem;
 
       return [...prev, cartItem];
@@ -991,7 +1006,7 @@ export function SaleForm({
       quantity: "1",
       notes: "",
       images: [],
-      serviceType: "REPAIR",
+      serviceType: tenantDefaultServiceLoaded ? tenantDefaultService : undefined,
       productId: "",
       unitPrice: 0,
       paymentMethods: [{
@@ -1110,7 +1125,7 @@ export function SaleForm({
             return {
               name: item.name,              
               price: typeof item.price === "string" ? parseFloat(item.price) : item.price,
-              type: (item.serviceType as 'REPAIR' | 'WARRANTY' | 'MISELANEOUS' || "REPAIR"),
+              type: (item.serviceType || (tenantDefaultServiceLoaded ? tenantDefaultService : "REPAIR")),
               description: item.notes,
               photoUrls,
               payments
@@ -1866,9 +1881,9 @@ export function SaleForm({
                     value={newItem.type}
                     onChange={handleNewItemChange}
                     className="w-full p-2 bg-muted border rounded"
+                    disabled={!(canSellProducts && canSellServices)}
                     required
                   >
-                    <option value="">Seleccionar tipo</option>
                     {canSellProducts && <option value="product">Producto</option>}
                     {canSellServices && <option value="service">Servicio</option>}
                   </select>
@@ -1881,7 +1896,7 @@ export function SaleForm({
                         case "product":
                           return "Buscar producto";
                         case "service":
-                          return "Nombre del servicio";
+                          return newItem.serviceType === "MISELANEOUS" ? "Nombre" : "Nombre del servicio";
                         default:
                           return "Nombre del ítem";
                       }
@@ -1901,7 +1916,7 @@ export function SaleForm({
                             case "product":
                               return "Buscar producto...";
                             case "service":
-                              return "Nombre del servicio";
+                              return newItem.serviceType === "MISELANEOUS" ? "Nombre" : "Nombre del servicio";
                             default:
                               return "Nombre del ítem";
                           }
@@ -2034,7 +2049,7 @@ export function SaleForm({
                       <label className="text-sm font-medium">Tipo de servicio</label>
                       <select
                         name="serviceType"
-                        value={newItem.serviceType || "REPAIR"}
+                        value={newItem.serviceType || (tenantDefaultServiceLoaded ? tenantDefaultService : "REPAIR")}
                         onChange={handleNewItemChange}
                         className="w-full p-2 bg-muted border rounded"
                         required
@@ -2116,7 +2131,7 @@ export function SaleForm({
                               }}
                               className="text-sm text-primary hover:underline flex items-center cursor-pointer"
                             >
-                              <Plus className="h-4 w-4 mr-1" /> Agregar más
+                              <Plus className="w-3 h-3" /> Agregar más
                             </div>
                           </div>
 
@@ -2339,9 +2354,11 @@ export function SaleForm({
                           selectedItems.reduce((sum, item) => {
                             // Para servicios, siempre usar el precio total del servicio
                             // Para productos y personalizados, usar el precio personalizado si existe
-                            const itemPrice = item.type === "service" 
-                              ? item.price 
-                              : item.customPrice !== undefined ? item.customPrice : item.price;
+                            const itemPrice = item.type === "service"
+                              ? item.price
+                              : item.customPrice !== undefined
+                                ? item.customPrice
+                                : item.price;
                             return sum + (itemPrice * item.quantity);
                           }, 0).toFixed(2)
                         }
@@ -2355,9 +2372,11 @@ export function SaleForm({
                             selectedItems.reduce((sum, item) => {
                               // Para servicios, siempre usar el precio total del servicio
                               // Para productos y personalizados, usar el precio personalizado si existe
-                              const itemPrice = item.type === "service" 
-                                ? item.price 
-                                : item.customPrice !== undefined ? item.customPrice : item.price;
+                              const itemPrice = item.type === "service"
+                                ? item.price
+                                : item.customPrice !== undefined
+                                  ? item.customPrice
+                                  : item.price;
                               return sum + (itemPrice * item.quantity);
                             }, 0).toFixed(2)
                           }
@@ -2614,7 +2633,7 @@ export function SaleForm({
                       updateOrderPaymentMethod(
                         paymentMethod.id,
                         "type",
-                        e.target.value as PaymentType
+                        e.target.value as PaymentTypeValue
                       )
                     }
                     className="flex-1 p-2 border rounded text-sm text-[#a3a3a3]"
@@ -2624,6 +2643,8 @@ export function SaleForm({
                     <option value={PaymentType.TRANSFERENCIA}>Transferencia</option>
                     <option value={PaymentType.YAPE}>Yape</option>
                     <option value={PaymentType.PLIN}>Plin</option>
+                    <option value={PaymentType.DATAPHONE}>Datáfono</option>
+                    <option value={PaymentType.BIZUM}>Bizum</option>
                     <option value={PaymentType.OTRO}>Otro</option>
                   </select>
 

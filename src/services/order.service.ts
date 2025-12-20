@@ -1,5 +1,15 @@
 import { api } from "./api";
 
+type CanonicalServiceType = 'REPAIR' | 'WARRANTY' | 'MISELANEOUS';
+type ServiceTypeInput = CanonicalServiceType | 'OTHER';
+
+type CanonicalPaymentType = 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+type PaymentTypeInput = CanonicalPaymentType | 'DATAPHONE' | 'BIZUM';
+
+const normalizeServiceType = (type: ServiceTypeInput): CanonicalServiceType => {
+  return type === 'OTHER' ? 'MISELANEOUS' : type;
+};
+
 export interface OrderItemDto {
   product: {
     id: string;
@@ -37,7 +47,7 @@ interface Client {
 
 interface Service {
   id: string;
-  type: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS';
+  type: CanonicalServiceType;
   status: 'IN_PROGRESS' | 'COMPLETED' | 'DELIVERED' | 'PAID' | 'ANNULLATED';
   name: string;
   description?: string;
@@ -102,7 +112,7 @@ export const orderService = {
     services: Array<{
       serviceId: string;
       payments: Array<{
-        type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+        type: PaymentTypeInput;
         amount: number;
       }>;
     }>;
@@ -134,7 +144,7 @@ export const orderService = {
       ruc?: string;
     };
     paymentMethods?: Array<{
-      type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+      type: PaymentTypeInput;
       amount: number;
     }>;
     products?: Array<{
@@ -142,7 +152,7 @@ export const orderService = {
       quantity: number;
       price?: number; // Ahora se usa como customPrice
       payments?: Array<{
-        type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+        type: PaymentTypeInput;
         amount: number;
       }>;
     }>;
@@ -150,10 +160,10 @@ export const orderService = {
       name: string;
       description?: string;
       price: number;
-      type: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS';
+      type: ServiceTypeInput;
       photoUrls?: string[];
       payments?: Array<{
-        type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+        type: PaymentTypeInput;
         amount: number;
       }>;
     }>;
@@ -198,7 +208,7 @@ export const orderService = {
               quantity: number;
               price?: number; // ✅ Ahora se usa como customPrice
               payments?: Array<{
-                type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+                type: PaymentTypeInput;
                 amount: number;
               }>;
             } = {
@@ -228,16 +238,16 @@ export const orderService = {
               name: string;
               description?: string;
               price: number;
-              type: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS';
+              type: CanonicalServiceType;
               photoUrls?: string[];
               payments?: Array<{
-                type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+                type: PaymentTypeInput;
                 amount: number;
               }>;
             } = {
               name: s.name,
               price: s.price,
-              type: s.type
+              type: normalizeServiceType(s.type)
             };
             
             // Incluir description si existe

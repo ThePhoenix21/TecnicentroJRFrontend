@@ -63,7 +63,7 @@ export interface SaleData {
     ruc?: string;
   };
   paymentMethods?: Array<{
-    type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+    type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'DATAPHONE' | 'BIZUM' | 'OTRO';
     amount: number;
   }>;
   products?: Array<{
@@ -72,7 +72,7 @@ export interface SaleData {
     price?: number;
     customPrice?: number;
     payments?: Array<{
-      type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+      type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'DATAPHONE' | 'BIZUM' | 'OTRO';
       amount: number;
     }>;
   }>;
@@ -83,7 +83,7 @@ export interface SaleData {
     type: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS'; // Updated to match backend
     photoUrls?: string[];
     payments?: Array<{
-      type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+      type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'DATAPHONE' | 'BIZUM' | 'OTRO';
       amount: number;
     }>;
   }>;
@@ -127,7 +127,7 @@ export const isNewSaleData = (data: SaleData): data is Required<Pick<SaleData, '
 // Tipos para respuestas de órdenes/ventas
 export interface Payment {
   id: string;
-  type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+  type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'DATAPHONE' | 'BIZUM' | 'OTRO';
   amount: number;
   sourceType: string;
   sourceId: string;

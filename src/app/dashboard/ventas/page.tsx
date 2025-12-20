@@ -40,7 +40,15 @@ export default function VentasPage() {
   const [hideOutsideCashSession, setHideOutsideCashSession] = useState(false);
 
   // Obtener currentStore y permisos del contexto
-  const { currentStore, hasPermission, isAdmin } = useAuth();
+  const { currentStore, hasPermission, isAdmin, tenantFeatures, tenantFeaturesLoaded } = useAuth();
+
+  const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
+  const hasSalesOfProducts = normalizedTenantFeatures.includes('SALESOFPRODUCTS');
+  const hasSalesOfServices = normalizedTenantFeatures.includes('SALESOFSERVICES');
+  const hasSalesFeatureGate = hasSalesOfProducts || hasSalesOfServices;
+
+  const canSellProducts = !tenantFeaturesLoaded || !hasSalesFeatureGate || hasSalesOfProducts;
+  const canViewInventory = isAdmin || hasPermission?.('VIEW_INVENTORY') || hasPermission?.('MANAGE_INVENTORY') || hasPermission?.('inventory.read') || hasPermission?.('inventory.manage');
 
   const canManageOrders = isAdmin || hasPermission?.("MANAGE_ORDERS");
 
@@ -74,13 +82,27 @@ export default function VentasPage() {
       
       // Usar storeProductService para obtener productos de la tienda actual
       if (currentStore) {
-        const productsResponse = await storeProductService.getStoreProducts(currentStore.id, 1, 100);
-        const productsArray = productsResponse.data || [];
-        setProducts(productsArray);
+        if (canSellProducts && canViewInventory) {
+          try {
+            const productsResponse = await storeProductService.getStoreProducts(currentStore.id, 1, 100);
+            const productsArray = productsResponse.data || [];
+            setProducts(productsArray);
+          } catch (error) {
+            console.error("Error al cargar productos:", error);
+            setProducts([]);
+          }
+        } else {
+          setProducts([]);
+        }
 
-        // Cargar órdenes solo de la tienda actual
-        const ordersData = await orderService.getOrdersByStore(currentStore.id);
-        setOrders(ordersData);
+        try {
+          // Cargar órdenes solo de la tienda actual
+          const ordersData = await orderService.getOrdersByStore(currentStore.id);
+          setOrders(ordersData);
+        } catch (error) {
+          console.error("Error al cargar órdenes:", error);
+          setOrders([]);
+        }
       } else {
         setProducts([]);
         setOrders([]);
@@ -93,7 +115,7 @@ export default function VentasPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentStore]);
+  }, [currentStore, canSellProducts, canViewInventory]);
 
   useEffect(() => {
     loadData();
@@ -185,7 +207,7 @@ export default function VentasPage() {
             type: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS';
             photoUrls?: string[];
             payments?: Array<{
-              type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+              type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'DATAPHONE' | 'BIZUM' | 'OTRO';
               amount: number;
             }>;
           }> 
@@ -195,6 +217,7 @@ export default function VentasPage() {
       const getValidServiceType = (type?: string) => {
         if (type === 'WARRANTY') return 'WARRANTY';
         if (type === 'MISELANEOUS') return 'MISELANEOUS';
+        if (type === 'OTHER') return 'MISELANEOUS';
         return 'REPAIR';
       };
 
@@ -214,7 +237,7 @@ export default function VentasPage() {
           ruc?: string;
         };
         paymentMethods?: Array<{
-          type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+          type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'DATAPHONE' | 'BIZUM' | 'OTRO';
           amount: number;
         }>;
         products?: Array<{
@@ -222,7 +245,7 @@ export default function VentasPage() {
           quantity: number;
           price?: number;
           payments?: Array<{
-            type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+            type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'DATAPHONE' | 'BIZUM' | 'OTRO';
             amount: number;
           }>;
         }>;
@@ -233,7 +256,7 @@ export default function VentasPage() {
           type: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS';
           photoUrls?: string[];
           payments?: Array<{
-            type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+            type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'DATAPHONE' | 'BIZUM' | 'OTRO';
             amount: number;
           }>;
         }>;
@@ -256,7 +279,7 @@ export default function VentasPage() {
         orderDataForBackend.products = products.map((product, index) => {
           // Validar y transformar métodos de pago al nuevo formato
           const validPayments = product.payments?.filter(payment => {
-            const validTypes = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'YAPE', 'PLIN', 'OTRO'];
+            const validTypes = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'YAPE', 'PLIN', 'DATAPHONE', 'BIZUM', 'OTRO'];
             return validTypes.includes(payment.type) && payment.amount > 0;
           }) || [];
 
@@ -266,7 +289,7 @@ export default function VentasPage() {
             quantity: number;
             price?: number;
             payments?: Array<{
-              type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+              type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'DATAPHONE' | 'BIZUM' | 'OTRO';
               amount: number;
             }>;
           } = {
@@ -296,7 +319,7 @@ export default function VentasPage() {
           // Para servicios, los pagos son opcionales y se consideran adelantos
           // Solo incluir si hay pagos válidos (adelantos)
           const validPayments = service.payments?.filter(payment => {
-            const validTypes = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'YAPE', 'PLIN', 'OTRO'];
+            const validTypes = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'YAPE', 'PLIN', 'DATAPHONE', 'BIZUM', 'OTRO'];
             return validTypes.includes(payment.type) && payment.amount > 0;
           }) || [];
 
@@ -307,7 +330,7 @@ export default function VentasPage() {
             type: "REPAIR" | "WARRANTY" | "MISELANEOUS";
             photoUrls?: string[];
             payments?: Array<{
-              type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
+              type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'DATAPHONE' | 'BIZUM' | 'OTRO';
               amount: number;
             }>;
           } = {

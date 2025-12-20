@@ -4,9 +4,9 @@ export interface Product {
   description?: string;
   basePrice?: number;
   buyCost?: number;
-  isDeleted: boolean;
-  createdAt: string;
-  updatedAt: string;
+  isDeleted?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
   createdById?: string;
   createdBy?: {
     id: string;

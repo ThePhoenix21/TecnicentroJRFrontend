@@ -32,13 +32,17 @@ enum PaymentType {
   TRANSFERENCIA = 'TRANSFERENCIA',
   YAPE = 'YAPE',
   PLIN = 'PLIN',
+  DATAPHONE = 'DATAPHONE',
+  BIZUM = 'BIZUM',
   OTRO = 'OTRO'
 }
+
+type PaymentTypeValue = (typeof PaymentType)[keyof typeof PaymentType];
 
 // Tipo para método de pago individual
 type PaymentMethod = {
   id: string;
-  type: PaymentType;
+  type: PaymentTypeValue;
   amount: number;
 };
 
@@ -216,7 +220,7 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
     }
   };
 
-  const updatePaymentMethod = (id: string, field: 'type' | 'amount', value: PaymentType | number) => {
+  const updatePaymentMethod = (id: string, field: 'type' | 'amount', value: PaymentTypeValue | number) => {
     setPaymentMethods(prev => 
       prev.map(pm => 
         pm.id === id ? { ...pm, [field]: value } : pm
@@ -839,7 +843,7 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
                 <div key={paymentMethod.id} className="flex gap-2">
                   <select
                     value={paymentMethod.type}
-                    onChange={(e) => updatePaymentMethod(paymentMethod.id, 'type', e.target.value as PaymentType)}
+                    onChange={(e) => updatePaymentMethod(paymentMethod.id, 'type', e.target.value as PaymentTypeValue)}
                     className="flex-1 p-2 border rounded text-sm"
                   >
                     <option value={PaymentType.EFECTIVO}>Efectivo</option>
@@ -847,6 +851,8 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
                     <option value={PaymentType.TRANSFERENCIA}>Transferencia</option>
                     <option value={PaymentType.YAPE}>Yape</option>
                     <option value={PaymentType.PLIN}>Plin</option>
+                    <option value={PaymentType.DATAPHONE}>Datáfono</option>
+                    <option value={PaymentType.BIZUM}>Bizum</option>
                     <option value={PaymentType.OTRO}>Otro</option>
                   </select>
                   

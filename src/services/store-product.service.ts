@@ -22,7 +22,25 @@ class StoreProductService {
       const response = await api.get(`/store/products/store/${storeId}?${params}`);
       return response.data; // El backend devuelve {data: Array, total, page, limit, totalPages}
     } catch (error) {
-      console.error('Error al obtener productos de la tienda:', error);
+      const anyError = error as any;
+      const tokenPresent = typeof window !== 'undefined' ? !!localStorage.getItem('auth_token') : false;
+      // Nota: el overlay de Next a veces serializa los objetos como {}. Por eso logueamos
+      // tanto el error crudo como un string con detalles.
+      console.error('[StoreProductService.getStoreProducts] AxiosError (raw):', anyError);
+
+      const details = {
+        message: anyError?.message,
+        code: anyError?.code,
+        status: anyError?.response?.status,
+        data: anyError?.response?.data,
+        url: anyError?.config?.url,
+        baseURL: anyError?.config?.baseURL,
+        method: anyError?.config?.method,
+        tokenPresent,
+      };
+
+      console.error('[StoreProductService.getStoreProducts] Details:', details);
+      console.error('[StoreProductService.getStoreProducts] Details (JSON):', JSON.stringify(details));
       throw error;
     }
   }

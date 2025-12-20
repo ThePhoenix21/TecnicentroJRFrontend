@@ -52,12 +52,20 @@ export default function ProductsPage() {
   const { user, currentStore, isAuthenticated, isAdmin, hasPermission } = useAuth();
 
   const canViewProducts = isAdmin || hasPermission?.("VIEW_PRODUCTS") || hasPermission?.("MANAGE_PRODUCTS");
+  const canViewInventory = isAdmin || hasPermission?.("VIEW_INVENTORY") || hasPermission?.("MANAGE_INVENTORY") || hasPermission?.("inventory.read") || hasPermission?.("inventory.manage");
   const canManageProducts = isAdmin || hasPermission?.("MANAGE_PRODUCTS");
   const canManagePrices = isAdmin || hasPermission?.("MANAGE_PRICES");
 
   const fetchStoreProducts = useCallback(async () => {
     if (!currentStore) {
       console.log('❌ No hay currentStore, abortando fetchStoreProducts');
+      return;
+    }
+
+    if (!canViewProducts || !canViewInventory) {
+      console.log('⛔ Sin permisos suficientes para ver productos de tienda (requiere VIEW_INVENTORY), abortando fetchStoreProducts');
+      setStoreProducts([]);
+      setFilteredStoreProducts([]);
       return;
     }
     
@@ -88,7 +96,7 @@ export default function ProductsPage() {
       setLoading(false);
       console.log('🏁 fetchStoreProducts finalizado');
     }
-  }, [currentStore?.id, searchTerm, toast]);
+  }, [currentStore?.id, searchTerm, toast, canViewProducts, canViewInventory]);
 
   useEffect(() => {
     if (!isAuthenticated) {

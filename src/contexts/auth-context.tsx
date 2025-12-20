@@ -7,7 +7,13 @@ import { authService, api } from '@/services/auth';
 import { userService } from '@/services/user.service';
 import { storeService } from '@/services/store.service';
 import { Store } from '@/types/store';
-import { tenantService, TENANT_FEATURES_STORAGE_KEY, type TenantFeature } from '@/services/tenant.service';
+import {
+  tenantService,
+  TENANT_DEFAULT_SERVICE_STORAGE_KEY,
+  TENANT_FEATURES_STORAGE_KEY,
+  type TenantDefaultService,
+  type TenantFeature,
+} from '@/services/tenant.service';
 
 // Interfaz simplificada para el contexto de autenticación
 export interface AuthStore {
@@ -46,6 +52,8 @@ interface AuthContextType {
   currentStore: AuthStore | null;
   tenantFeatures: TenantFeature[];
   tenantFeaturesLoaded: boolean;
+  tenantDefaultService: TenantDefaultService;
+  tenantDefaultServiceLoaded: boolean;
   login: (email: string, password: string) => Promise<User | null>;
   logout: () => void;
   selectStore: (store: AuthStore) => void;
@@ -64,6 +72,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentStore, setCurrentStore] = useState<AuthStore | null>(null);
   const [tenantFeatures, setTenantFeatures] = useState<TenantFeature[]>([]);
   const [tenantFeaturesLoaded, setTenantFeaturesLoaded] = useState(false);
+  const [tenantDefaultService, setTenantDefaultService] = useState<TenantDefaultService>('REPAIR');
+  const [tenantDefaultServiceLoaded, setTenantDefaultServiceLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -91,6 +101,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loadTenantDefaultService = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const defaultService = await tenantService.getDefaultService();
+      setTenantDefaultService(defaultService);
+      localStorage.setItem(TENANT_DEFAULT_SERVICE_STORAGE_KEY, defaultService);
+    } catch (e) {
+      // Fallback a cache local para no romper la UI si el endpoint falla temporalmente
+      try {
+        const cached = localStorage.getItem(TENANT_DEFAULT_SERVICE_STORAGE_KEY);
+        if (cached === 'REPAIR' || cached === 'WARRANTY' || cached === 'MISELANEOUS') {
+          setTenantDefaultService(cached);
+        }
+      } catch {
+        // ignorar
+      }
+    } finally {
+      setTenantDefaultServiceLoaded(true);
+    }
+  }, []);
+
   const logout = useCallback((redirect: boolean = true) => {
     console.log('Logging out...');
     // Clear all auth related data
@@ -100,6 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('current_store'); // Limpiar tienda seleccionada
     localStorage.removeItem('stores_cache'); // Limpiar cache de tiendas
     localStorage.removeItem(TENANT_FEATURES_STORAGE_KEY);
+    localStorage.removeItem(TENANT_DEFAULT_SERVICE_STORAGE_KEY);
     
     // Clear axios default headers
     if (api?.defaults?.headers?.common) {
@@ -111,6 +144,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setCurrentStore(null);
     setTenantFeatures([]);
     setTenantFeaturesLoaded(false);
+    setTenantDefaultService('REPAIR');
+    setTenantDefaultServiceLoaded(false);
     setError(null);
     
     if (redirect) {
@@ -259,6 +294,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Cargar features del tenant después de login
       await loadTenantFeatures();
+
+      // Cargar defaultService del tenant después de login
+      await loadTenantDefaultService();
       
       if (response.refresh_token) {
         localStorage.setItem('refresh_token', response.refresh_token);
@@ -283,6 +321,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem('current_store');
       localStorage.removeItem('stores_cache');
       localStorage.removeItem(TENANT_FEATURES_STORAGE_KEY);
+      localStorage.removeItem(TENANT_DEFAULT_SERVICE_STORAGE_KEY);
       
       // Handle different error types
       if (err && typeof err === 'object') {
@@ -333,6 +372,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setTenantFeatures([]);
       setTenantFeaturesLoaded(false);
+      setTenantDefaultService('REPAIR');
+      setTenantDefaultServiceLoaded(false);
       setLoading(false);
       return false;
     }
@@ -451,6 +492,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Cargar features del tenant al restaurar sesión
         await loadTenantFeatures();
 
+        // Cargar defaultService del tenant al restaurar sesión
+        await loadTenantDefaultService();
+
         // Recuperar tienda seleccionada del localStorage
         const savedStore = localStorage.getItem('current_store');
         if (savedStore) {
@@ -514,6 +558,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     currentStore,
     tenantFeatures,
     tenantFeaturesLoaded,
+    tenantDefaultService,
+    tenantDefaultServiceLoaded,
     login,
     logout,
     selectStore,
