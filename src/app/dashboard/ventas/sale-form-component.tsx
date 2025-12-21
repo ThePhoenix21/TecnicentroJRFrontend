@@ -186,6 +186,7 @@ export function SaleForm({
   const hasSalesOfProducts = normalizedTenantFeatures.includes('SALESOFPRODUCTS');
   const hasSalesOfServices = normalizedTenantFeatures.includes('SALESOFSERVICES');
   const hasSalesFeatureGate = hasSalesOfProducts || hasSalesOfServices;
+  const hasGenericClient = normalizedTenantFeatures.includes('GENERICCLIENT');
 
   const canSellProducts = !tenantFeaturesLoaded || !hasSalesFeatureGate || hasSalesOfProducts;
   const canSellServices = !tenantFeaturesLoaded || !hasSalesFeatureGate || hasSalesOfServices;
@@ -382,6 +383,11 @@ export function SaleForm({
   }>({});
 
   const validateForm = (): boolean => {
+    if (hasGenericClient) {
+      setErrors({});
+      return true;
+    }
+
     const newErrors: typeof errors = {};
     let isValid = true;
 
@@ -1145,16 +1151,18 @@ export function SaleForm({
       }
 
       // Usar los datos del cliente si hay servicios o productos, de lo contrario usar los valores por defecto
-      const clientInfo = (hasServices || hasProducts)
-        ? {
-          name: customerData.name || (hasServices ? "Venta" : "Cliente"),
-          email: customerData.email,
-          phone: customerData.phone,
-          address: customerData.address || (hasServices ? "Venta" : "Sin dirección"),
-          dni: finalDni || "00000000",
-          ...(customerData.ruc && { ruc: customerData.ruc }),
-        }
-        : defaultClientInfo;
+      const clientInfo = hasGenericClient
+        ? defaultClientInfo
+        : (hasServices || hasProducts)
+          ? {
+            name: customerData.name || (hasServices ? "Venta" : "Cliente"),
+            email: customerData.email,
+            phone: customerData.phone,
+            address: customerData.address || (hasServices ? "Venta" : "Sin dirección"),
+            dni: finalDni || "00000000",
+            ...(customerData.ruc && { ruc: customerData.ruc }),
+          }
+          : defaultClientInfo;
 
       console.log("existe productsData:", productsData);
 
@@ -2178,7 +2186,7 @@ export function SaleForm({
               </form>
 
               {/* Formulario de cliente - se muestra cuando hay items en el carrito */}
-              {selectedItems.length > 0 && renderCustomerForm()}
+              {!hasGenericClient && selectedItems.length > 0 && renderCustomerForm()}
             </div>
 
             {/* Panel derecho - Carrito */}
