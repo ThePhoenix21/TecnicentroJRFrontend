@@ -187,6 +187,7 @@ export function SaleForm({
   const hasSalesOfServices = normalizedTenantFeatures.includes('SALESOFSERVICES');
   const hasSalesFeatureGate = hasSalesOfProducts || hasSalesOfServices;
   const hasGenericClient = normalizedTenantFeatures.includes('GENERICCLIENT');
+  const hasImageUpload = normalizedTenantFeatures.includes('IMAGEUPLOAD');
 
   const canSellProducts = !tenantFeaturesLoaded || !hasSalesFeatureGate || hasSalesOfProducts;
   const canSellServices = !tenantFeaturesLoaded || !hasSalesFeatureGate || hasSalesOfServices;
@@ -688,7 +689,7 @@ export function SaleForm({
         setIsDropdownOpen(!!value);
         
         // Si es un producto y se encuentra en la lista, configurar payment automático
-        const product = products.find(p => p.id === value);
+        const product = products.find((p) => p.id === value);
         if (product && prev.paymentMethods.length === 1 && prev.paymentMethods[0].amount === 0) {
           newState.paymentMethods = [{
             id: "1",
@@ -1107,7 +1108,7 @@ export function SaleForm({
           .filter((item) => item.type === "service")
           .map(async (item) => {
             let photoUrls: string[] = [];
-            if (item.images?.length) {
+            if (hasImageUpload && item.images?.length) {
               const result = await uploadImages(item.images, ({ total, completed }) => {
                 setUploadStatus((prev) => ({ ...prev, progress: Math.round((completed / total) * 100) }));
               });
@@ -2084,101 +2085,102 @@ export function SaleForm({
                       />
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">
-                        Imágenes del servicio
-                      </label>
+                    {hasImageUpload && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">
+                          Imágenes del servicio
+                        </label>
 
-                      {/* Área de dropzone - solo visible si no hay imágenes */}
-                      {(!newItem.images || newItem.images.length === 0) && (
-                        <div
-                          {...getRootProps()}
-                          className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-primary transition-colors"
-                        >
-                          <input {...getInputProps()} />
-                          <div className="flex flex-col items-center justify-center space-y-2">
-                            <Plus className="h-8 w-8 text-gray-400" />
-                            {isDragActive ? (
-                              <p className="text-sm text-gray-600">
-                                Suelta las imágenes aquí...
-                              </p>
-                            ) : (
-                              <>
+                        {/* Área de dropzone - solo visible si no hay imágenes */}
+                        {(!newItem.images || newItem.images.length === 0) && (
+                          <div
+                            {...getRootProps()}
+                            className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-primary transition-colors"
+                          >
+                            <input {...getInputProps()} />
+                            <div className="flex flex-col items-center justify-center space-y-2">
+                              <Plus className="h-8 w-8 text-gray-400" />
+                              {isDragActive ? (
                                 <p className="text-sm text-gray-600">
-                                  Arrastra y suelta imágenes aquí, o haz clic
-                                  para seleccionar
+                                  Suelta las imágenes aquí...
                                 </p>
-                                <p className="text-xs text-gray-500">
-                                  Formatos soportados: .jpeg, .jpg, .png, .webp
-                                </p>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Muestra las miniaturas de las imágenes */}
-                      {newItem.images && newItem.images.length > 0 && (
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-center">
-                            <h4 className="text-sm font-medium">
-                              Imágenes seleccionadas ({newItem.images.length})
-                            </h4>
-                            {/* Botón para agregar más imágenes */}
-                            <div
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const input = document.createElement("input");
-                                input.type = "file";
-                                input.accept = "image/*";
-                                input.multiple = true;
-                                input.onchange = (e) => {
-                                  const files = (e.target as HTMLInputElement)
-                                    .files;
-                                  if (files) {
-                                    onDrop(Array.from(files));
-                                  }
-                                };
-                                input.click();
-                              }}
-                              className="text-sm text-primary hover:underline flex items-center cursor-pointer"
-                            >
-                              <Plus className="w-3 h-3" /> Agregar más
+                              ) : (
+                                <>
+                                  <p className="text-sm text-gray-600">
+                                    Arrastra y suelta imágenes aquí, o haz clic
+                                    para seleccionar
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    Formatos soportados: .jpeg, .jpg, .png, .webp
+                                  </p>
+                                </>
+                              )}
                             </div>
                           </div>
+                        )}
 
-                          <div className="flex flex-wrap gap-2">
-                            {newItem.images.map((file, index) => (
+                        {/* Muestra las miniaturas de las imágenes */}
+                        {newItem.images && newItem.images.length > 0 && (
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center">
+                              <h4 className="text-sm font-medium">
+                                Imágenes seleccionadas ({newItem.images.length})
+                              </h4>
+                              {/* Botón para agregar más imágenes */}
                               <div
-                                key={`${file.name}-${index}`}
-                                className="relative group w-16 h-16 rounded-md overflow-hidden border"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const input = document.createElement("input");
+                                  input.type = "file";
+                                  input.accept = "image/*";
+                                  input.multiple = true;
+                                  input.onchange = (e) => {
+                                    const files = (e.target as HTMLInputElement)
+                                      .files;
+                                    if (files) {
+                                      onDrop(Array.from(files));
+                                    }
+                                  };
+                                  input.click();
+                                }}
+                                className="text-sm text-primary hover:underline flex items-center cursor-pointer"
                               >
-                                <Image
-                                  src={URL.createObjectURL(file)}
-                                  alt={`Vista previa ${index + 1}`}
-                                  width={64}
-                                  height={64}
-                                  className="w-full h-full object-cover"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    removeImage(index);
-                                  }}
-                                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
+                                <Plus className="w-3 h-3" /> Agregar más
                               </div>
-                            ))}
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                              {newItem.images.map((file, index) => (
+                                <div
+                                  key={`${file.name}-${index}`}
+                                  className="relative group w-16 h-16 rounded-md overflow-hidden border"
+                                >
+                                  <Image
+                                    src={URL.createObjectURL(file)}
+                                    alt={`Vista previa ${index + 1}`}
+                                    width={64}
+                                    height={64}
+                                    className="w-full h-full object-cover"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      removeImage(index);
+                                    }}
+                                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </div>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
-
                 <Button type="submit" className="w-full">
                   <Plus className="h-4 w-4 mr-2" />
                   Agregar al carrito
