@@ -87,7 +87,7 @@ interface ProductMap {
 }
 
 const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenChange, order, onOrderUpdate }) => {
-  const { user, currentStore } = useAuth();
+  const { user, currentStore, canIssuePdf } = useAuth();
   const [showPDF, setShowPDF] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
@@ -525,7 +525,13 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
           <div className="flex gap-2">
             <Button
               variant="default"
-              onClick={() => setShowPDF(true)}
+              onClick={() => {
+                if (!canIssuePdf) {
+                  toast.error('Tu plan no permite emitir PDFs');
+                  return;
+                }
+                setShowPDF(true);
+              }}
               className="flex items-center gap-2"
               disabled={isLoadingDetails} // Deshabilitar si aún está cargando
             >
@@ -564,7 +570,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                 Visualiza y descarga el comprobante PDF de esta venta
               </DialogDescription>
             </div>
-            {showPDF && orderDetails && (
+            {canIssuePdf && showPDF && orderDetails && (
               <div className="flex gap-2 absolute left-6 top-14">
                 <PDFDownloadLink
                   document={
@@ -645,7 +651,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
             )}
           </DialogHeader>
           <div className="flex-1 overflow-hidden p-0">
-            {showPDF && orderDetails && (
+            {canIssuePdf && showPDF && orderDetails && (
               <PDFViewer
                 width="100%"
                 height="100%"

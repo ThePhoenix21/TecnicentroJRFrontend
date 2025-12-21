@@ -267,7 +267,7 @@ export default function VentasPage() {
           ...(orderData.clientInfo?.email && { email: orderData.clientInfo.email }),
           ...(orderData.clientInfo?.phone && { phone: orderData.clientInfo.phone }),
           ...(orderData.clientInfo?.address && { address: orderData.clientInfo.address }),
-          dni: orderData.clientInfo?.dni || '11111111',
+          dni: orderData.clientInfo?.dni || '00000000',
           ...(orderData.clientInfo?.ruc && { ruc: orderData.clientInfo.ruc })
         },
         ...(orderData.paymentMethods && { paymentMethods: orderData.paymentMethods }),
@@ -789,7 +789,7 @@ export default function VentasPage() {
             ...data,
             clientInfo: data.clientInfo ? {
               ...data.clientInfo,
-              dni: data.clientInfo.dni || '11111111'
+              dni: data.clientInfo.dni || '00000000'
             } : undefined,
             products: data.products?.map(p => ({
               ...p,

@@ -24,7 +24,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { formatCurrency } from '@/lib/utils';
 
 export default function CajaPage() {
-  const { user, currentStore, hasPermission, isAdmin } = useAuth();
+  const { user, currentStore, hasPermission, isAdmin, canIssuePdf } = useAuth();
 
   const canViewCash = isAdmin || hasPermission?.("VIEW_CASH") || hasPermission?.("MANAGE_CASH");
   const canManageCash = isAdmin || hasPermission?.("MANAGE_CASH");
@@ -152,40 +152,42 @@ export default function CajaPage() {
       setCloseData({ email: '', password: '', declaredAmount: '' });
       await loadCurrentSession();
 
-      // Generar e imprimir reporte PDF automáticamente
-      try {
-        const { default: ReceiptClosingPDF } = await import('./ReceiptClosingPDF');
-        const { pdf } = await import('@react-pdf/renderer');
-
-        // Intentar obtener todos los movimientos de la sesión para que el PDF
-        // incluya también ingresos manuales (como pagos diferidos de servicios)
-        let closingData = response as any;
+      if (canIssuePdf) {
+        // Generar e imprimir reporte PDF automáticamente
         try {
-          const movementsResponse = await cashService.getCashMovements(currentSession.id, 1, 1000);
-          closingData = {
-            ...response,
-            movements: movementsResponse.data,
-          };
-        } catch (movErr) {
-          console.error('Error al obtener movimientos para el PDF de cierre:', movErr);
-        }
+          const { default: ReceiptClosingPDF } = await import('./ReceiptClosingPDF');
+          const { pdf } = await import('@react-pdf/renderer');
 
-        const blob = await pdf(
-          <ReceiptClosingPDF data={closingData} />
-        ).toBlob();
-        
-        const pdfUrl = URL.createObjectURL(blob);
-        const printWindow = window.open(pdfUrl, '_blank');
-        
-        if (printWindow) {
-          // Esperar a que cargue el PDF antes de imprimir
-          setTimeout(() => {
-            printWindow.print();
-          }, 1000);
+          // Intentar obtener todos los movimientos de la sesión para que el PDF
+          // incluya también ingresos manuales (como pagos diferidos de servicios)
+          let closingData = response as any;
+          try {
+            const movementsResponse = await cashService.getCashMovements(currentSession.id, 1, 1000);
+            closingData = {
+              ...response,
+              movements: movementsResponse.data,
+            };
+          } catch (movErr) {
+            console.error('Error al obtener movimientos para el PDF de cierre:', movErr);
+          }
+
+          const blob = await pdf(
+            <ReceiptClosingPDF data={closingData} />
+          ).toBlob();
+          
+          const pdfUrl = URL.createObjectURL(blob);
+          const printWindow = window.open(pdfUrl, '_blank');
+          
+          if (printWindow) {
+            // Esperar a que cargue el PDF antes de imprimir
+            setTimeout(() => {
+              printWindow.print();
+            }, 1000);
+          }
+        } catch (pdfError) {
+          console.error('Error al generar reporte PDF:', pdfError);
+          toast.error('Caja cerrada, pero no se pudo generar el reporte PDF automático');
         }
-      } catch (pdfError) {
-        console.error('Error al generar reporte PDF:', pdfError);
-        toast.error('Caja cerrada, pero no se pudo generar el reporte PDF automático');
       }
 
     } catch (error: any) {

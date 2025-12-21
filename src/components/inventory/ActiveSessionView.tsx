@@ -37,7 +37,7 @@ interface ActiveSessionViewProps {
 }
 
 export function ActiveSessionView({ session, onSessionClosed, onBack }: ActiveSessionViewProps) {
-  const { user, isAdmin } = useAuth(); // Usar isAdmin
+  const { user, isAdmin, canIssuePdf } = useAuth(); // Usar isAdmin
   const { toast } = useToast();
   
   // Calcular si la sesión está abierta basado en finalizedAt (si es null, está abierta)
@@ -173,12 +173,16 @@ export function ActiveSessionView({ session, onSessionClosed, onBack }: ActiveSe
         title: "Inventario finalizado",
         description: "La sesión se ha cerrado correctamente.",
       });
-      
-      // Mostrar el reporte
-      setReportData(report);
-      setShowReport(true);
-      
-      // No llamamos a onSessionClosed() aquí, esperamos a que el usuario cierre el reporte
+
+      if (canIssuePdf) {
+        // Mostrar el reporte
+        setReportData(report);
+        setShowReport(true);
+
+        // No llamamos a onSessionClosed() aquí, esperamos a que el usuario cierre el reporte
+      } else {
+        onSessionClosed();
+      }
     } catch (error) {
       console.error("Error closing session:", error);
       toast({
@@ -369,7 +373,7 @@ export function ActiveSessionView({ session, onSessionClosed, onBack }: ActiveSe
             <DialogTitle>Reporte de Cierre de Inventario</DialogTitle>
           </DialogHeader>
           <div className="flex-1 w-full h-full min-h-[500px]">
-            {reportData && (
+            {canIssuePdf && reportData && (
               <PDFViewer width="100%" height="100%" className="w-full h-full rounded-md border">
                 <InventoryReportPDF data={reportData} />
               </PDFViewer>

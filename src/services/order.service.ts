@@ -171,14 +171,21 @@ export const orderService = {
   }): Promise<Order> {
     console.log('=== INICIO: Datos recibidos en orderService.createOrder ===');
     console.log('Datos completos recibidos:', JSON.stringify(orderData, null, 2));
-    
+
+    const normalizedClientInfo = orderData.clientInfo
+      ? {
+        ...orderData.clientInfo,
+        dni: orderData.clientInfo.dni?.trim() || '00000000',
+      }
+      : undefined;
+
     // ✅ Validación obligatoria de cashSessionId
     if (!orderData.cashSessionId) {
       throw new Error('El ID de la sesión de caja es obligatorio');
     }
 
     // Validar que al menos se proporcione clientId o clientInfo con DNI
-    if (!orderData.clientId && !orderData.clientInfo?.dni) {
+    if (!orderData.clientId && !normalizedClientInfo?.dni) {
       throw new Error('Se requiere clientId o clientInfo con DNI');
     }
 
@@ -199,7 +206,7 @@ export const orderService = {
       // ✅ Preparar los datos para la solicitud (sin status, lo maneja el backend)
       const requestData = {
         ...(orderData.clientId && { clientId: orderData.clientId }),
-        ...(orderData.clientInfo && { clientInfo: orderData.clientInfo }),
+        ...(normalizedClientInfo && { clientInfo: normalizedClientInfo }),
         ...(orderData.paymentMethods && { paymentMethods: orderData.paymentMethods }),
         ...(orderData.products && { 
           products: orderData.products.map(p => {

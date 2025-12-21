@@ -162,7 +162,7 @@ export function SaleForm({
   products,
   services,
 }: SaleFormProps) {
-  const { currentStore, tenantFeatures, tenantFeaturesLoaded, tenantDefaultService, tenantDefaultServiceLoaded } = useAuth();
+  const { currentStore, tenantFeatures, tenantFeaturesLoaded, tenantDefaultService, tenantDefaultServiceLoaded, canIssuePdf } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState<CartItem[]>([]);
@@ -405,13 +405,10 @@ export function SaleForm({
         isValid = false;
       }
 
-      // Validar DNI si hay servicios (obligatorio) o si se completó (formato)
+      // Validar DNI si hay servicios (opcional; si se ingresa debe ser válido) o si se completó (formato)
       if (hasServices) {
-        // Para servicios, DNI es obligatorio
-        if (!customerData.documentNumber?.trim()) {
-          newErrors.documentNumber = "El DNI es obligatorio para servicios";
-          isValid = false;
-        } else if (!/^[0-9]{8}$/.test(customerData.documentNumber)) {
+        // Para servicios, DNI es opcional; si se ingresa debe ser válido
+        if (customerData.documentNumber?.trim() && !/^[0-9]{8}$/.test(customerData.documentNumber)) {
           newErrors.documentNumber = "El DNI debe tener 8 dígitos";
           isValid = false;
         }
@@ -1034,7 +1031,7 @@ export function SaleForm({
     email: "venta_cliente@example.com",
     phone: "",
     address: "Calle Falsa 123",
-    dni: "11111111",
+    dni: "00000000",
   };
 
   // Manejar envío del formulario
@@ -1140,7 +1137,7 @@ export function SaleForm({
       }
 
       // Generar DNI único para ventas de productos si no se ingresó
-      let finalDni = customerData.documentNumber;
+      let finalDni = customerData.documentNumber?.trim();
       if (!finalDni && hasProducts && !hasServices) {
         // Generar DNI único con timestamp para evitar colisiones
         const timestamp = Date.now().toString().slice(-6);
@@ -1154,7 +1151,7 @@ export function SaleForm({
           email: customerData.email,
           phone: customerData.phone,
           address: customerData.address || (hasServices ? "Venta" : "Sin dirección"),
-          dni: finalDni || (hasServices ? "11111111" : "00000000"),
+          dni: finalDni || "00000000",
           ...(customerData.ruc && { ruc: customerData.ruc }),
         }
         : defaultClientInfo;
@@ -1199,12 +1196,17 @@ export function SaleForm({
         setOrderResponse(result.orderData || result);
         setOrderNumber(result.orderNumber || null);
 
-        // Mostrar el PDF solo después de que la venta se concrete exitosamente
-        console.log(" Venta completada - mostrando hoja de servicio");
-        setShowServiceSheet(true);
+        if (canIssuePdf) {
+          // Mostrar el PDF solo después de que la venta se concrete exitosamente
+          console.log(" Venta completada - mostrando hoja de servicio");
+          setShowServiceSheet(true);
 
-        // El formulario se mantiene intacto hasta que el usuario cierre el PDF
-        console.log(" Hoja de servicio se mostrará - el usuario decidirá cuándo cerrar");
+          // El formulario se mantiene intacto hasta que el usuario cierre el PDF
+          console.log(" Hoja de servicio se mostrará - el usuario decidirá cuándo cerrar");
+        } else {
+          resetSaleState();
+          onClose();
+        }
       }
     } catch (error) {
       console.error("Error al procesar la venta:", error);
@@ -1768,65 +1770,67 @@ export function SaleForm({
                 <DialogTitle className="text-2xl font-bold">
                   Comprobante de Venta
                 </DialogTitle>
-                <div className="flex space-x-2">
-                  <PDFDownloadLink
-                    document={
-                      <ReceiptThermalPDF
-                        saleData={orderResponse}
-                        businessInfo={businessInfo}
-                        isCompleted={orders.some(order => order.id === orderResponse.orderId && order.status === 'COMPLETED')}
-                      />
-                    }
-                    fileName={`comprobante-${new Date().toISOString().split('T')[0]}.pdf`}
-                    className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
-                  >
-                    {({ loading }: PDFDownloadLinkRenderProps) => (
-                      <>
-                        <Download className="h-4 w-4 mr-2" />
-                        {loading ? 'Generando...' : 'Descargar PDF'}
-                      </>
-                    )}
-                  </PDFDownloadLink>
-                  <button
-                    onClick={async () => {
-                      const receiptData = orderResponse;
-                      if (!receiptData) return;
-                      
-                      try {
-                        const { default: ReceiptThermalPDF } = await import('./ReceiptThermalPDF');
-                        const blob = await pdf(
-                          <ReceiptThermalPDF 
-                            saleData={receiptData} 
-                            businessInfo={businessInfo}
-                            isCompleted={orders.some(order => order.id === receiptData.orderId && order.status === 'COMPLETED')}
-                          />
-                        ).toBlob();
-                        
-                        const pdfUrl = URL.createObjectURL(blob);
-                        const printWindow = window.open(pdfUrl, '_blank');
-                        
-                        if (printWindow) {
-                          setTimeout(() => {
-                            printWindow.print();
-                          }, 500);
-                        }
-                      } catch (error) {
-                        console.error('Error al generar el PDF:', error);
-                        // Usar toast de la forma correcta
-                        const { toast: showToast } = await import('@/components/ui/use-toast');
-                        showToast({
-                          title: "Error",
-                          description: "No se pudo generar el PDF para imprimir",
-                          variant: "destructive",
-                        });
+                {canIssuePdf && (
+                  <div className="flex space-x-2">
+                    <PDFDownloadLink
+                      document={
+                        <ReceiptThermalPDF
+                          saleData={orderResponse}
+                          businessInfo={businessInfo}
+                          isCompleted={orders.some(order => order.id === orderResponse.orderId && order.status === 'COMPLETED')}
+                        />
                       }
-                    }}
-                    className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                  >
-                    <Printer className="h-4 w-4 mr-2" />
-                    Imprimir
-                  </button>
-                </div>
+                      fileName={`comprobante-${new Date().toISOString().split('T')[0]}.pdf`}
+                      className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                    >
+                      {({ loading }: PDFDownloadLinkRenderProps) => (
+                        <>
+                          <Download className="h-4 w-4 mr-2" />
+                          {loading ? 'Generando...' : 'Descargar PDF'}
+                        </>
+                      )}
+                    </PDFDownloadLink>
+                    <button
+                      onClick={async () => {
+                        const receiptData = orderResponse;
+                        if (!receiptData) return;
+                        
+                        try {
+                          const { default: ReceiptThermalPDF } = await import('./ReceiptThermalPDF');
+                          const blob = await pdf(
+                            <ReceiptThermalPDF 
+                              saleData={receiptData} 
+                              businessInfo={businessInfo}
+                              isCompleted={orders.some(order => order.id === receiptData.orderId && order.status === 'COMPLETED')}
+                            />
+                          ).toBlob();
+                          
+                          const pdfUrl = URL.createObjectURL(blob);
+                          const printWindow = window.open(pdfUrl, '_blank');
+                          
+                          if (printWindow) {
+                            setTimeout(() => {
+                              printWindow.print();
+                            }, 500);
+                          }
+                        } catch (error) {
+                          console.error('Error al generar el PDF:', error);
+                          // Usar toast de la forma correcta
+                          const { toast: showToast } = await import('@/components/ui/use-toast');
+                          showToast({
+                            title: "Error",
+                            description: "No se pudo generar el PDF para imprimir",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                      className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                      <Printer className="h-4 w-4 mr-2" />
+                      Imprimir
+                    </button>
+                  </div>
+                )}
               </div>
             </DialogHeader>
             <div className="flex-1 overflow-hidden p-0">

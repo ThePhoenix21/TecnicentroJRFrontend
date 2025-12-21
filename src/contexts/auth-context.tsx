@@ -54,6 +54,7 @@ interface AuthContextType {
   tenantFeaturesLoaded: boolean;
   tenantDefaultService: TenantDefaultService;
   tenantDefaultServiceLoaded: boolean;
+  canIssuePdf: boolean;
   login: (email: string, password: string) => Promise<User | null>;
   logout: () => void;
   selectStore: (store: AuthStore) => void;
@@ -77,6 +78,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+
+  const normalizedTenantFeatures = tenantFeatures.map((feature) => String(feature).toUpperCase());
+  const canIssuePdf = tenantFeaturesLoaded && normalizedTenantFeatures.includes('PDFISSUANCE');
 
   const loadTenantFeatures = useCallback(async () => {
     if (typeof window === 'undefined') return;
@@ -560,6 +564,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     tenantFeaturesLoaded,
     tenantDefaultService,
     tenantDefaultServiceLoaded,
+    canIssuePdf,
     login,
     logout,
     selectStore,
