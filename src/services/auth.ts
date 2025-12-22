@@ -2,6 +2,7 @@
 // Importar servicios desde archivos centralizados en lugar de duplicar
 import { api } from '@/services/api';
 import { jwtDecode } from 'jwt-decode';
+import { CURRENCY_STORAGE_KEY } from '@/lib/utils';
 
 declare global {
   interface Window {
@@ -305,6 +306,7 @@ export const authService = {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('user');
+    localStorage.removeItem(CURRENCY_STORAGE_KEY);
 
     // Limpiar cualquier renovación pendiente
     if (window.refreshTokenTimeout) {

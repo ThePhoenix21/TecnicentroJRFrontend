@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -42,6 +43,13 @@ export default function CajaPage() {
     payment: 'EFECTIVO',
     description: ''
   });
+  const [isMobile, setIsMobile] = useState(false);
+  const [isMobileMovementModalOpen, setIsMobileMovementModalOpen] = useState(false);
+  const [mobileMovementStep, setMobileMovementStep] = useState<'select' | 'form'>('select');
+  const [mobileMovementType, setMobileMovementType] = useState<'INCOME' | 'EXPENSE' | null>(null);
+  const [mobileMovementPayment, setMobileMovementPayment] = useState('EFECTIVO');
+  const [mobileMovementAmount, setMobileMovementAmount] = useState('');
+  const [mobileMovementDescription, setMobileMovementDescription] = useState('');
   const [isAddingMovement, setIsAddingMovement] = useState(false);
   const [showCloseForm, setShowCloseForm] = useState(false);
   const [closeData, setCloseData] = useState({
@@ -86,6 +94,33 @@ export default function CajaPage() {
       setCurrentPage(1);
     }
   }, [balance?.movements.length, showOnlyCash]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const mediaQuery = window.matchMedia('(max-width: 767px)');
+
+    const apply = () => {
+      const nextIsMobile = mediaQuery.matches;
+      setIsMobile(nextIsMobile);
+
+      if (!nextIsMobile) {
+        // Abortamos cualquier flujo móvil en progreso para evitar errores al cambiar a pantalla grande.
+        setIsMobileMovementModalOpen(false);
+        setMobileMovementStep('select');
+        setMobileMovementType(null);
+        setMobileMovementPayment('EFECTIVO');
+        setMobileMovementAmount('');
+        setMobileMovementDescription('');
+      }
+    };
+
+    apply();
+    mediaQuery.addEventListener('change', apply);
+    return () => {
+      mediaQuery.removeEventListener('change', apply);
+    };
+  }, []);
 
   const loadCurrentSession = useCallback(async () => {
     if (!currentStore) return;
@@ -211,8 +246,10 @@ export default function CajaPage() {
     }
   };
 
-  const handleAddMovement = async () => {
-    if (!currentSession || !movementData.amount || !movementData.description || !movementData.payment) {
+  const handleAddMovement = async (payload?: { type: 'INCOME' | 'EXPENSE'; payment: string; amount: string; description: string; }) => {
+    const data = payload ?? movementData;
+
+    if (!currentSession || !data.amount || !data.description || !data.payment) {
       toast.error('Por favor complete todos los campos');
       return;
     }
@@ -226,10 +263,10 @@ export default function CajaPage() {
       setIsAddingMovement(true);
       await cashService.addManualMovement({
         cashSessionId: currentSession.id,
-        amount: parseFloat(movementData.amount),
-        type: movementData.type,
-        payment: movementData.payment,
-        description: movementData.description
+        amount: parseFloat(data.amount),
+        type: data.type,
+        payment: data.payment,
+        description: data.description
       });
       
       toast.success('Movimiento agregado exitosamente');
@@ -297,7 +334,18 @@ export default function CajaPage() {
             <>
               <Button
                 variant="outline"
-                onClick={() => setShowMovementForm(!showMovementForm)}
+                onClick={() => {
+                  if (isMobile) {
+                    setIsMobileMovementModalOpen(true);
+                    setMobileMovementStep('select');
+                    setMobileMovementType(null);
+                    setMobileMovementPayment('EFECTIVO');
+                    setMobileMovementAmount('');
+                    setMobileMovementDescription('');
+                    return;
+                  }
+                  setShowMovementForm(!showMovementForm);
+                }}
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Movimiento
@@ -425,6 +473,144 @@ export default function CajaPage() {
         </Card>
       )}
 
+      <Dialog
+        open={isMobile && isMobileMovementModalOpen}
+        onOpenChange={(open) => {
+          if (!isMobile) return;
+          setIsMobileMovementModalOpen(open);
+          if (!open) {
+            setMobileMovementStep('select');
+            setMobileMovementType(null);
+            setMobileMovementPayment('EFECTIVO');
+            setMobileMovementAmount('');
+            setMobileMovementDescription('');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Movimiento de caja</DialogTitle>
+          </DialogHeader>
+
+          {mobileMovementStep === 'select' ? (
+            <div className="grid gap-3">
+              <Button
+                type="button"
+                className="h-14 text-base justify-start"
+                onClick={() => {
+                  setMobileMovementType('INCOME');
+                  setMobileMovementStep('form');
+                }}
+              >
+                <TrendingUp className="h-5 w-5 mr-3" />
+                Ingreso
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                className="h-14 text-base justify-start"
+                onClick={() => {
+                  setMobileMovementType('EXPENSE');
+                  setMobileMovementStep('form');
+                }}
+              >
+                <TrendingDown className="h-5 w-5 mr-3" />
+                Egreso
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Método de pago</label>
+                <select
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  value={mobileMovementPayment}
+                  onChange={(e) => setMobileMovementPayment(e.target.value)}
+                >
+                  <option value="EFECTIVO">EFECTIVO</option>
+                  <option value="TARJETA">TARJETA</option>
+                  <option value="TRANSFERENCIA">TRANSFERENCIA</option>
+                  <option value="YAPE">YAPE</option>
+                  <option value="PLIN">PLIN</option>
+                  <option value="DATAPHONE">DATAPHONE</option>
+                  <option value="BIZUM">BIZUM</option>
+                  <option value="OTRO">OTRO</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Monto</label>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={mobileMovementAmount}
+                  onChange={(e) => setMobileMovementAmount(e.target.value)}
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Descripción</label>
+                <textarea
+                  className="w-full min-h-[90px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  placeholder="Ej: compra de insumos, ingreso extra, etc."
+                  value={mobileMovementDescription}
+                  onChange={(e) => setMobileMovementDescription(e.target.value)}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setMobileMovementStep('select');
+                    setMobileMovementType(null);
+                    setMobileMovementPayment('EFECTIVO');
+                    setMobileMovementAmount('');
+                    setMobileMovementDescription('');
+                  }}
+                  disabled={isAddingMovement}
+                >
+                  Atrás
+                </Button>
+                <Button
+                  type="button"
+                  onClick={async () => {
+                    if (!mobileMovementType) return;
+                    await handleAddMovement({
+                      type: mobileMovementType,
+                      payment: mobileMovementPayment,
+                      amount: mobileMovementAmount,
+                      description: mobileMovementDescription,
+                    });
+
+                    // Si se agregó bien, cerramos y reseteamos
+                    setIsMobileMovementModalOpen(false);
+                    setMobileMovementStep('select');
+                    setMobileMovementType(null);
+                    setMobileMovementPayment('EFECTIVO');
+                    setMobileMovementAmount('');
+                    setMobileMovementDescription('');
+                  }}
+                  disabled={
+                    isAddingMovement ||
+                    !mobileMovementType ||
+                    !mobileMovementPayment ||
+                    !mobileMovementAmount ||
+                    !mobileMovementDescription
+                  }
+                >
+                  {isAddingMovement ? 'Procesando...' : 'Aceptar'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Formulario para abrir caja */}
       {!currentSession && canManageCash && (
         <Card>
@@ -520,7 +706,7 @@ export default function CajaPage() {
             </div>
             <div className="flex gap-2">
               <Button
-                onClick={handleAddMovement}
+                onClick={() => handleAddMovement()}
                 disabled={isAddingMovement || !movementData.amount || !movementData.description || !movementData.payment}
               >
                 <Plus className="h-4 w-4 mr-2" />

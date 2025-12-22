@@ -95,6 +95,7 @@ export default function DashboardPage() {
 
   const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
   const hasCash = !tenantFeaturesLoaded || normalizedTenantFeatures.includes("CASH");
+  const hasClients = !tenantFeaturesLoaded || normalizedTenantFeatures.includes("CLIENTS");
   const hasProducts = !tenantFeaturesLoaded || normalizedTenantFeatures.includes("PRODUCTS");
   const hasServices = !tenantFeaturesLoaded || normalizedTenantFeatures.includes("SERVICES");
 
@@ -232,30 +233,36 @@ export default function DashboardPage() {
               icon={<DollarSign className="h-4 w-4" />}
               loading={loading}
             />
-            
-            <StatCard
-              title="Clientes"
-              value={loading ? '...' : stats?.clientsSummary?.total || 0}
-              description={`${stats?.clientsSummary?.newThisMonth || 0} nuevos este mes`}
-              icon={<Users className="h-4 w-4" />}
-              loading={loading}
-            />
 
-            <StatCard
-              title="Productos"
-              value={loading ? '...' : stats?.productsSummary?.total || 0}
-              description={`${stats?.productsSummary?.lowStock || 0} con bajo stock`}
-              icon={<Package className="h-4 w-4" />}
-              loading={loading}
-            />
+            {hasClients && (
+              <StatCard
+                title="Clientes"
+                value={loading ? '...' : stats?.clientsSummary?.total || 0}
+                description={`${stats?.clientsSummary?.newThisMonth || 0} nuevos este mes`}
+                icon={<Users className="h-4 w-4" />}
+                loading={loading}
+              />
+            )}
 
-            <StatCard
-              title="Servicios"
-              value={loading ? '...' : stats?.servicesSummary?.total || 0}
-              description={`${stats?.servicesSummary?.mostPopular || 'Ninguno'}`}
-              icon={<Wrench className="h-4 w-4" />}
-              loading={loading}
-            />
+            {hasProducts && (
+              <StatCard
+                title="Productos"
+                value={loading ? '...' : stats?.productsSummary?.total || 0}
+                description={`${stats?.productsSummary?.lowStock || 0} con bajo stock`}
+                icon={<Package className="h-4 w-4" />}
+                loading={loading}
+              />
+            )}
+
+            {hasServices && (
+              <StatCard
+                title="Servicios"
+                value={loading ? '...' : stats?.servicesSummary?.total || 0}
+                description={`${stats?.servicesSummary?.mostPopular || 'Ninguno'}`}
+                icon={<Wrench className="h-4 w-4" />}
+                loading={loading}
+              />
+            )}
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
@@ -318,56 +325,51 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
-            <Card className="col-span-3">
-              <CardHeader>
-                <CardTitle>Productos Destacados</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  {loading ? 'Cargando...' : `Top ${Math.min(5, stats?.topProducts?.length || 0)} productos`}
-                </p>
-              </CardHeader>
-              <CardContent>
-                {loading ? (
-                  <div className="space-y-4">
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <div key={i} className="flex items-center space-x-4">
-                        <Skeleton className="h-12 w-12 rounded-md" />
-                        <div className="space-y-2 flex-1">
-                          <Skeleton className="h-4 w-3/4" />
-                          <Skeleton className="h-3 w-1/2" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : stats?.topProducts && stats.topProducts.length > 0 ? (
-                  <div className="space-y-4">
-                    {stats.topProducts.map((product) => (
-                      <div key={product.id} className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4">
-                          <div className="p-2 rounded-md bg-secondary">
-                            <Package className="h-5 w-5" />
-                          </div>
-                          <div>
-                            <p className="font-medium">{product.name}</p>
-                            <p className="text-sm text-muted-foreground">
-                              Stock: {product.value} • Precio: {formatCurrency(product.price || 0)}
-                            </p>
-                            {product.description && (
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {product.description.length > 50 ? `${product.description.substring(0, 50)}...` : product.description}
-                              </p>
-                            )}
+            {hasProducts && (
+              <Card className="col-span-3">
+                <CardHeader>
+                  <CardTitle>Productos Destacados</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    {loading ? 'Cargando...' : `Top ${Math.min(5, stats?.topProducts?.length || 0)} productos`}
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  {loading ? (
+                    <div className="space-y-4">
+                      {[1, 2, 3, 4, 5].map((i) => (
+                        <div key={i} className="flex items-center space-x-4">
+                          <Skeleton className="h-12 w-12 rounded-md" />
+                          <div className="space-y-2 flex-1">
+                            <Skeleton className="h-4 w-3/4" />
+                            <Skeleton className="h-3 w-1/2" />
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No hay productos destacados
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                      ))}
+                    </div>
+                  ) : stats?.topProducts && stats.topProducts.length > 0 ? (
+                    <div className="space-y-4">
+                      {stats.topProducts.slice(0, 5).map((product, index) => (
+                        <div key={index} className="flex items-center justify-between">
+                          <div className="flex items-center space-x-4">
+                            <div className="p-2 rounded-md bg-primary/10">
+                              <Package className="h-5 w-5 text-primary" />
+                            </div>
+                            <div>
+                              <p className="font-medium">{product.name}</p>
+                            </div>
+                          </div>
+                          <Badge variant="secondary">{formatCurrency(product.value)}</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No hay productos destacados
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </div>
         </TabsContent>
 

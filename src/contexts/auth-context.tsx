@@ -7,6 +7,7 @@ import { authService, api } from '@/services/auth';
 import { userService } from '@/services/user.service';
 import { storeService } from '@/services/store.service';
 import { Store } from '@/types/store';
+import { CURRENCY_STORAGE_KEY, type SupportedCurrency } from '@/lib/utils';
 import {
   tenantService,
   TENANT_DEFAULT_SERVICE_STORAGE_KEY,
@@ -31,6 +32,8 @@ interface JwtPayload {
   verified?: boolean;
   stores?: string[]; // 🆕 IDs de tiendas en el JWT
   permissions?: string[]; // 🆕 Permisos del usuario
+  currency?: SupportedCurrency;
+  tenantCurrency?: SupportedCurrency;
   iat?: number;
   exp?: number;
 }
@@ -137,6 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('stores_cache'); // Limpiar cache de tiendas
     localStorage.removeItem(TENANT_FEATURES_STORAGE_KEY);
     localStorage.removeItem(TENANT_DEFAULT_SERVICE_STORAGE_KEY);
+    localStorage.removeItem(CURRENCY_STORAGE_KEY);
     
     // Clear axios default headers
     if (api?.defaults?.headers?.common) {
@@ -266,6 +270,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('JWT Token:', jwtToken);
         const decoded = jwtDecode(jwtToken) as any;
         console.log('JWT Decoded:', decoded);
+
+        const effectiveCurrency = decoded.tenantCurrency ?? decoded.currency;
+        if (effectiveCurrency === 'PEN' || effectiveCurrency === 'USD' || effectiveCurrency === 'EUR') {
+          localStorage.setItem(CURRENCY_STORAGE_KEY, effectiveCurrency);
+        }
         
         if (decoded.stores && Array.isArray(decoded.stores)) {
           // El JWT tiene IDs de tiendas, obtener los nombres reales
@@ -386,6 +395,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('Decoding token...');
       const decoded = jwtDecode<JwtPayload>(token as string);
       console.log('Decoded token:', decoded);
+
+      const effectiveCurrency = decoded.tenantCurrency ?? decoded.currency;
+      if (effectiveCurrency === 'PEN' || effectiveCurrency === 'USD' || effectiveCurrency === 'EUR') {
+        localStorage.setItem(CURRENCY_STORAGE_KEY, effectiveCurrency);
+      }
       
       const currentTime = Date.now() / 1000;
       const tokenExpiration = decoded.exp || 0;

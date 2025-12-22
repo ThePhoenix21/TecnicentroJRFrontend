@@ -28,6 +28,7 @@ import { PDFViewer, pdf, PDFDownloadLink, PDFDownloadLinkProps } from "@react-pd
 import ReceiptThermalPDF from './ReceiptThermalPDF';
 import { clientService } from '@/services/client.service';
 import { cashSessionService } from "@/services/cash-session.service";
+import { formatCurrency } from "@/lib/utils";
 
 // Definir el tipo para los props del PDFDownloadLink
 type PDFDownloadLinkRenderProps = {
@@ -706,7 +707,9 @@ export function SaleForm({
   // Agregar ítem personalizado
   const handleAddCustomItem = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newItem.type || !newItem.name || !newItem.price) return;
+    if (!newItem.type || !newItem.price) return;
+
+    if (newItem.type === 'product' && !newItem.name) return;
 
     const canSellProducts = !tenantFeaturesLoaded || !hasSalesFeatureGate || hasSalesOfProducts;
     const canSellServices = !tenantFeaturesLoaded || !hasSalesFeatureGate || hasSalesOfServices;
@@ -747,7 +750,7 @@ export function SaleForm({
       handleAddItem(
         {
           id: serviceId,
-          name: newItem.name,
+          name: newItem.name?.trim() || 'Defauld_Service',
           price: price,
         },
         "service",
@@ -794,7 +797,6 @@ export function SaleForm({
             id: product.id,
             name: product.name,
             price: product.price,
-            productId: product.id,
           },
           type: "product" as const,
           notes,
@@ -1127,7 +1129,7 @@ export function SaleForm({
             }));
 
             return {
-              name: item.name,              
+              name: item.name?.trim() || 'Defauld_Service',              
               price: typeof item.price === "string" ? parseFloat(item.price) : item.price,
               type: (item.serviceType || (tenantDefaultServiceLoaded ? tenantDefaultService : "REPAIR")),
               description: item.notes,
@@ -1935,7 +1937,7 @@ export function SaleForm({
                           }
                         })()
                       }
-                      required
+                      required={newItem.type === 'product'}
                     />
                     {isDropdownOpen && newItem.type === "product" && (
                       <div className="absolute z-10 w-full mt-1 bg-card text-card-foreground border rounded-md shadow-lg max-h-60 overflow-auto dark:bg-gray-800 dark:border-gray-700">
@@ -1947,7 +1949,7 @@ export function SaleForm({
                           >
                             <div className="font-medium">{item.name}</div>
                             <div className="text-sm text-muted-foreground">
-                              S/{item.price.toFixed(2)}
+                              {formatCurrency(item.price)}
                             </div>
                           </div>
                         ))}
@@ -2013,7 +2015,7 @@ export function SaleForm({
                                 </label>
                                 {isProduct && (
                                   <span className="text-xs text-muted-foreground">
-                                    S/{basePrice.toFixed(2)}
+                                    {formatCurrency(basePrice)}
                                   </span>
                                 )}
                               </div>
@@ -2023,7 +2025,7 @@ export function SaleForm({
                                 value={newItem.price}
                                 onChange={handleNewItemChange}
                                 className="w-full p-2 border rounded"
-                                placeholder={isProduct ? `Dejar vacío para usar precio base (S/${basePrice.toFixed(2)})` : "0.00"}
+                                placeholder={isProduct ? `Dejar vacío para usar precio base (${formatCurrency(basePrice)})` : "0.00"}
                                 min="0"
                                 step="0.01"
                                 required={!isProduct}
@@ -2049,7 +2051,7 @@ export function SaleForm({
 
                         {/* Total esperado de la compra según cantidad y precio */}
                         <div className="text-xs text-muted-foreground text-right">
-                          Total a pagar: S/{expectedTotal.toFixed(2)}
+                          Total a pagar: {formatCurrency(expectedTotal)}
                         </div>
                       </>
                     );
@@ -2244,7 +2246,6 @@ export function SaleForm({
                               <div className="text-sm text-gray-500">
                                 {item.type === "product" ? (
                                   <>
-                                    S/
                                     <input
                                       type="number"
                                       value={editedUnitPriceStr}
@@ -2286,12 +2287,12 @@ export function SaleForm({
                                     />
                                   </>
                                 ) : (
-                                  <>S/{finalUnitPrice.toFixed(2)}</>
+                                  <>{formatCurrency(finalUnitPrice)}</>
                                 )}
-                                {" "}x {item.quantity} = S/{finalTotal.toFixed(2)}
+                                {" "}x {item.quantity} = {formatCurrency(finalTotal)}
                                 {isUnitPriceModified && (
                                   <span className="text-xs text-muted-foreground ml-2 line-through">
-                                    S/{originalTotal.toFixed(2)}
+                                    {formatCurrency(originalTotal)}
                                   </span>
                                 )}
                               </div>
@@ -2364,7 +2365,7 @@ export function SaleForm({
                     <div className="flex justify-between mb-2">
                       <span>Subtotal:</span>
                       <span>
-                        S/{
+                        {formatCurrency(
                           selectedItems.reduce((sum, item) => {
                             // Para servicios, siempre usar el precio total del servicio
                             // Para productos y personalizados, usar el precio personalizado si existe
@@ -2374,15 +2375,15 @@ export function SaleForm({
                                 ? item.customPrice
                                 : item.price;
                             return sum + (itemPrice * item.quantity);
-                          }, 0).toFixed(2)
-                        }
+                          }, 0)
+                        )}
                       </span>
                     </div>
                     <div className="flex justify-between font-medium text-lg">
                       <div className="flex justify-between w-full gap-4">
                         <span>Total:</span>
                         <span className="font-medium">
-                          S/{
+                          {formatCurrency(
                             selectedItems.reduce((sum, item) => {
                               // Para servicios, siempre usar el precio total del servicio
                               // Para productos y personalizados, usar el precio personalizado si existe
@@ -2392,8 +2393,8 @@ export function SaleForm({
                                   ? item.customPrice
                                   : item.price;
                               return sum + (itemPrice * item.quantity);
-                            }, 0).toFixed(2)
-                          }
+                            }, 0)
+                          )}
                         </span>
                       </div>
                     </div>

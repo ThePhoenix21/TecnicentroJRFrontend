@@ -77,7 +77,7 @@ export interface SaleData {
     }>;
   }>;
   services?: Array<{
-    name: string;
+    name?: string;
     description?: string;
     price: number;
     type: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS'; // Updated to match backend

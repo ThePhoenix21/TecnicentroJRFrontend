@@ -88,7 +88,7 @@ const translateStatus = (status: ServiceStatus | undefined): string => {
 };
 
 export default function ServiceDetailsModal({ service, isOpen, onClose, onStatusChange }: ServiceDetailsModalProps) {
-  const { user, currentStore, hasPermission, isAdmin } = useAuth();
+  const { user, currentStore, hasPermission, isAdmin, tenantFeatures, tenantFeaturesLoaded } = useAuth();
   const [currentService, setCurrentService] = useState<ServiceWithClient | null>(service);
   const [status, setStatus] = useState<ServiceStatus>(service?.status || ServiceStatus.IN_PROGRESS);
   const [isLoading, setIsLoading] = useState(false);
@@ -113,6 +113,10 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
 
   const canViewServices = isAdmin || hasPermission?.("VIEW_SERVICES") || hasPermission?.("MANAGE_SERVICES");
   const canManageServices = isAdmin || hasPermission?.("MANAGE_SERVICES");
+
+  const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
+  const hasImageUpload = !tenantFeaturesLoaded || normalizedTenantFeatures.includes('IMAGEUPLOAD');
+  const hasFastService = !tenantFeaturesLoaded || normalizedTenantFeatures.includes('FASTSERVICE');
 
   useEffect(() => {
     console.log('🔍 Debug - useEffect triggered with service:', service?.id);
@@ -271,6 +275,7 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
           cashSessionId: currentSession.id,
           amount: totalRefundAmount,
           type: 'EXPENSE' as const,
+          payment: 'EFECTIVO',
           description: `Extorno por anulación de servicio - ${service.name} (DNI: ${service.client?.dni || 'N/A'})`
         };
         
@@ -404,6 +409,7 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
                       cashSessionId: currentSession.id,
                       amount: totalPayment,
                       type: 'INCOME',
+                      payment: paymentMethods.map((pm) => pm.type).filter(Boolean).join('+') || 'EFECTIVO',
                       description: `Pago servicio ${currentService.name} - Orden ${order.orderNumber || order.id.substring(0, 8)}`
                    });
                    toast.success('Ingreso registrado correctamente en la caja del día');
@@ -627,12 +633,14 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
               </div>
 
               {/* Galería de imágenes */}
-              <div className="grid grid-cols-4 items-start gap-4">
-                <Label className="text-right font-medium pt-2">Imágenes</Label>
-                <div className="col-span-3">
-                  {renderImageGallery()}
+              {hasImageUpload && (
+                <div className="grid grid-cols-4 items-start gap-4">
+                  <Label className="text-right font-medium pt-2">Imágenes</Label>
+                  <div className="col-span-3">
+                    {renderImageGallery()}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="grid grid-cols-4 items-start gap-4">
                 <Label className="text-right font-medium pt-2">Precio</Label>
@@ -646,33 +654,35 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
                 </div>
               </div>
 
-              <div className="grid grid-cols-4 items-start gap-4">
-                <Label className="text-right font-medium pt-2">Pago pendiente</Label>
-                <div className="col-span-3">
-                  {isLoadingPendingPayment ? (
-                    <p className="text-sm text-muted-foreground">Calculando...</p>
-                  ) : (
-                    <div className="space-y-1">
-                      <p className={`font-medium ${pendingPayment > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                        {new Intl.NumberFormat('es-PE', {
-                          style: 'currency',
-                          currency: 'PEN'
-                        }).format(pendingPayment)}
-                      </p>
-                      {pendingPayment > 0 && (
-                        <p className="text-xs text-muted-foreground">
-                          Queda por pagar del servicio
+              {!hasFastService && (
+                <div className="grid grid-cols-4 items-start gap-4">
+                  <Label className="text-right font-medium pt-2">Pago pendiente</Label>
+                  <div className="col-span-3">
+                    {isLoadingPendingPayment ? (
+                      <p className="text-sm text-muted-foreground">Calculando...</p>
+                    ) : (
+                      <div className="space-y-1">
+                        <p className={`font-medium ${pendingPayment > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                          {new Intl.NumberFormat('es-PE', {
+                            style: 'currency',
+                            currency: 'PEN'
+                          }).format(pendingPayment)}
                         </p>
-                      )}
-                      {pendingPayment === 0 && (
-                        <p className="text-xs text-green-600">
-                          El servicio está completamente pagado
-                        </p>
-                      )}
-                    </div>
-                  )}
+                        {pendingPayment > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            Queda por pagar del servicio
+                          </p>
+                        )}
+                        {pendingPayment === 0 && (
+                          <p className="text-xs text-green-600">
+                            El servicio está completamente pagado
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="grid grid-cols-4 items-start gap-4">
                 <Label className="text-right font-medium pt-2">Fecha de creación</Label>
@@ -681,34 +691,36 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
                 </div>
               </div>
 
-              <div className="grid grid-cols-4 items-start gap-4">
-                <Label className="text-right font-medium pt-2">Estado</Label>
-                <div className="col-span-3">
-                  <p className="text-sm text-muted-foreground mb-2">
-                    Estado actual: {translateStatus(currentService.status)}
-                  </p>
-                  <Select 
-                    value={status} 
-                    onValueChange={(value) => setStatus(value as ServiceStatus)}
-                    disabled={
-                      isLoading ||
-                      !canManageServices ||
-                      currentService.status === ServiceStatus.ANNULLATED
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Seleccionar estado" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {statusOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              {!hasFastService && (
+                <div className="grid grid-cols-4 items-start gap-4">
+                  <Label className="text-right font-medium pt-2">Estado</Label>
+                  <div className="col-span-3">
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Estado actual: {translateStatus(currentService.status)}
+                    </p>
+                    <Select 
+                      value={status} 
+                      onValueChange={(value) => setStatus(value as ServiceStatus)}
+                      disabled={
+                        isLoading ||
+                        !canManageServices ||
+                        currentService.status === ServiceStatus.ANNULLATED
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Seleccionar estado" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {statusOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </ScrollArea>
 
@@ -736,16 +748,18 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
             <Button variant="outline" onClick={onClose} disabled={isLoading}>
               Cerrar
             </Button>
-            <Button 
-              onClick={handleStatusUpdate} 
-              disabled={
-                isLoading ||
-                !canManageServices ||
-                status === currentService.status
-              }
-            >
-              {isLoading ? 'Guardando...' : 'Guardar cambios'}
-            </Button>
+            {!hasFastService && (
+              <Button 
+                onClick={handleStatusUpdate} 
+                disabled={
+                  isLoading ||
+                  !canManageServices ||
+                  status === currentService.status
+                }
+              >
+                {isLoading ? 'Guardando...' : 'Guardar cambios'}
+              </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>

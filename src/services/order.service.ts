@@ -157,7 +157,7 @@ export const orderService = {
       }>;
     }>;
     services?: Array<{
-      name: string;
+      name?: string;
       description?: string;
       price: number;
       type: ServiceTypeInput;
@@ -252,7 +252,7 @@ export const orderService = {
                 amount: number;
               }>;
             } = {
-              name: s.name,
+              name: s.name?.trim() || 'Defauld_Service',
               price: s.price,
               type: normalizeServiceType(s.type)
             };

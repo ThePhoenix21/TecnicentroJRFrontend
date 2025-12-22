@@ -8,11 +8,13 @@ import { type Product } from "@/types/product.types";
 import { SaleForm } from "./sale-form-component";
 import type { SaleData } from '@/types/sale.types';
 import { useAuth } from "@/contexts/auth-context";
+import { formatCurrency } from "@/lib/utils";
 
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+
 import {
   Table,
   TableBody,
@@ -201,7 +203,7 @@ export default function VentasPage() {
       const products = Array.isArray(orderData.products) ? orderData.products : [];
       const services = Array.isArray(orderData.services) 
         ? orderData.services as Array<{
-            name: string;
+            name?: string;
             description?: string;
             price: number;
             type: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS';
@@ -334,7 +336,7 @@ export default function VentasPage() {
               amount: number;
             }>;
           } = {
-            name: service.name || 'Servicio sin nombre',
+            name: service.name?.trim() || 'Defauld_Service',
             ...(service.description && { description: service.description }),
             price: service.price || 0,
             type: getValidServiceType(service.type) as "REPAIR" | "WARRANTY" | "MISELANEOUS",
@@ -659,7 +661,7 @@ export default function VentasPage() {
                           </TableCell>
                           <TableCell className="px-2 py-3 text-right">
                             <span className="text-sm font-medium whitespace-nowrap">
-                              S/{(order.totalAmount || 0).toLocaleString('es-PE')}
+                              {formatCurrency(order.totalAmount || 0)}
                             </span>
                           </TableCell>
                           <TableCell className="px-2 py-3">
