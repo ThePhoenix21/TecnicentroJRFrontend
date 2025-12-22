@@ -32,6 +32,8 @@ export interface CashMovement {
   orderId?: string;
   clientId?: string;
   clientName?: string;
+  clientEmail?: string;
+  paymentMethod?: string;
   createdAt: string;
   updatedAt: string;
 }

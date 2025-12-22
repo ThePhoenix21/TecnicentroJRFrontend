@@ -48,7 +48,6 @@ export class CashSessionService {
     }
   }
 
-
   // ✅ Obtener sesión de caja abierta para una tienda
   async getOpenCashSession(storeId: string): Promise<CashSession | null> {
     try {
@@ -70,7 +69,6 @@ export class CashSessionService {
     }
   }
 
-
   // ✅ Crear nueva sesión de caja
   async createCashSession(data: CreateCashSessionRequest): Promise<any> {
     try {
@@ -87,7 +85,6 @@ export class CashSessionService {
       throw error;
     }
   }
-
 
   // ✅ Cerrar sesión de caja (actualizado: POST y requiere email/password)
   async closeCashSession(sessionId: string, data: CloseCashSessionRequest): Promise<any> {
@@ -106,7 +103,6 @@ export class CashSessionService {
     }
   }
 
-
   // ✅ Obtener sesión de caja por ID
   async getCashSessionById(sessionId: string): Promise<CashSession> {
     try {
@@ -123,7 +119,6 @@ export class CashSessionService {
       throw error;
     }
   }
-
 
   // ✅ Obtener sesión actual de una tienda
   async getCurrentSessionByStore(storeId: string): Promise<CashSession | null> {

@@ -18,11 +18,7 @@ import {
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils";
 import { useAuth } from "@/contexts/auth-context";
-import { orderService } from "@/services/order.service";
-import { clientService } from "@/services/client.service";
-import { storeProductService } from "@/services/store-product.service";
-import { serviceService } from "@/services/service.service";
-import { DashboardStats } from "@/services/dashboard.service";
+import { dashboardService, DashboardStats } from "@/services/dashboard.service";
 
 type StatCardProps = {
   title: string;
@@ -71,8 +67,8 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   
-  // Obtener currentStore y permisos del contexto de autenticación
-  const { currentStore, hasPermission } = useAuth();
+  // Obtener currentStore del contexto de autenticación
+  const { currentStore } = useAuth();
 
   const fetchDashboardData = async () => {
     if (!currentStore) {
@@ -83,119 +79,11 @@ export default function DashboardPage() {
     try {
       setLoading(true);
       setError(null);
-      console.log('🚀 Iniciando fetchDashboardData con servicios directos...');
+      console.log('🚀 Iniciando fetchDashboardData con servicio unificado...');
 
-      // Evaluar permisos
-      const canViewOrders = hasPermission?.("VIEW_ORDERS") || hasPermission?.("MANAGE_ORDERS");
-      // Ajusta estos códigos si en backend usas otros permisos para servicios
-      const canViewServices = hasPermission?.("VIEW_SERVICES") || hasPermission?.("MANAGE_SERVICES");
-
-      // Ejecutar peticiones en paralelo, solo cuando corresponda por permisos
-      const [orders, clientsResponse, storeProductsResponse, services] = await Promise.all([
-        canViewOrders
-          ? orderService.getOrdersByStore(currentStore.id).catch(err => {
-              console.error("Error fetching orders:", err);
-              return [];
-            })
-          : Promise.resolve([]),
-        clientService.getClients(1, 1000).catch(err => { // Obtener una gran cantidad para estadísticas
-          console.error("Error fetching clients:", err);
-          return { data: [], meta: { total: 0 } };
-        }),
-        storeProductService.getStoreProducts(currentStore.id, 1, 100).catch(err => {
-          console.error("Error fetching products:", err);
-          return { data: [], meta: { total: 0 } };
-        }),
-        canViewServices
-          ? serviceService.getServicesWithClients(undefined, undefined, currentStore.id).catch(err => {
-              console.error("Error fetching services:", err);
-              return [];
-            })
-          : Promise.resolve([])
-      ]);
-
-      // Procesar Clientes
-      const clients = Array.isArray(clientsResponse) ? clientsResponse : (clientsResponse.data || []);
+      const dashboardData = await dashboardService.getDashboardStats(currentStore.id);
       
-      const currentMonth = new Date().getMonth();
-      const currentYear = new Date().getFullYear();
-      const newClientsThisMonth = clients.filter((client: any) => {
-        if (!client.createdAt) return false;
-        const clientDate = new Date(client.createdAt);
-        return clientDate.getMonth() === currentMonth && clientDate.getFullYear() === currentYear;
-      }).length;
-
-      // Procesar Órdenes (Ventas)
-      const completedOrders = orders.filter(order => order.status === 'COMPLETED');
-      const salesTotal = completedOrders.reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0);
-      const salesCount = completedOrders.length;
-      const salesAverage = salesCount > 0 ? salesTotal / salesCount : 0;
-
-      // Ventas recientes
-      const recentSales = orders
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 5)
-        .map(sale => {
-          const orderProductsCount = sale.orderProducts?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
-          const servicesCount = sale.services?.length || 0;
-          const totalItemsCount = orderProductsCount + servicesCount;
-
-          return {
-            id: sale.id,
-            type: 'sale' as const,
-            amount: Number(sale.totalAmount) || 0,
-            status: sale.status,
-            description: `Venta #${sale.orderNumber || sale.id.substring(0, 6)}`,
-            customerName: sale.client?.name || 'Cliente General',
-            userName: sale.user?.name,
-            itemsCount: totalItemsCount,
-            createdAt: sale.createdAt,
-          };
-        });
-
-      // Procesar Productos
-      const products = Array.isArray(storeProductsResponse) ? storeProductsResponse : (storeProductsResponse.data || []);
-      const lowStockThreshold = 10;
-      const lowStockCount = products.filter((p: any) => (p.stock || 0) <= lowStockThreshold).length;
-      
-      // Top Productos
-      const topProducts = [...products]
-        .sort((a: any, b: any) => (b.stock || 0) - (a.stock || 0)) 
-        .slice(0, 5)
-        .map((p: any) => ({
-          id: p.id,
-          name: p.product?.name || 'Producto Desconocido',
-          value: p.stock || 0,
-          price: Number(p.price) || 0,
-          description: p.product?.description
-        }));
-
-      // Procesar Servicios
-      const mostPopularService = services.length > 0 ? services[0].name : 'Ninguno';
-
-      const dashboardStats: DashboardStats = {
-        salesSummary: {
-          total: salesTotal,
-          count: salesCount,
-          average: parseFloat(salesAverage.toFixed(2)),
-        },
-        productsSummary: {
-          total: products.length,
-          lowStock: lowStockCount,
-        },
-        servicesSummary: {
-          total: services.length,
-          mostPopular: mostPopularService,
-        },
-        clientsSummary: {
-          total: clients.length,
-          newThisMonth: newClientsThisMonth,
-        },
-        recentSales: recentSales,
-        topProducts: topProducts,
-      };
-      
-      setStats(dashboardStats);
+      setStats(dashboardData);
       setLastUpdated(new Date());
       toast.success('Datos actualizados correctamente');
 

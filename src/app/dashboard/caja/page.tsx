@@ -53,26 +53,38 @@ export default function CajaPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const movementsPerPage = 10;
   
-  // Funciones de paginación
-  const totalPages = balance ? Math.ceil(balance.movements.length / movementsPerPage) : 1;
+  // Estado para filtrar métodos de pago
+  const [showOnlyCash, setShowOnlyCash] = useState(false);
   
-  const getCurrentMovements = () => {
+  // Funciones de paginación
+  const getFilteredMovements = () => {
     if (!balance) return [];
     // Ordenar por createdAt descendente (más nuevos primero)
     const sortedMovements = [...balance.movements].sort((a, b) => 
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-    const startIndex = (currentPage - 1) * movementsPerPage;
-    const endIndex = startIndex + movementsPerPage;
-    return sortedMovements.slice(startIndex, endIndex);
+    
+    // Filtrar por método de pago si está activado
+    return showOnlyCash 
+      ? sortedMovements.filter(movement => !movement.paymentMethod || movement.paymentMethod === 'EFECTIVO')
+      : sortedMovements;
   };
   
-  // Resetear página cuando cambian los movimientos
+  const totalPages = balance ? Math.ceil(getFilteredMovements().length / movementsPerPage) : 1;
+  
+  const getCurrentMovements = () => {
+    const filteredMovements = getFilteredMovements();
+    const startIndex = (currentPage - 1) * movementsPerPage;
+    const endIndex = startIndex + movementsPerPage;
+    return filteredMovements.slice(startIndex, endIndex);
+  };
+  
+  // Resetear página cuando cambian los movimientos o el filtro
   useEffect(() => {
     if (balance) {
       setCurrentPage(1);
     }
-  }, [balance?.movements.length]);
+  }, [balance?.movements.length, showOnlyCash]);
 
   const loadCurrentSession = useCallback(async () => {
     if (!currentStore) return;
@@ -586,10 +598,22 @@ export default function CajaPage() {
             <div className="space-y-4">
               {/* Información de movimientos */}
               <div className="flex items-center justify-between text-sm text-muted-foreground">
-                <p>
-                  Mostrando {Math.min(movementsPerPage, getCurrentMovements().length)} de {balance.movements.length} movimientos
-                </p>
-                {balance.movements.length > movementsPerPage && (
+                <div className="flex items-center gap-4">
+                  <p>
+                    Mostrando {Math.min(movementsPerPage, getCurrentMovements().length)} de {getFilteredMovements().length} movimientos
+                    {showOnlyCash && " (solo efectivo)"}
+                  </p>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showOnlyCash}
+                      onChange={(e) => setShowOnlyCash(e.target.checked)}
+                      className="rounded"
+                    />
+                    <span>Solo efectivo</span>
+                  </label>
+                </div>
+                {getFilteredMovements().length > movementsPerPage && (
                   <p>
                     Página {currentPage} de {totalPages} ({movementsPerPage} por página)
                   </p>
@@ -597,7 +621,7 @@ export default function CajaPage() {
               </div>
               
               {/* Paginación */}
-              {balance.movements.length > movementsPerPage && (
+              {getFilteredMovements().length > movementsPerPage && (
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Button
@@ -642,6 +666,7 @@ export default function CajaPage() {
                         <p className="text-sm text-muted-foreground">
                           {new Date(movement.createdAt).toLocaleString()}
                           {movement.clientName && ` • ${movement.clientName}`}
+                          {movement.paymentMethod && ` • ${movement.paymentMethod}`}
                         </p>
                       </div>
                     </div>
@@ -656,7 +681,7 @@ export default function CajaPage() {
               </div>
               
               {/* Paginación inferior */}
-              {balance.movements.length > movementsPerPage && (
+              {getFilteredMovements().length > movementsPerPage && (
                 <div className="flex items-center justify-center">
                   <div className="flex items-center gap-1">
                     {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
