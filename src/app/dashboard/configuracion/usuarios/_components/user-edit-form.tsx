@@ -12,15 +12,20 @@ import { toast } from 'sonner';
 import { authService } from '@/services/auth';
 import { Checkbox } from '@/components/ui/checkbox';
 import { userService, UpdateUserDto, Store, User } from '@/services/user.service';
+import { useAuth } from '@/contexts/auth-context';
+import { tenantService } from '@/services/tenant.service';
 
 // Schema para edición de usuario
 const userEditSchema = z.object({
   name: z.string().min(2, {
     message: 'El nombre debe tener al menos 2 caracteres.',
   }),
-  username: z.string().min(3, {
-    message: 'El nombre de usuario debe tener al menos 3 caracteres.',
-  }),
+  username: z
+    .string()
+    .optional()
+    .refine((value) => !value || value.trim().length === 0 || value.trim().length >= 3, {
+      message: 'El alias debe tener al menos 3 caracteres.',
+    }),
   email: z.string().email({
     message: 'Por favor ingresa un correo electrónico válido.',
   }),
@@ -44,6 +49,9 @@ interface UserEditFormProps {
 
 const formatPermissionLabel = (permission: string): string => {
   if (!permission) return '';
+
+  if (permission === 'VIEW_ORDERS') return 'Ver ventas';
+  if (permission === 'MANAGE_ORDERS') return 'Gestionar ventas';
 
   const normalized = permission
     .replace(/[\s]+/g, '')
@@ -119,6 +127,70 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
   const [userComplete, setUserComplete] = useState<User | null>(null);
   const [availablePermissions, setAvailablePermissions] = useState<string[]>([]);
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(true);
+  const [storesCount, setStoresCount] = useState<number | null>(null);
+
+  const { tenantFeatures, tenantFeaturesLoaded } = useAuth();
+
+  const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
+  const hasFeature = (feature: string) => !tenantFeaturesLoaded || normalizedTenantFeatures.includes(feature);
+
+  const allowedPermissionsSet = (() => {
+    if (!tenantFeaturesLoaded) return null;
+
+    const allowed = new Set<string>();
+
+    if (hasFeature('DASHBOARD')) {
+      allowed.add('VIEW_DASHBOARD');
+    }
+
+    if (hasFeature('INVENTORY')) {
+      allowed.add('VIEW_INVENTORY');
+      allowed.add('MANAGE_INVENTORY');
+    }
+
+    if (hasFeature('PRODUCTS')) {
+      allowed.add('VIEW_PRODUCTS');
+      allowed.add('MANAGE_PRODUCTS');
+      allowed.add('MANAGE_PRICES');
+    }
+
+    if (hasFeature('CLIENTS')) {
+      allowed.add('VIEW_CLIENTS');
+      allowed.add('MANAGE_CLIENTS');
+    }
+
+    if (hasFeature('SERVICES')) {
+      allowed.add('VIEW_SERVICES');
+      allowed.add('MANAGE_SERVICES');
+    }
+
+    if (hasFeature('SALES')) {
+      allowed.add('VIEW_ORDERS');
+      allowed.add('MANAGE_ORDERS');
+    }
+
+    if (hasFeature('SALESOFPRODUCTS') && hasFeature('PRODUCTS')) {
+      allowed.add('VIEW_ORDERS');
+      allowed.add('MANAGE_ORDERS');
+    }
+
+    if (hasFeature('SALESOFSERVICES') && hasFeature('SERVICES')) {
+      allowed.add('VIEW_ORDERS');
+      allowed.add('MANAGE_ORDERS');
+    }
+
+    if (hasFeature('CASH')) {
+      allowed.add('VIEW_CASH');
+      allowed.add('MANAGE_CASH');
+    }
+
+    return allowed;
+  })();
+
+  const filteredAvailablePermissions = (allowedPermissionsSet
+    ? availablePermissions.filter((p) => allowedPermissionsSet.has(p))
+    : availablePermissions
+  ).slice();
 
   // Cargar permisos al montar
   useEffect(() => {
@@ -135,6 +207,24 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
     };
     loadPermissions();
   }, []);
+
+  useEffect(() => {
+    const loadStoresCount = async () => {
+      try {
+        const count = await tenantService.getStoresCount();
+        setStoresCount(count);
+      } catch (error) {
+        console.error('Error loading stores count:', error);
+        setStoresCount(null);
+      }
+    };
+    loadStoresCount();
+  }, []);
+
+  const shouldShowStoreSelect = (count: number | null, storesList: Store[]) => {
+    if (count === 1 && storesList.length === 1) return false;
+    return true;
+  };
 
   // Obtener el usuario completo al montar el componente
   useEffect(() => {
@@ -185,6 +275,28 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
     }
   }, [userComplete, form]);
 
+  useEffect(() => {
+    if (user.role !== 'USER') return;
+
+    if (storesCount === 1 && stores.length === 1) {
+      const current = form.getValues('storeId');
+      if (!current) {
+        form.setValue('storeId', stores[0].id);
+      }
+    }
+  }, [storesCount, stores, form, user.role]);
+
+  useEffect(() => {
+    if (!allowedPermissionsSet) return;
+
+    const current = form.getValues('permissions') || [];
+    const next = current.filter((p: string) => allowedPermissionsSet.has(p));
+
+    if (next.length !== current.length) {
+      form.setValue('permissions', next);
+    }
+  }, [allowedPermissionsSet, form]);
+
   const onSubmit = async (data: any) => {
     try {
       setIsSubmitting(true);
@@ -194,7 +306,9 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
       // Construir payload según el rol del usuario
       const updatePayload: UpdateUserDto = {
         name: data.name,
-        username: data.username,
+        ...(data.username && String(data.username).trim().length > 0 && {
+          username: String(data.username).trim(),
+        }),
         email: data.email,
         phone: data.phone,
         language: data.language || 'es',
@@ -243,9 +357,16 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
             name="username"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Nombre de usuario</FormLabel>
+                <FormLabel>Alias (opcional)</FormLabel>
                 <FormControl>
-                  <Input placeholder="nombre_usuario" {...field} />
+                  <Input
+                    placeholder="alias"
+                    autoComplete="nickname"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    {...field}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -348,7 +469,7 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
           />
 
           {/* Solo mostrar selector de tienda para usuarios USER */}
-          {user.role === 'USER' && (
+          {user.role === 'USER' && shouldShowStoreSelect(storesCount, stores) && (
             <FormField
               control={form.control}
               name="storeId"
@@ -397,7 +518,7 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
                     <FormItem>
                       <div className="max-h-64 overflow-y-auto pr-1">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {availablePermissions.map((permission) => (
+                        {filteredAvailablePermissions.map((permission) => (
                           <FormField
                             key={permission}
                             control={form.control}

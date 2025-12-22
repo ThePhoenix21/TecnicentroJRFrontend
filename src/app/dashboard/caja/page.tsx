@@ -32,7 +32,7 @@ export default function CajaPage() {
   const [currentSession, setCurrentSession] = useState<CashSession | null>(null);
   const [balance, setBalance] = useState<CashBalance | null>(null);
   const [loading, setLoading] = useState(true);
-  const [openingAmount, setOpeningAmount] = useState('50');
+  const [openingAmount, setOpeningAmount] = useState('0');
   const [isOpening, setIsOpening] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [showMovementForm, setShowMovementForm] = useState(false);
@@ -135,7 +135,7 @@ export default function CajaPage() {
       
       toast.success('Caja abierta exitosamente');
       await loadCurrentSession();
-      setOpeningAmount('50');
+      setOpeningAmount('0');
     } catch (error: any) {
       console.error('Error al abrir caja:', error);
       toast.error(error.response?.data?.message || 'Error al abrir la caja');
@@ -440,7 +440,7 @@ export default function CajaPage() {
                 <label className="text-sm font-medium">Monto Inicial</label>
                 <Input
                   type="number"
-                  placeholder="50.00"
+                  placeholder="0.00"
                   value={openingAmount}
                   onChange={(e) => setOpeningAmount(e.target.value)}
                   min="0"

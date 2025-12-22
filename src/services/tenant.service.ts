@@ -25,6 +25,24 @@ class TenantService {
     return [];
   }
 
+  async getStoresCount(): Promise<number> {
+    const response = await api.get('/tenant/stores/count');
+    const data = response.data as unknown;
+
+    if (typeof data === 'number' && Number.isFinite(data)) {
+      return data;
+    }
+
+    if (data && typeof data === 'object') {
+      const maybeCount = (data as any).count;
+      if (typeof maybeCount === 'number' && Number.isFinite(maybeCount)) {
+        return maybeCount;
+      }
+    }
+
+    return 0;
+  }
+
   async getDefaultService(): Promise<TenantDefaultService> {
     const response = await api.get('/tenant/default-service');
     const data = response.data as unknown;

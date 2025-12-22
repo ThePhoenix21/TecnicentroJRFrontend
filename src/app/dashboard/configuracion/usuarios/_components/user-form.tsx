@@ -27,6 +27,8 @@ import { authService } from '@/services/auth';
 import { Checkbox } from '@/components/ui/checkbox';
 import { userService, type CreateUserRegularDto, type UpdateUserDto } from '@/services/user.service';
 import { adminRegisterService, type CreateAdminData } from '@/services/admin-register';
+import { useAuth } from '@/contexts/auth-context';
+import { tenantService } from '@/services/tenant.service';
 
 const UserRole = z.enum(['ADMIN', 'USER']);
 type UserRoleType = z.infer<typeof UserRole>;
@@ -36,9 +38,12 @@ const userFormSchema = z.object({
   name: z.string().min(2, {
     message: 'El nombre debe tener al menos 2 caracteres.',
   }),
-  username: z.string().min(3, {
-    message: 'El nombre de usuario debe tener al menos 3 caracteres.',
-  }).optional(),
+  username: z
+    .string()
+    .optional()
+    .refine((value) => !value || value.trim().length === 0 || value.trim().length >= 3, {
+      message: 'El alias debe tener al menos 3 caracteres.',
+    }),
   email: z.string().email({
     message: 'Por favor ingresa un correo electrónico válido.',
   }),
@@ -142,6 +147,9 @@ const DEFAULT_USER_PERMISSIONS = [
 const formatPermissionLabel = (permission: string): string => {
   if (!permission) return '';
 
+  if (permission === 'VIEW_ORDERS') return 'Ver ventas';
+  if (permission === 'MANAGE_ORDERS') return 'Gestionar ventas';
+
   const normalized = permission
     .replace(/[\s]+/g, '')
     .trim()
@@ -229,9 +237,73 @@ interface UserFormProps {
 export function UserForm({ onSuccess, initialData }: UserFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
+  const [storesCount, setStoresCount] = useState<number | null>(null);
   const [isLoadingStores, setIsLoadingStores] = useState(true);
   const [availablePermissions, setAvailablePermissions] = useState<string[]>([]);
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(true);
+
+  const { tenantFeatures, tenantFeaturesLoaded } = useAuth();
+
+  const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
+  const hasFeature = (feature: string) => !tenantFeaturesLoaded || normalizedTenantFeatures.includes(feature);
+
+  const allowedPermissionsSet = (() => {
+    if (!tenantFeaturesLoaded) return null;
+
+    const allowed = new Set<string>();
+
+    if (hasFeature('DASHBOARD')) {
+      allowed.add('VIEW_DASHBOARD');
+    }
+
+    if (hasFeature('INVENTORY')) {
+      allowed.add('VIEW_INVENTORY');
+      allowed.add('MANAGE_INVENTORY');
+    }
+
+    if (hasFeature('PRODUCTS')) {
+      allowed.add('VIEW_PRODUCTS');
+      allowed.add('MANAGE_PRODUCTS');
+      allowed.add('MANAGE_PRICES');
+    }
+
+    if (hasFeature('CLIENTS')) {
+      allowed.add('VIEW_CLIENTS');
+      allowed.add('MANAGE_CLIENTS');
+    }
+
+    if (hasFeature('SERVICES')) {
+      allowed.add('VIEW_SERVICES');
+      allowed.add('MANAGE_SERVICES');
+    }
+
+    if (hasFeature('SALES')) {
+      allowed.add('VIEW_ORDERS');
+      allowed.add('MANAGE_ORDERS');
+    }
+
+    if (hasFeature('SALESOFPRODUCTS') && hasFeature('PRODUCTS')) {
+      allowed.add('VIEW_ORDERS');
+      allowed.add('MANAGE_ORDERS');
+    }
+
+    if (hasFeature('SALESOFSERVICES') && hasFeature('SERVICES')) {
+      allowed.add('VIEW_ORDERS');
+      allowed.add('MANAGE_ORDERS');
+    }
+
+    if (hasFeature('CASH')) {
+      allowed.add('VIEW_CASH');
+      allowed.add('MANAGE_CASH');
+    }
+
+    return allowed;
+  })();
+
+  const filteredAvailablePermissions = (allowedPermissionsSet
+    ? availablePermissions.filter((p) => allowedPermissionsSet.has(p))
+    : availablePermissions
+  ).slice();
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userFormSchema) as any,
@@ -259,16 +331,29 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
 
       // Si no tiene permisos seleccionados, aplicar los por defecto
       if (currentPermissions.length === 0) {
-        const validDefaults = DEFAULT_USER_PERMISSIONS.filter(p =>
-          availablePermissions.includes(p)
-        );
+        const validDefaults = DEFAULT_USER_PERMISSIONS.filter((p) => {
+          if (!availablePermissions.includes(p)) return false;
+          if (!allowedPermissionsSet) return true;
+          return allowedPermissionsSet.has(p);
+        });
 
         if (validDefaults.length > 0) {
           form.setValue('permissions', validDefaults);
         }
       }
     }
-  }, [currentRole, availablePermissions, initialData?.id, form]);
+  }, [currentRole, availablePermissions, allowedPermissionsSet, initialData?.id, form]);
+
+  useEffect(() => {
+    if (!allowedPermissionsSet) return;
+
+    const current = form.getValues('permissions') || [];
+    const next = current.filter((p) => allowedPermissionsSet.has(p));
+
+    if (next.length !== current.length) {
+      form.setValue('permissions', next);
+    }
+  }, [allowedPermissionsSet, form]);
 
   // Cargar tiendas y permisos al montar
   useEffect(() => {
@@ -276,6 +361,14 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
       try {
         setIsLoadingStores(true);
         setIsLoadingPermissions(true);
+
+        try {
+          const count = await tenantService.getStoresCount();
+          setStoresCount(count);
+        } catch (error) {
+          console.error('Error loading stores count:', error);
+          setStoresCount(null);
+        }
         
         // Cargar tiendas
         const users = await userService.getAllUsers();
@@ -306,6 +399,23 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
     loadData();
   }, []);
 
+  const shouldShowStoreSelect = (count: number | null, storesList: { id: string; name: string }[]) => {
+    if (count === 1 && storesList.length === 1) return false;
+    return true;
+  };
+
+  useEffect(() => {
+    if (initialData?.id) return;
+    if (form.watch('role') !== 'USER') return;
+
+    if (storesCount === 1 && stores.length === 1) {
+      const current = form.getValues('storeId');
+      if (!current) {
+        form.setValue('storeId', stores[0].id);
+      }
+    }
+  }, [storesCount, stores, form, initialData?.id]);
+
 
   const onSubmit = async (data: UserFormValues) => {
     console.log('🚀 onSubmit se ejecutó con datos:', data);
@@ -322,7 +432,9 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
         // Para actualizaciones, solo enviar campos permitidos
         const updateUserData: UpdateUserDto = {
           name: data.name,
-          username: data.username || '', // Fallback para undefined
+          ...(data.username && String(data.username).trim().length > 0 && {
+            username: String(data.username).trim(),
+          }),
           email: data.email,
           phone: data.phone,
           // Solo incluir storeId si es USER
@@ -346,7 +458,9 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
             email: data.email,
             phone: data.phone,
             password: data.password,
-            username: data.username, // Opcional para admin
+            ...(data.username && String(data.username).trim().length > 0 && {
+              username: String(data.username).trim(),
+            }),
             permissions: data.permissions,
           };
 
@@ -361,7 +475,9 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
             phone: data.phone,
             password: data.password,
             storeId: data.storeId!, // Obligatorio para USER
-            username: data.username, // Opcional, se genera automáticamente si no se proporciona
+            ...(data.username && String(data.username).trim().length > 0 && {
+              username: String(data.username).trim(),
+            }),
             permissions: data.permissions,
           };
 
@@ -393,36 +509,44 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
         onSubmit={form.handleSubmit(onSubmit as any)}
         className="space-y-6"
       >
-        {/* Loading state for stores */}
-        {isLoadingStores && (
-          <div className="flex items-center justify-center py-8">
-            <div className="text-sm text-muted-foreground">Cargando tiendas...</div>
-          </div>
-        )}
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <FormField
-            control={form.control as UserFormControl}
-            name="name"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Nombre completo</FormLabel>
-                <FormControl>
-                  <Input placeholder="Nombre del usuario" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+        <div className="max-h-[calc(100vh-220px)] overflow-y-auto pr-2">
+          {/* Loading state for stores */}
+          {isLoadingStores && (
+            <div className="flex items-center justify-center py-8">
+              <div className="text-sm text-muted-foreground">Cargando tiendas...</div>
+            </div>
+          )}
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <FormField
+              control={form.control as UserFormControl}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nombre completo</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Nombre del usuario" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
           <FormField
             control={form.control as UserFormControl}
             name="username"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Nombre de usuario</FormLabel>
+                <FormLabel>Alias (opcional)</FormLabel>
                 <FormControl>
-                  <Input placeholder="nombre_usuario" {...field} />
+                  <Input
+                    placeholder="alias"
+                    autoComplete="nickname"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    {...field}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -485,30 +609,32 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
           {/* Selector de tienda visible para USER en creación, o para edición de USER */}
           {((!initialData?.id && form.watch('role') === 'USER') || 
             (initialData?.id && initialData.role === 'USER')) && (
-            <FormField
-              control={form.control as UserFormControl}
-              name="storeId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Tienda asignada</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecciona una tienda" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {stores.map((store) => (
-                        <SelectItem key={store.id} value={store.id}>
-                          {store.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            shouldShowStoreSelect(storesCount, stores) && (
+              <FormField
+                control={form.control as UserFormControl}
+                name="storeId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tienda asignada</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona una tienda" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {stores.map((store) => (
+                          <SelectItem key={store.id} value={store.id}>
+                            {store.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )
           )}
 
           {/* Sección de Permisos */}
@@ -533,7 +659,7 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
                     <FormItem>
                       <div className="max-h-64 overflow-y-auto pr-1">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {availablePermissions.map((permission) => (
+                        {filteredAvailablePermissions.map((permission) => (
                           <FormField
                             key={permission}
                             control={form.control as UserFormControl}
@@ -652,6 +778,7 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
               </div>
             </div>
           )}
+          </div>
         </div>
 
         <div className="flex justify-end space-x-4">
