@@ -1,7 +1,8 @@
 // src/app/dashboard/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -98,6 +99,37 @@ export default function DashboardPage() {
   const hasClients = !tenantFeaturesLoaded || normalizedTenantFeatures.includes("CLIENTS");
   const hasProducts = !tenantFeaturesLoaded || normalizedTenantFeatures.includes("PRODUCTS");
   const hasServices = !tenantFeaturesLoaded || normalizedTenantFeatures.includes("SERVICES");
+  const hasNamedServices = !tenantFeaturesLoaded || normalizedTenantFeatures.includes("NAMEDSERVICES");
+
+  const topRecurringNamedServices = useMemo(() => {
+    const rows = (incomeData?.rankings?.topUsersServices || []) as any[];
+    const byName = new Map<string, { name: string; description?: string; totalAmount: number }>();
+
+    for (const r of rows) {
+      const name = (r?.Name ?? r?.name) as string | undefined;
+      if (!name) continue;
+
+      const amount = Number(r?.totalAmount ?? r?.total ?? 0) || 0;
+      const description = (r?.Description ?? r?.description) as string | undefined;
+
+      const prev = byName.get(name);
+      if (!prev) {
+        byName.set(name, {
+          name,
+          description,
+          totalAmount: amount,
+        });
+      } else {
+        byName.set(name, {
+          ...prev,
+          description: prev.description || description,
+          totalAmount: prev.totalAmount + amount,
+        });
+      }
+    }
+
+    return Array.from(byName.values()).sort((a, b) => b.totalAmount - a.totalAmount);
+  }, [incomeData]);
 
   const fetchDashboardData = async () => {
     if (!currentStore) {
@@ -562,32 +594,101 @@ export default function DashboardPage() {
                           <CardTitle>Top usuarios por servicios</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="rounded-md border">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>Usuario</TableHead>
-                                  <TableHead className="text-right">Total</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {(incomeData?.rankings?.topUsersServices || []).length === 0 ? (
+                          {hasNamedServices ? (
+                            <Tabs defaultValue="top-recurring-services" className="w-full">
+                              <TabsList className="mb-4">
+                                <TabsTrigger value="top-recurring-services">Top servicios recurrentes</TabsTrigger>
+                                <TabsTrigger value="top-users-services">Top usuarios por servicios</TabsTrigger>
+                              </TabsList>
+
+                              <TabsContent value="top-recurring-services">
+                                <div className="rounded-md border">
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>Servicio</TableHead>
+                                        <TableHead>Descripción</TableHead>
+                                        <TableHead className="text-right">Total</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {topRecurringNamedServices.length === 0 ? (
+                                        <TableRow>
+                                          <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
+                                            No hay datos.
+                                          </TableCell>
+                                        </TableRow>
+                                      ) : (
+                                        topRecurringNamedServices.map((s) => (
+                                          <TableRow key={s.name}>
+                                            <TableCell className="font-medium">{s.name}</TableCell>
+                                            <TableCell className="max-w-[260px] truncate">{s.description || "-"}</TableCell>
+                                            <TableCell className="text-right font-medium">{formatCurrency(s.totalAmount)}</TableCell>
+                                          </TableRow>
+                                        ))
+                                      )}
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                              </TabsContent>
+
+                              <TabsContent value="top-users-services">
+                                <div className="rounded-md border">
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>Usuario</TableHead>
+                                        <TableHead className="text-right">Total</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {(incomeData?.rankings?.topUsersServices || []).length === 0 ? (
+                                        <TableRow>
+                                          <TableCell colSpan={2} className="h-24 text-center text-muted-foreground">
+                                            No hay datos.
+                                          </TableCell>
+                                        </TableRow>
+                                      ) : (
+                                        (incomeData?.rankings?.topUsersServices || []).map((u) => (
+                                          <TableRow key={u.userId}>
+                                            <TableCell>{u.userName}</TableCell>
+                                            <TableCell className="text-right font-medium">{formatCurrency(u.totalAmount ?? u.total ?? 0)}</TableCell>
+                                          </TableRow>
+                                        ))
+                                      )}
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                              </TabsContent>
+                            </Tabs>
+                          ) : (
+                            <div className="rounded-md border">
+                              <Table>
+                                <TableHeader>
                                   <TableRow>
-                                    <TableCell colSpan={2} className="h-24 text-center text-muted-foreground">
-                                      No hay datos.
-                                    </TableCell>
+                                    <TableHead>Usuario</TableHead>
+                                    <TableHead className="text-right">Total</TableHead>
                                   </TableRow>
-                                ) : (
-                                  (incomeData?.rankings?.topUsersServices || []).map((u) => (
-                                    <TableRow key={u.userId}>
-                                      <TableCell>{u.userName}</TableCell>
-                                      <TableCell className="text-right font-medium">{formatCurrency(u.totalAmount ?? u.total ?? 0)}</TableCell>
+                                </TableHeader>
+                                <TableBody>
+                                  {(incomeData?.rankings?.topUsersServices || []).length === 0 ? (
+                                    <TableRow>
+                                      <TableCell colSpan={2} className="h-24 text-center text-muted-foreground">
+                                        No hay datos.
+                                      </TableCell>
                                     </TableRow>
-                                  ))
-                                )}
-                              </TableBody>
-                            </Table>
-                          </div>
+                                  ) : (
+                                    (incomeData?.rankings?.topUsersServices || []).map((u) => (
+                                      <TableRow key={u.userId}>
+                                        <TableCell>{u.userName}</TableCell>
+                                        <TableCell className="text-right font-medium">{formatCurrency(u.totalAmount ?? u.total ?? 0)}</TableCell>
+                                      </TableRow>
+                                    ))
+                                  )}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          )}
                         </CardContent>
                       </Card>
                     )}

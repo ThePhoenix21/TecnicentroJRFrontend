@@ -87,7 +87,7 @@ interface ProductMap {
 }
 
 const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenChange, order, onOrderUpdate }) => {
-  const { user, currentStore, canIssuePdf } = useAuth();
+  const { user, currentStore, canIssuePdf, tenantFeatures } = useAuth();
   const [showPDF, setShowPDF] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
@@ -97,6 +97,10 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
 
   // Verificar si el usuario es administrador
   const isAdmin = user?.role === 'Admin' || user?.role === 'ADMIN';
+
+  const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
+  const hasNamedServices = normalizedTenantFeatures.includes('NAMEDSERVICES');
+  const hasClientsFeature = normalizedTenantFeatures.includes('CLIENTS');
 
   // Información del negocio (hardcodeada ya que useBusinessInfo no existe)
   const businessInfo = {
@@ -273,6 +277,8 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
     photoUrls: s.photoUrls
   })) || order.services || [];
 
+  const namedServiceName = displayServices?.[0]?.name;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl w-[90%] max-h-[90vh] p-0 flex flex-col overflow-hidden">
@@ -310,11 +316,18 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                   <p className="text-muted-foreground">Total</p>
                   <p className="font-medium">S/{(order.totalAmount || 0).toFixed(2)}</p>
                 </div>
-                {order.client && (
+                {hasNamedServices ? (
                   <div className="space-y-1">
-                    <p className="text-muted-foreground">Cliente</p>
-                    <p className="font-medium">{order.client.name}</p>
+                    <p className="text-muted-foreground">Nombre</p>
+                    <p className="font-medium">{namedServiceName || 'Sin nombre'}</p>
                   </div>
+                ) : (
+                  order.client && (
+                    <div className="space-y-1">
+                      <p className="text-muted-foreground">Cliente</p>
+                      <p className="font-medium">{order.client.name}</p>
+                    </div>
+                  )
                 )}
               </div>
             </div>
@@ -476,7 +489,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
             )}
 
             {/* Información del Cliente */}
-            {order.client && (
+            {hasClientsFeature && order.client && (
               <>
                 <div className="border-t my-4" />
                 <div className="space-y-2">
@@ -523,21 +536,19 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
         {/* Footer */}
         <div className="border-t border-border p-4 flex justify-between flex-shrink-0 gap-2">
           <div className="flex gap-2">
-            <Button
-              variant="default"
-              onClick={() => {
-                if (!canIssuePdf) {
-                  toast.error('Tu plan no permite emitir PDFs');
-                  return;
-                }
-                setShowPDF(true);
-              }}
-              className="flex items-center gap-2"
-              disabled={isLoadingDetails} // Deshabilitar si aún está cargando
-            >
-              <FileText className="h-4 w-4" />
-              Ver Comprobante
-            </Button>
+            {canIssuePdf && (
+              <Button
+                variant="default"
+                onClick={() => {
+                  setShowPDF(true);
+                }}
+                className="flex items-center gap-2"
+                disabled={isLoadingDetails} // Deshabilitar si aún está cargando
+              >
+                <FileText className="h-4 w-4" />
+                Ver Comprobante
+              </Button>
+            )}
             {isAdmin && order.status !== 'CANCELLED' && (
               <Button
                 variant="destructive"

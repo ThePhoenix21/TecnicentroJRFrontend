@@ -47,7 +47,11 @@ export default function VentasPage() {
   const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
   const hasSalesOfProducts = normalizedTenantFeatures.includes('SALESOFPRODUCTS');
   const hasSalesOfServices = normalizedTenantFeatures.includes('SALESOFSERVICES');
+  const hasNamedServices = normalizedTenantFeatures.includes('NAMEDSERVICES');
+  const hasProductsFeature = normalizedTenantFeatures.includes('PRODUCTS');
   const hasSalesFeatureGate = hasSalesOfProducts || hasSalesOfServices;
+
+  const tableColSpan = 7 + (isAdmin ? 1 : 0) + (hasProductsFeature ? 1 : 0);
 
   const canSellProducts = !tenantFeaturesLoaded || !hasSalesFeatureGate || hasSalesOfProducts;
   const canViewInventory = isAdmin || hasPermission?.('VIEW_INVENTORY') || hasPermission?.('MANAGE_INVENTORY') || hasPermission?.('inventory.read') || hasPermission?.('inventory.manage');
@@ -385,7 +389,7 @@ export default function VentasPage() {
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
-                  {[...Array(8)].map((_, i) => (
+                  {[...Array(tableColSpan)].map((_, i) => (
                     <TableHead key={i} className="h-10">
                       <div className="h-4 bg-muted rounded-md w-3/4 mx-auto"></div>
                     </TableHead>
@@ -395,7 +399,7 @@ export default function VentasPage() {
               <TableBody>
                 {[...Array(5)].map((_, rowIndex) => (
                   <TableRow key={rowIndex}>
-                    {[...Array(8)].map((_, cellIndex) => (
+                    {[...Array(tableColSpan)].map((_, cellIndex) => (
                       <TableCell key={cellIndex} className="h-16">
                         <div className="h-4 bg-muted rounded-md w-3/4 mx-auto"></div>
                       </TableCell>
@@ -509,9 +513,13 @@ export default function VentasPage() {
                   <TableRow>
                     <TableHead className="w-[80px] px-2 text-center hidden sm:table-cell">Order #</TableHead>
                     <TableHead className="w-[90px] px-2 text-center">Fecha</TableHead>
-                    <TableHead className="min-w-[120px] px-2 text-center">Cliente</TableHead>
-                    <TableHead className="w-[110px] px-2 text-center">Vendedor</TableHead>
-                    <TableHead className="w-[100px] px-2 text-center hidden md:table-cell">Productos</TableHead>
+                    <TableHead className="min-w-[120px] px-2 text-center">{hasNamedServices ? 'Nombre' : 'Cliente'}</TableHead>
+                    {isAdmin && (
+                      <TableHead className="w-[110px] px-2 text-center">Vendedor</TableHead>
+                    )}
+                    {hasProductsFeature && (
+                      <TableHead className="w-[100px] px-2 text-center hidden md:table-cell">Productos</TableHead>
+                    )}
                     <TableHead className="w-[100px] px-2 text-center hidden md:table-cell">Servicios</TableHead>
                     <TableHead className="w-[110px] px-2 text-center">Estado</TableHead>
                     <TableHead className="w-[100px] px-2 text-right">Total</TableHead>
@@ -573,6 +581,9 @@ export default function VentasPage() {
                         ] || statusConfig.PENDING;
 
                       const clientName = order.client?.name || 'Sin cliente';
+                      const displayName = hasNamedServices
+                        ? (order.services?.[0]?.name || 'Sin nombre')
+                        : clientName;
                       const productCount = order.orderProducts?.length || 0;
                       const serviceCount = order.services?.length || 0;
 
@@ -605,9 +616,9 @@ export default function VentasPage() {
                           <TableCell className="px-2 py-3">
                             <div className="flex flex-col min-w-0">
                               <span className="text-sm font-medium truncate max-w-[120px] sm:max-w-[180px] mx-auto">
-                                {clientName}
+                                {displayName}
                               </span>
-                              {order.client?.phone && (
+                              {!hasNamedServices && order.client?.phone && (
                                 <a
                                   href={`tel:${order.client.phone}`}
                                   className="text-xs text-muted-foreground hover:text-primary transition-colors truncate max-w-[120px] sm:max-w-[180px] mx-auto"
@@ -618,27 +629,31 @@ export default function VentasPage() {
                               )}
                             </div>
                           </TableCell>
-                          <TableCell className="px-2 py-3">
-                            <div className="flex flex-col min-w-0">
-                              <span className="text-sm font-medium truncate max-w-[120px] sm:max-w-[180px] mx-auto">
-                                {order.user?.name || 'Sistema'}
-                              </span>
-                              {order.user?.email && (
-                                <span className="text-xs text-muted-foreground truncate max-w-[120px] sm:max-w-[180px] mx-auto">
-                                  {order.user.email}
+                          {isAdmin && (
+                            <TableCell className="px-2 py-3">
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-sm font-medium truncate max-w-[120px] sm:max-w-[180px] mx-auto">
+                                  {order.user?.name || 'Sistema'}
                                 </span>
+                                {order.user?.email && (
+                                  <span className="text-xs text-muted-foreground truncate max-w-[120px] sm:max-w-[180px] mx-auto">
+                                    {order.user.email}
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                          )}
+                          {hasProductsFeature && (
+                            <TableCell className="px-2 py-3 text-center hidden md:table-cell">
+                              {productCount > 0 ? (
+                                <Badge variant="outline" className="text-xs py-0.5">
+                                  {productCount} {productCount === 1 ? 'prod.' : 'prod.'}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">-</span>
                               )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="px-2 py-3 text-center hidden md:table-cell">
-                            {productCount > 0 ? (
-                              <Badge variant="outline" className="text-xs py-0.5">
-                                {productCount} {productCount === 1 ? 'prod.' : 'prod.'}
-                              </Badge>
-                            ) : (
-                              <span className="text-muted-foreground text-sm">-</span>
-                            )}
-                          </TableCell>
+                            </TableCell>
+                          )}
                           <TableCell className="px-2 py-3 text-center hidden md:table-cell">
                             {serviceCount > 0 ? (
                               <Badge variant="outline" className="text-xs py-0.5">
@@ -682,7 +697,7 @@ export default function VentasPage() {
                     })
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={10} className="text-center py-12">
+                      <TableCell colSpan={tableColSpan} className="text-center py-12">
                         <div className="flex flex-col items-center justify-center text-center">
                           <ShoppingCart className="h-12 w-12 text-muted-foreground/50 mb-4" />
                           <h3 className="text-lg font-medium text-muted-foreground">
