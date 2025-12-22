@@ -39,6 +39,7 @@ export default function CajaPage() {
   const [movementData, setMovementData] = useState({
     amount: '',
     type: 'INCOME' as 'INCOME' | 'EXPENSE',
+    payment: 'EFECTIVO',
     description: ''
   });
   const [isAddingMovement, setIsAddingMovement] = useState(false);
@@ -211,7 +212,7 @@ export default function CajaPage() {
   };
 
   const handleAddMovement = async () => {
-    if (!currentSession || !movementData.amount || !movementData.description) {
+    if (!currentSession || !movementData.amount || !movementData.description || !movementData.payment) {
       toast.error('Por favor complete todos los campos');
       return;
     }
@@ -227,11 +228,12 @@ export default function CajaPage() {
         cashSessionId: currentSession.id,
         amount: parseFloat(movementData.amount),
         type: movementData.type,
+        payment: movementData.payment,
         description: movementData.description
       });
       
       toast.success('Movimiento agregado exitosamente');
-      setMovementData({ amount: '', type: 'INCOME', description: '' });
+      setMovementData({ amount: '', type: 'INCOME', payment: 'EFECTIVO', description: '' });
       setShowMovementForm(false);
       await loadCurrentSession();
     } catch (error: any) {
@@ -467,7 +469,7 @@ export default function CajaPage() {
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-4">
               <div>
                 <label className="text-sm font-medium">Tipo</label>
                 <select
@@ -477,6 +479,23 @@ export default function CajaPage() {
                 >
                   <option value="INCOME">Ingreso</option>
                   <option value="EXPENSE">Egreso</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Método de pago</label>
+                <select
+                  className="w-full mt-1 p-2 border rounded-md"
+                  value={movementData.payment}
+                  onChange={(e) => setMovementData({ ...movementData, payment: e.target.value })}
+                >
+                  <option value="EFECTIVO">EFECTIVO</option>
+                  <option value="TARJETA">TARJETA</option>
+                  <option value="TRANSFERENCIA">TRANSFERENCIA</option>
+                  <option value="YAPE">YAPE</option>
+                  <option value="PLIN">PLIN</option>
+                  <option value="DATAPHONE">DATAPHONE</option>
+                  <option value="BIZUM">BIZUM</option>
+                  <option value="OTRO">OTRO</option>
                 </select>
               </div>
               <div>
@@ -502,7 +521,7 @@ export default function CajaPage() {
             <div className="flex gap-2">
               <Button
                 onClick={handleAddMovement}
-                disabled={isAddingMovement || !movementData.amount || !movementData.description}
+                disabled={isAddingMovement || !movementData.amount || !movementData.description || !movementData.payment}
               >
                 <Plus className="h-4 w-4 mr-2" />
                 {isAddingMovement ? 'Agregando...' : 'Agregar Movimiento'}
@@ -511,7 +530,7 @@ export default function CajaPage() {
                 variant="outline"
                 onClick={() => {
                   setShowMovementForm(false);
-                  setMovementData({ amount: '', type: 'INCOME', description: '' });
+                  setMovementData({ amount: '', type: 'INCOME', payment: 'EFECTIVO', description: '' });
                 }}
               >
                 Cancelar

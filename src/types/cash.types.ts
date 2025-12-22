@@ -84,5 +84,6 @@ export interface ManualMovementRequest {
   cashSessionId: string;
   amount: number;
   type: 'INCOME' | 'EXPENSE';
+  payment: string;
   description: string;
 }
