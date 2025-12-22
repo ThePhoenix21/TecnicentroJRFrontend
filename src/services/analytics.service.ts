@@ -48,18 +48,25 @@ export type AnalyticsIncomeResponse = {
 };
 
 export type AnalyticsExpenseItem = {
-  id: string;
-  createdAt: string;
+  date: string;
   description: string;
   amount: number;
   expenseType?: string;
+  source?: string;
+  sourceId?: string;
   user?: {
     id: string;
     name: string;
+    email?: string;
   };
 };
 
-export type AnalyticsExpensesResponse = AnalyticsExpenseItem[];
+export type AnalyticsExpensesResponse = {
+  totals?: {
+    totalExpenses?: number;
+  };
+  expenses: AnalyticsExpenseItem[];
+};
 
 class AnalyticsService {
   async getNetProfit(range: AnalyticsRange): Promise<NetProfitResponse> {

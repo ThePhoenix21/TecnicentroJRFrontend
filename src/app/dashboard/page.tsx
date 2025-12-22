@@ -637,7 +637,10 @@ export default function DashboardPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold text-red-600">
-                        {formatCurrency((expensesData || []).reduce((sum, e) => sum + (Number(e.amount) || 0), 0))}
+                        {formatCurrency(
+                          expensesData?.totals?.totalExpenses ??
+                            (expensesData?.expenses || []).reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -665,16 +668,16 @@ export default function DashboardPage() {
                                   Cargando...
                                 </TableCell>
                               </TableRow>
-                            ) : (expensesData || []).length === 0 ? (
+                            ) : (expensesData?.expenses || []).length === 0 ? (
                               <TableRow>
                                 <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                                   No hay egresos en este rango.
                                 </TableCell>
                               </TableRow>
                             ) : (
-                              (expensesData || []).map((e) => (
-                                <TableRow key={e.id}>
-                                  <TableCell className="whitespace-nowrap">{new Date(e.createdAt).toLocaleString()}</TableCell>
+                              (expensesData?.expenses || []).map((e) => (
+                                <TableRow key={e.sourceId || `${e.date}-${e.description}`}>
+                                  <TableCell className="whitespace-nowrap">{new Date(e.date).toLocaleString()}</TableCell>
                                   <TableCell>{e.user?.name || "-"}</TableCell>
                                   <TableCell className="max-w-[300px] truncate">{e.description}</TableCell>
                                   <TableCell>{e.expenseType || "OTRO"}</TableCell>
