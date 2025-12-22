@@ -79,14 +79,25 @@ export interface UserInfo {
   role?: string;
 }
 
+export interface PaymentMethod {
+  id: string;
+  type: PaymentTypeInput;
+  amount: number;
+  createdAt?: string;
+}
+
 export interface Order {
   id: string;
   orderNumber: string;
-  items: OrderItem[];
+  items?: OrderItem[];
   userId: string;
   totalAmount: number;
   status: "PENDING" | "COMPLETED" | "CANCELLED";
-  paymentMethod: string;
+  paymentMethod?: string;
+  paymentMethods?: PaymentMethod[];
+  isPriceModified?: boolean;
+  canceledAt?: string | null;
+  canceledById?: string | null;
   createdAt: string;
   updatedAt: string;
   clientId?: string;
@@ -95,6 +106,7 @@ export interface Order {
   orderProducts?: OrderProduct[];
   user?: UserInfo;
   cashSessionId?: string;
+  cashSessionsId?: string;
   cashSession?: {
     id: string;
     status: "OPEN" | "CLOSED";

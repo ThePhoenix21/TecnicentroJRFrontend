@@ -51,7 +51,7 @@ export default function VentasPage() {
   const hasProductsFeature = normalizedTenantFeatures.includes('PRODUCTS');
   const hasSalesFeatureGate = hasSalesOfProducts || hasSalesOfServices;
 
-  const tableColSpan = 7 + (isAdmin ? 1 : 0) + (hasProductsFeature ? 1 : 0);
+  const tableColSpan = 8 + (isAdmin ? 1 : 0) + (hasProductsFeature ? 1 : 0);
 
   const canSellProducts = !tenantFeaturesLoaded || !hasSalesFeatureGate || hasSalesOfProducts;
   const canViewInventory = isAdmin || hasPermission?.('VIEW_INVENTORY') || hasPermission?.('MANAGE_INVENTORY') || hasPermission?.('inventory.read') || hasPermission?.('inventory.manage');
@@ -136,7 +136,11 @@ export default function VentasPage() {
       result = result.filter(
         (order) =>
           order.id?.toLowerCase().includes(term) ||
-          order.paymentMethod?.toLowerCase().includes(term) ||
+          (order.paymentMethods || []).some((pm) => {
+            const type = String(pm?.type || '').toLowerCase();
+            const amount = String(pm?.amount ?? '').toLowerCase();
+            return type.includes(term) || amount.includes(term);
+          }) ||
           order.client?.name?.toLowerCase().includes(term) ||
           order.client?.phone?.toLowerCase().includes(term) ||
           order.client?.email?.toLowerCase().includes(term) ||
@@ -522,6 +526,7 @@ export default function VentasPage() {
                     )}
                     <TableHead className="w-[100px] px-2 text-center hidden md:table-cell">Servicios</TableHead>
                     <TableHead className="w-[110px] px-2 text-center">Estado</TableHead>
+                    <TableHead className="min-w-[160px] px-2 text-center hidden md:table-cell">Método</TableHead>
                     <TableHead className="w-[100px] px-2 text-right">Total</TableHead>
                     <TableHead className="w-[50px] px-2 text-center">Acciones</TableHead>
                   </TableRow>
@@ -586,6 +591,7 @@ export default function VentasPage() {
                         : clientName;
                       const productCount = order.orderProducts?.length || 0;
                       const serviceCount = order.services?.length || 0;
+                      const paymentMethods = order.paymentMethods || [];
 
                       const fromOpenSession = isOrderFromOpenCashSession(order);
                       return (
@@ -673,6 +679,25 @@ export default function VentasPage() {
                                 <span className="hidden sm:inline">{status.text}</span>
                               </span>
                             </div>
+                          </TableCell>
+                          <TableCell className="px-2 py-3 text-center hidden md:table-cell">
+                            {paymentMethods.length > 0 ? (
+                              <div className="flex flex-col items-center gap-0.5">
+                                {paymentMethods.map((pm) => (
+                                  <span
+                                    key={pm?.id || `${pm?.type}-${pm?.amount}`}
+                                    className="text-xs whitespace-nowrap"
+                                    title={String(pm?.type || '')}
+                                  >
+                                    {paymentMethods.length > 1
+                                      ? `${pm?.type || '-'} ${formatCurrency(Number(pm?.amount) || 0)}`
+                                      : (pm?.type || '-')}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
                           </TableCell>
                           <TableCell className="px-2 py-3 text-right">
                             <span className="text-sm font-medium whitespace-nowrap">

@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { startOfWeek } from "date-fns";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -83,8 +84,12 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
+  const [activeMainTab, setActiveMainTab] = useState<"overview" | "analytics">("overview");
+
   const [analyticsFrom, setAnalyticsFrom] = useState<string>("");
   const [analyticsTo, setAnalyticsTo] = useState<string>("");
+  const [serviceProfitPercent, setServiceProfitPercent] = useState<number>(50);
+
   const [analysisType, setAnalysisType] = useState<"net-profit" | "income" | "expenses">("net-profit");
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
@@ -100,6 +105,34 @@ export default function DashboardPage() {
   const hasProducts = !tenantFeaturesLoaded || normalizedTenantFeatures.includes("PRODUCTS");
   const hasServices = !tenantFeaturesLoaded || normalizedTenantFeatures.includes("SERVICES");
   const hasNamedServices = !tenantFeaturesLoaded || normalizedTenantFeatures.includes("NAMEDSERVICES");
+
+  const toLocalDateInputValue = (date: Date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  const setRangeToday = () => {
+    const today = new Date();
+    const v = toLocalDateInputValue(today);
+    setAnalyticsFrom(v);
+    setAnalyticsTo(v);
+  };
+
+  const setRangeThisWeek = () => {
+    const today = new Date();
+    const start = startOfWeek(today, { weekStartsOn: 1 });
+    setAnalyticsFrom(toLocalDateInputValue(start));
+    setAnalyticsTo(toLocalDateInputValue(today));
+  };
+
+  const setRangeThisMonth = () => {
+    const today = new Date();
+    const start = new Date(today.getFullYear(), today.getMonth(), 1);
+    setAnalyticsFrom(toLocalDateInputValue(start));
+    setAnalyticsTo(toLocalDateInputValue(today));
+  };
 
   const topRecurringNamedServices = useMemo(() => {
     const rows = (incomeData?.rankings?.topUsersServices || []) as any[];
@@ -213,6 +246,12 @@ export default function DashboardPage() {
     }
   }, [hasCash, analysisType]);
 
+  useEffect(() => {
+    if (activeMainTab !== 'analytics') return;
+    if (analyticsFrom && analyticsTo) return;
+    setRangeThisMonth();
+  }, [activeMainTab]);
+
   if (error) {
     return (
       <div className="p-6">
@@ -248,7 +287,12 @@ export default function DashboardPage() {
         </Button>
       </div>
 
-      <Tabs defaultValue="overview" className="space-y-4">
+      <Tabs
+        defaultValue="overview"
+        value={activeMainTab}
+        onValueChange={(v) => setActiveMainTab(v as "overview" | "analytics")}
+        className="space-y-4"
+      >
         <TabsList>
           <TabsTrigger value="overview">Resumen</TabsTrigger>
           <TabsTrigger value="analytics">
@@ -414,6 +458,17 @@ export default function DashboardPage() {
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={setRangeToday}>
+                  Hoy
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={setRangeThisWeek}>
+                  Esta semana
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={setRangeThisMonth}>
+                  Este mes
+                </Button>
+              </div>
               <div className="grid gap-4 md:grid-cols-3">
                 <div>
                   <label className="text-sm font-medium">Desde</label>
@@ -602,19 +657,35 @@ export default function DashboardPage() {
                               </TabsList>
 
                               <TabsContent value="top-recurring-services">
+                                <div className="flex items-center justify-end gap-2 mb-3">
+                                  <span className="text-sm text-muted-foreground">% ganancia</span>
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    step={1}
+                                    value={serviceProfitPercent}
+                                    onChange={(e) => {
+                                      const next = Number(e.target.value);
+                                      if (Number.isFinite(next)) setServiceProfitPercent(next);
+                                    }}
+                                    className="w-[90px]"
+                                  />
+                                </div>
                                 <div className="rounded-md border">
                                   <Table>
                                     <TableHeader>
                                       <TableRow>
                                         <TableHead>Servicio</TableHead>
                                         <TableHead>Descripción</TableHead>
+                                        <TableHead className="text-right">Ganancia</TableHead>
                                         <TableHead className="text-right">Total</TableHead>
                                       </TableRow>
                                     </TableHeader>
                                     <TableBody>
                                       {topRecurringNamedServices.length === 0 ? (
                                         <TableRow>
-                                          <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
+                                          <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
                                             No hay datos.
                                           </TableCell>
                                         </TableRow>
@@ -623,6 +694,9 @@ export default function DashboardPage() {
                                           <TableRow key={s.name}>
                                             <TableCell className="font-medium">{s.name}</TableCell>
                                             <TableCell className="max-w-[260px] truncate">{s.description || "-"}</TableCell>
+                                            <TableCell className="text-right font-medium">
+                                              {formatCurrency((Number(s.totalAmount) || 0) * (Math.max(0, Math.min(100, serviceProfitPercent)) / 100))}
+                                            </TableCell>
                                             <TableCell className="text-right font-medium">{formatCurrency(s.totalAmount)}</TableCell>
                                           </TableRow>
                                         ))

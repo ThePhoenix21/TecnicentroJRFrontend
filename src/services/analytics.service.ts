@@ -3,6 +3,17 @@ import { api } from "@/services/api";
 export type AnalyticsRange = {
   from: string;
   to: string;
+  timeZone?: string;
+};
+
+const getBrowserTimeZone = (): string | undefined => {
+  try {
+    if (typeof Intl === 'undefined' || !Intl.DateTimeFormat) return undefined;
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return typeof tz === 'string' && tz.length > 0 ? tz : undefined;
+  } catch {
+    return undefined;
+  }
 };
 
 export type NetProfitTimelineItem = {
@@ -71,21 +82,21 @@ export type AnalyticsExpensesResponse = {
 class AnalyticsService {
   async getNetProfit(range: AnalyticsRange): Promise<NetProfitResponse> {
     const response = await api.get<NetProfitResponse>("/analytics/net-profit", {
-      params: { from: range.from, to: range.to },
+      params: { from: range.from, to: range.to, timeZone: range.timeZone ?? getBrowserTimeZone() },
     });
     return response.data;
   }
 
   async getIncome(range: AnalyticsRange): Promise<AnalyticsIncomeResponse> {
     const response = await api.get<AnalyticsIncomeResponse>("/analytics/income", {
-      params: { from: range.from, to: range.to },
+      params: { from: range.from, to: range.to, timeZone: range.timeZone ?? getBrowserTimeZone() },
     });
     return response.data;
   }
 
   async getExpenses(range: AnalyticsRange): Promise<AnalyticsExpensesResponse> {
     const response = await api.get<AnalyticsExpensesResponse>("/analytics/expenses", {
-      params: { from: range.from, to: range.to },
+      params: { from: range.from, to: range.to, timeZone: range.timeZone ?? getBrowserTimeZone() },
     });
     return response.data;
   }
