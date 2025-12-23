@@ -135,14 +135,15 @@ export default function DashboardPage() {
   };
 
   const topRecurringNamedServices = useMemo(() => {
-    const rows = (incomeData?.rankings?.topUsersServices || []) as any[];
+    const rankings: any = (incomeData as any)?.rankings;
+    const rows = ((rankings?.TotalUsersServices ?? incomeData?.rankings?.topUsersServices ?? []) as any[]);
     const byName = new Map<string, { name: string; description?: string; totalAmount: number }>();
 
     for (const r of rows) {
       const name = (r?.Name ?? r?.name) as string | undefined;
       if (!name) continue;
 
-      const amount = Number(r?.totalAmount ?? r?.total ?? 0) || 0;
+      const amount = Number(r?.Amount ?? r?.amount ?? r?.totalAmount ?? r?.total ?? 0) || 0;
       const description = (r?.Description ?? r?.description) as string | undefined;
 
       const prev = byName.get(name);
@@ -162,6 +163,116 @@ export default function DashboardPage() {
     }
 
     return Array.from(byName.values()).sort((a, b) => b.totalAmount - a.totalAmount);
+  }, [incomeData]);
+
+  const topUsersServicesAggregated = useMemo(() => {
+    const rankings: any = (incomeData as any)?.rankings;
+    const rows = ((rankings?.TotalUsersServices ?? incomeData?.rankings?.topUsersServices ?? []) as any[]);
+    const byUser = new Map<string, { userId: string; userName?: string; userEmail?: string; totalAmount: number }>();
+
+    const debug = {
+      rowsLen: rows.length,
+      skippedNoKey: 0,
+      sampleRawRows: rows.slice(0, 3),
+      sampleComputed: [] as Array<{
+        userIdRaw: any;
+        userEmailRaw: any;
+        userKey: string;
+        userName: any;
+        totalAmount: number;
+      }>,
+    };
+
+    for (const r of rows) {
+      const nameRaw = (r?.Name ?? r?.name) as string | undefined;
+      const userIdRaw =
+        r?.userId ??
+        r?.UserId ??
+        r?.user_id ??
+        r?.userid ??
+        r?.performedById ??
+        r?.performed_by_id ??
+        r?.employeeId ??
+        r?.user?.id ??
+        r?.user?.Id ??
+        r?.user?.userId ??
+        r?.User?.id ??
+        r?.User?.Id;
+
+      const userEmailRaw =
+        r?.userEmail ??
+        r?.UserEmail ??
+        r?.user_email ??
+        r?.email ??
+        r?.user?.email ??
+        r?.User?.email;
+
+      const userNameRaw = (
+        r?.userName ??
+          r?.UserName ??
+          r?.user_name ??
+          r?.username ??
+          r?.performedByName ??
+          r?.performed_by_name ??
+          r?.user?.name ??
+          r?.User?.name
+      ) as string | undefined;
+
+      const userKey = String(userIdRaw ?? userEmailRaw ?? userNameRaw ?? "").trim();
+      if (!userKey) {
+        debug.skippedNoKey++;
+        continue;
+      }
+
+      const totalAmount =
+        Number(
+          r?.Amount ??
+            r?.amount ??
+            r?.totalAmount ??
+            r?.total ??
+            r?.totalIncome ??
+            r?.total_income ??
+            0
+        ) || 0;
+
+      const userName = (
+        userNameRaw ??
+          nameRaw
+      ) as string | undefined;
+
+      const userEmail = (userEmailRaw ?? r?.user?.email ?? r?.User?.email) as string | undefined;
+
+      if (debug.sampleComputed.length < 5) {
+        debug.sampleComputed.push({ userIdRaw, userEmailRaw, userKey, userName, totalAmount });
+      }
+
+      const prev = byUser.get(userKey);
+      if (!prev) {
+        byUser.set(userKey, { userId: String(userIdRaw ?? userKey), userName, userEmail, totalAmount });
+      } else {
+        byUser.set(userKey, {
+          userId: prev.userId,
+          userName: prev.userName || userName,
+          userEmail: prev.userEmail || userEmail,
+          totalAmount: prev.totalAmount + totalAmount,
+        });
+      }
+    }
+
+    const aggregated = Array.from(byUser.values()).sort((a, b) => b.totalAmount - a.totalAmount);
+
+    if (process.env.NODE_ENV !== "production") {
+      console.groupCollapsed("[analytics][income] topUsersServicesAggregated debug");
+      console.log("rowsLen", debug.rowsLen);
+      console.log("skippedNoKey", debug.skippedNoKey);
+      console.log("sampleRawRows", debug.sampleRawRows);
+      console.log("sampleComputed (first 5)", debug.sampleComputed);
+      console.log("aggregatedLen", aggregated.length);
+      console.log("aggregated (first 10)", aggregated.slice(0, 10));
+      console.groupEnd();
+    }
+
+    return aggregated;
   }, [incomeData]);
 
   const fetchDashboardData = async () => {
@@ -241,6 +352,29 @@ export default function DashboardPage() {
   }, [currentStore, analysisType, analyticsFrom, analyticsTo]);
 
   useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    if (analysisType !== "income") return;
+    if (!incomeData) return;
+
+    const anyIncome: any = incomeData as any;
+    const rankings: any = anyIncome?.rankings;
+
+    console.groupCollapsed("[analytics][income] incomeData shape debug");
+    console.log("incomeData keys", anyIncome ? Object.keys(anyIncome) : anyIncome);
+    console.log("rankings keys", rankings ? Object.keys(rankings) : rankings);
+    console.log("rankings", rankings);
+    console.log("rankings.topUsersServices len", (rankings?.topUsersServices || []).length);
+    console.log("rankings.topUsersProducts len", (rankings?.topUsersProducts || []).length);
+    console.log("possible alt paths", {
+      topUsersServices: anyIncome?.topUsersServices,
+      rankingsTopUsersServices: rankings?.topUsersServices,
+      dataRankingsTopUsersServices: anyIncome?.data?.rankings?.topUsersServices,
+      resultRankingsTopUsersServices: anyIncome?.result?.rankings?.topUsersServices,
+    });
+    console.groupEnd();
+  }, [analysisType, incomeData]);
+
+  useEffect(() => {
     if (!hasCash && (analysisType === "income" || analysisType === "expenses")) {
       setAnalysisType("net-profit");
     }
@@ -251,6 +385,13 @@ export default function DashboardPage() {
     if (analyticsFrom && analyticsTo) return;
     setRangeThisMonth();
   }, [activeMainTab]);
+
+  useEffect(() => {
+    if (activeMainTab !== 'analytics') return;
+    if (!hasCash) return;
+    if (analysisType !== 'net-profit') return;
+    setAnalysisType('income');
+  }, [activeMainTab, hasCash, analysisType]);
 
   if (error) {
     return (
@@ -646,7 +787,7 @@ export default function DashboardPage() {
                     {hasServices && (
                       <Card>
                         <CardHeader>
-                          <CardTitle>Top usuarios por servicios</CardTitle>
+                          <CardTitle>Tabla de servicios</CardTitle>
                         </CardHeader>
                         <CardContent>
                           {hasNamedServices ? (
@@ -716,17 +857,23 @@ export default function DashboardPage() {
                                       </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                      {(incomeData?.rankings?.topUsersServices || []).length === 0 ? (
+                                      {analyticsLoading && !incomeData ? (
+                                        <TableRow>
+                                          <TableCell colSpan={2} className="h-24 text-center text-muted-foreground">
+                                            Cargando...
+                                          </TableCell>
+                                        </TableRow>
+                                      ) : topUsersServicesAggregated.length === 0 ? (
                                         <TableRow>
                                           <TableCell colSpan={2} className="h-24 text-center text-muted-foreground">
                                             No hay datos.
                                           </TableCell>
                                         </TableRow>
                                       ) : (
-                                        (incomeData?.rankings?.topUsersServices || []).map((u) => (
+                                        topUsersServicesAggregated.map((u) => (
                                           <TableRow key={u.userId}>
-                                            <TableCell>{u.userName}</TableCell>
-                                            <TableCell className="text-right font-medium">{formatCurrency(u.totalAmount ?? u.total ?? 0)}</TableCell>
+                                            <TableCell>{u.userName || u.userEmail || "-"}</TableCell>
+                                            <TableCell className="text-right font-medium">{formatCurrency(u.totalAmount)}</TableCell>
                                           </TableRow>
                                         ))
                                       )}
