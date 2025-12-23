@@ -6,6 +6,19 @@ export type AnalyticsRange = {
   timeZone?: string;
 };
 
+export type PaymentMethodSummary = {
+  summary: {
+    totalAmount: number;
+    totalCount: number;
+    methodsCount: number;
+  };
+  methods: Array<{
+    type: string;
+    totalAmount: number;
+    count: number;
+  }>;
+};
+
 const getBrowserTimeZone = (): string | undefined => {
   try {
     if (typeof Intl === 'undefined' || !Intl.DateTimeFormat) return undefined;
@@ -96,6 +109,13 @@ class AnalyticsService {
 
   async getExpenses(range: AnalyticsRange): Promise<AnalyticsExpensesResponse> {
     const response = await api.get<AnalyticsExpensesResponse>("/analytics/expenses", {
+      params: { from: range.from, to: range.to, timeZone: range.timeZone ?? getBrowserTimeZone() },
+    });
+    return response.data;
+  }
+
+  async getPaymentMethodsSummary(range: AnalyticsRange): Promise<PaymentMethodSummary> {
+    const response = await api.get<PaymentMethodSummary>("/analytics/payment-methods-summary", {
       params: { from: range.from, to: range.to, timeZone: range.timeZone ?? getBrowserTimeZone() },
     });
     return response.data;

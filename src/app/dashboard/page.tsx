@@ -36,6 +36,7 @@ import {
   type AnalyticsIncomeResponse,
   type AnalyticsExpensesResponse,
   type NetProfitResponse,
+  type PaymentMethodSummary,
 } from "@/services/analytics.service";
 
 type StatCardProps = {
@@ -96,8 +97,10 @@ export default function DashboardPage() {
   const [netProfitData, setNetProfitData] = useState<NetProfitResponse | null>(null);
   const [incomeData, setIncomeData] = useState<AnalyticsIncomeResponse | null>(null);
   const [expensesData, setExpensesData] = useState<AnalyticsExpensesResponse | null>(null);
-  
-  const { currentStore, tenantFeatures, tenantFeaturesLoaded } = useAuth();
+  const [paymentMethodsSummary, setPaymentMethodsSummary] = useState<PaymentMethodSummary | null>(null);
+  const [paymentMethodsSummaryForbidden, setPaymentMethodsSummaryForbidden] = useState(false);
+
+  const { currentStore, tenantFeatures, tenantFeaturesLoaded, isAdmin } = useAuth();
 
   const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
   const hasCash = !tenantFeaturesLoaded || normalizedTenantFeatures.includes("CASH");
@@ -168,7 +171,7 @@ export default function DashboardPage() {
   const topUsersServicesAggregated = useMemo(() => {
     const rankings: any = (incomeData as any)?.rankings;
     const rows = ((rankings?.TotalUsersServices ?? incomeData?.rankings?.topUsersServices ?? []) as any[]);
-    const byUser = new Map<string, { userId: string; userName?: string; userEmail?: string; totalAmount: number }>();
+    const byUser = new Map<string, { userId: string; userName?: string; totalAmount: number }>();
 
     const debug = {
       rowsLen: rows.length,
@@ -176,7 +179,6 @@ export default function DashboardPage() {
       sampleRawRows: rows.slice(0, 3),
       sampleComputed: [] as Array<{
         userIdRaw: any;
-        userEmailRaw: any;
         userKey: string;
         userName: any;
         totalAmount: number;
@@ -184,76 +186,31 @@ export default function DashboardPage() {
     };
 
     for (const r of rows) {
-      const nameRaw = (r?.Name ?? r?.name) as string | undefined;
-      const userIdRaw =
-        r?.userId ??
-        r?.UserId ??
-        r?.user_id ??
-        r?.userid ??
-        r?.performedById ??
-        r?.performed_by_id ??
-        r?.employeeId ??
-        r?.user?.id ??
-        r?.user?.Id ??
-        r?.user?.userId ??
-        r?.User?.id ??
-        r?.User?.Id;
+      const userIdRaw = r?.userId ?? r?.UserId ?? r?.user_id ?? r?.userid;
 
-      const userEmailRaw =
-        r?.userEmail ??
-        r?.UserEmail ??
-        r?.user_email ??
-        r?.email ??
-        r?.user?.email ??
-        r?.User?.email;
+      const userNameRaw = r?.userName ?? r?.UserName ?? r?.user_name ?? r?.username;
 
-      const userNameRaw = (
-        r?.userName ??
-          r?.UserName ??
-          r?.user_name ??
-          r?.username ??
-          r?.performedByName ??
-          r?.performed_by_name ??
-          r?.user?.name ??
-          r?.User?.name
-      ) as string | undefined;
-
-      const userKey = String(userIdRaw ?? userEmailRaw ?? userNameRaw ?? "").trim();
+      const userKey = String(userIdRaw ?? userNameRaw ?? "").trim();
       if (!userKey) {
         debug.skippedNoKey++;
         continue;
       }
 
-      const totalAmount =
-        Number(
-          r?.Amount ??
-            r?.amount ??
-            r?.totalAmount ??
-            r?.total ??
-            r?.totalIncome ??
-            r?.total_income ??
-            0
-        ) || 0;
+      const totalAmount = Number(r?.Amount ?? r?.amount ?? r?.totalAmount ?? r?.total ?? r?.totalIncome ?? r?.total_income ?? 0) || 0;
 
-      const userName = (
-        userNameRaw ??
-          nameRaw
-      ) as string | undefined;
-
-      const userEmail = (userEmailRaw ?? r?.user?.email ?? r?.User?.email) as string | undefined;
+      const userName = userNameRaw;
 
       if (debug.sampleComputed.length < 5) {
-        debug.sampleComputed.push({ userIdRaw, userEmailRaw, userKey, userName, totalAmount });
+        debug.sampleComputed.push({ userIdRaw, userKey, userName, totalAmount });
       }
 
       const prev = byUser.get(userKey);
       if (!prev) {
-        byUser.set(userKey, { userId: String(userIdRaw ?? userKey), userName, userEmail, totalAmount });
+        byUser.set(userKey, { userId: String(userIdRaw ?? userKey), userName, totalAmount });
       } else {
         byUser.set(userKey, {
           userId: prev.userId,
           userName: prev.userName || userName,
-          userEmail: prev.userEmail || userEmail,
           totalAmount: prev.totalAmount + totalAmount,
         });
       }
@@ -321,14 +278,48 @@ export default function DashboardPage() {
       setAnalyticsLoading(true);
       setAnalyticsError(null);
 
+      if (analysisType !== "income") {
+        setPaymentMethodsSummary(null);
+        setPaymentMethodsSummaryForbidden(false);
+      }
+
       if (analysisType === "net-profit") {
         const data = await analyticsService.getNetProfit({ from: analyticsFrom, to: analyticsTo });
         setNetProfitData(data);
       }
 
       if (analysisType === "income") {
-        const data = await analyticsService.getIncome({ from: analyticsFrom, to: analyticsTo });
-        setIncomeData(data);
+        const [incomeRes, paymentMethodsRes] = await Promise.all([
+          analyticsService.getIncome({ from: analyticsFrom, to: analyticsTo }),
+          isAdmin
+            ? analyticsService
+                .getPaymentMethodsSummary({ from: analyticsFrom, to: analyticsTo })
+                .then((r) => ({ ok: true as const, data: r }))
+                .catch((e: any) => ({ ok: false as const, error: e }))
+            : Promise.resolve({ ok: false as const, error: { response: { status: 403 } } }),
+        ]);
+
+        setIncomeData(incomeRes);
+
+        if (isAdmin) {
+          if (paymentMethodsRes.ok) {
+            setPaymentMethodsSummary(paymentMethodsRes.data);
+            setPaymentMethodsSummaryForbidden(false);
+          } else {
+            const status = paymentMethodsRes.error?.response?.status;
+            if (status === 403) {
+              setPaymentMethodsSummary(null);
+              setPaymentMethodsSummaryForbidden(true);
+            } else {
+              // No bloqueamos todo el análisis si este endpoint falla: solo ocultamos el bloque.
+              setPaymentMethodsSummary(null);
+              setPaymentMethodsSummaryForbidden(false);
+            }
+          }
+        } else {
+          setPaymentMethodsSummary(null);
+          setPaymentMethodsSummaryForbidden(true);
+        }
       }
 
       if (analysisType === "expenses") {
@@ -756,6 +747,105 @@ export default function DashboardPage() {
 
               {analysisType === "income" && (
                 <div className="space-y-4">
+                  {hasCash && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Resumen por métodos de pago</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {!isAdmin ? (
+                          <Alert>
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertTitle>Solo administradores</AlertTitle>
+                            <AlertDescription>
+                              Este resumen está disponible solo para administradores.
+                            </AlertDescription>
+                          </Alert>
+                        ) : paymentMethodsSummaryForbidden ? (
+                          <Alert>
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertTitle>Sin acceso</AlertTitle>
+                            <AlertDescription>
+                              No tienes acceso a este resumen (requiere rol ADMIN y feature CASH).
+                            </AlertDescription>
+                          </Alert>
+                        ) : analyticsLoading && !paymentMethodsSummary ? (
+                          <div className="rounded-md border p-6 text-center text-muted-foreground">
+                            Cargando...
+                          </div>
+                        ) : !paymentMethodsSummary ? (
+                          <div className="rounded-md border p-6 text-center text-muted-foreground">
+                            No hay datos.
+                          </div>
+                        ) : (
+                          <>
+                            <div className="grid gap-4 md:grid-cols-3">
+                              <Card>
+                                <CardHeader className="pb-2">
+                                  <CardTitle className="text-sm font-medium">Total</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                  <div className="text-2xl font-bold text-green-600">
+                                    {formatCurrency(paymentMethodsSummary.summary.totalAmount || 0)}
+                                  </div>
+                                </CardContent>
+                              </Card>
+                              <Card>
+                                <CardHeader className="pb-2">
+                                  <CardTitle className="text-sm font-medium">N° transacciones</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                  <div className="text-2xl font-bold">
+                                    {paymentMethodsSummary.summary.totalCount || 0}
+                                  </div>
+                                </CardContent>
+                              </Card>
+                              <Card>
+                                <CardHeader className="pb-2">
+                                  <CardTitle className="text-sm font-medium">Métodos usados</CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                  <div className="text-2xl font-bold">
+                                    {paymentMethodsSummary.summary.methodsCount || 0}
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            </div>
+
+                            <div className="rounded-md border">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow>
+                                    <TableHead>Método</TableHead>
+                                    <TableHead className="text-right">Cantidad</TableHead>
+                                    <TableHead className="text-right">Total</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {paymentMethodsSummary.methods.length === 0 ? (
+                                    <TableRow>
+                                      <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
+                                        No hay datos.
+                                      </TableCell>
+                                    </TableRow>
+                                  ) : (
+                                    paymentMethodsSummary.methods.map((m) => (
+                                      <TableRow key={m.type}>
+                                        <TableCell className="font-medium">{m.type}</TableCell>
+                                        <TableCell className="text-right">{m.count}</TableCell>
+                                        <TableCell className="text-right font-medium">{formatCurrency(m.totalAmount)}</TableCell>
+                                      </TableRow>
+                                    ))
+                                  )}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+
                   <div className="grid gap-4 md:grid-cols-2">
                     {hasProducts && (
                       <Card>
@@ -872,7 +962,7 @@ export default function DashboardPage() {
                                       ) : (
                                         topUsersServicesAggregated.map((u) => (
                                           <TableRow key={u.userId}>
-                                            <TableCell>{u.userName || u.userEmail || "-"}</TableCell>
+                                            <TableCell>{u.userName || "-"}</TableCell>
                                             <TableCell className="text-right font-medium">{formatCurrency(u.totalAmount)}</TableCell>
                                           </TableRow>
                                         ))
