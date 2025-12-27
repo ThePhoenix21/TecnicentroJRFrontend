@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { Suspense } from 'react';
 import { Providers } from '@/lib/providers';
-import { MaintenanceProvider } from '@/contexts/maintenance-context';
-import MaintenanceMode from '@/components/maintenance/maintenance-mode';
-import { MaintenanceInterceptor } from '@/components/maintenance/maintenance-interceptor';
+import { ConnectionErrorProvider } from '@/contexts/connection-error-context';
+import ConnectionErrorOverlay from '@/components/connection/connection-error-overlay';
+import { ConnectionErrorHandler } from '@/components/connection/connection-error-handler';
 import './globals.css';
 import PWAWrapper from '@/components/pwa/PWAWrapper';
 
@@ -43,14 +43,14 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         <Providers>
-          <MaintenanceProvider>
+          <ConnectionErrorProvider>
             <Suspense fallback={null}>
               <PWAWrapper />
-              <MaintenanceInterceptor />
-              <MaintenanceMode />
             </Suspense>
+            <ConnectionErrorHandler />
+            <ConnectionErrorOverlay />
             {children}
-          </MaintenanceProvider>
+          </ConnectionErrorProvider>
         </Providers>
       </body>
     </html>

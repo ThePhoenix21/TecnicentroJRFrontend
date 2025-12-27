@@ -1,6 +1,13 @@
 // src/services/api.ts
 import axios, { AxiosError, AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 
+// Variable global para manejar errores de conexión
+let connectionErrorHandler: ((hasError: boolean) => void) | null = null;
+
+export const setConnectionErrorHandler = (handler: (hasError: boolean) => void) => {
+  connectionErrorHandler = handler;
+};
+
 // Frontend se ejecuta en el puerto 3001, Backend API se ejecuta en el puerto 3000
 export const getApiBaseUrl = () => {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
@@ -44,25 +51,13 @@ api.interceptors.response.use(
   (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
     
-    if (error.code === 'ECONNABORTED') {
-      console.error('Tiempo de espera agotado. Por favor verifica tu conexión a internet.');
-    } else if (!error.response) {
-      // Error de red o problema de CORS
-      console.error('Error de red. Esto podría deberse a uno de los siguientes motivos:');
-      console.error('1. El servidor no se está ejecutando o no es accesible');
-      console.error('2. CORS no está configurado correctamente en el servidor');
-      console.error('3. Estás desconectado');
+    if (error.code === 'ECONNABORTED' || !error.response) {
+      // Error de timeout o de red - activar pantalla de error de conexión
+      console.error('Error de conexión o timeout del servidor');
       
-      console.error('Detalles del error:', {
-        message: error.message,
-        code: error.code,
-        config: {
-          url: originalRequest?.url,
-          method: originalRequest?.method,
-          baseURL: originalRequest?.baseURL,
-          withCredentials: originalRequest?.withCredentials,
-        },
-      });
+      if (connectionErrorHandler) {
+        connectionErrorHandler(true);
+      }
     } else if (error.response.status === 401) {
       // Manejar acceso no autorizado
       if (typeof window !== 'undefined' && !originalRequest?._retry) {
