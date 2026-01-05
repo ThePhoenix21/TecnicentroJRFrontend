@@ -14,6 +14,16 @@ import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useRouter } from "next/navigation";
 
 import {
   Table,
@@ -24,12 +34,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Search, Plus, X, Info, ShoppingCart } from "lucide-react";
+import { Search, Plus, X, Info, ShoppingCart, AlertTriangle, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import OrderDetailsDialog from "@/components/orders/OrderDetailsDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 
 export default function VentasPage() {
+  const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<StoreProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,6 +51,19 @@ export default function VentasPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10); // Mostrar 10 elementos por página
   const [hideOutsideCashSession, setHideOutsideCashSession] = useState(false);
+
+  const CONSENT_PHRASE =
+    "soy conciente de que los datos no se podran recuperar";
+  const [isHardDeleteOpen, setIsHardDeleteOpen] = useState(false);
+  const [hardDeleteStep, setHardDeleteStep] = useState<"warning" | "form">("warning");
+  const [hardDeleteFrom, setHardDeleteFrom] = useState<string>("");
+  const [hardDeleteTo, setHardDeleteTo] = useState<string>("");
+  const [hardDeleteEmail, setHardDeleteEmail] = useState<string>("");
+  const [hardDeletePassword, setHardDeletePassword] = useState<string>("");
+  const [hardDeleteReason, setHardDeleteReason] = useState<string>("");
+  const [hardDeleteConsent, setHardDeleteConsent] = useState<string>("");
+  const [hardDeleteError, setHardDeleteError] = useState<string | null>(null);
+  const [hardDeleteSubmitting, setHardDeleteSubmitting] = useState(false);
 
   // Obtener currentStore y permisos del contexto
   const { currentStore, hasPermission, isAdmin, tenantFeatures, tenantFeaturesLoaded } = useAuth();
@@ -57,30 +81,6 @@ export default function VentasPage() {
   const canViewInventory = isAdmin || hasPermission?.('VIEW_INVENTORY') || hasPermission?.('MANAGE_INVENTORY') || hasPermission?.('inventory.read') || hasPermission?.('inventory.manage');
 
   const canManageOrders = isAdmin || hasPermission?.("MANAGE_ORDERS");
-
-  const handleViewOrder = (orderId: string) => {    
-    const order = orders.find(o => o.id === orderId);
-    if (order) {
-      setSelectedOrder(order);
-      setIsDetailsOpen(true);
-    }
-  };
-
-  const handleOrderUpdate = (updatedOrder: Order) => {
-    setOrders(prevOrders => 
-      prevOrders.map(order => 
-        order.id === updatedOrder.id ? updatedOrder : order
-      )
-    );
-    // Actualizar la orden seleccionada si es la misma
-    if (selectedOrder?.id === updatedOrder.id) {
-      setSelectedOrder(updatedOrder);
-    }
-    // Cerrar el diálogo de detalles si la orden se completa
-    if (updatedOrder?.status === 'COMPLETED') {
-      setIsDetailsOpen(false);
-    }
-  };
 
   const loadData = useCallback(async () => {
     try {
@@ -122,6 +122,127 @@ export default function VentasPage() {
       setLoading(false);
     }
   }, [currentStore, canSellProducts, canViewInventory]);
+
+  const resetHardDeleteModal = useCallback(() => {
+    setHardDeleteStep("warning");
+    setHardDeleteFrom("");
+    setHardDeleteTo("");
+    setHardDeleteEmail("");
+    setHardDeletePassword("");
+    setHardDeleteReason("");
+    setHardDeleteConsent("");
+    setHardDeleteError(null);
+    setHardDeleteSubmitting(false);
+  }, []);
+
+  const handleHardDeleteOpenChange = useCallback(
+    (open: boolean) => {
+      setIsHardDeleteOpen(open);
+      if (!open) resetHardDeleteModal();
+    },
+    [resetHardDeleteModal]
+  );
+
+  const toUtcRange = (from: string, to: string) => {
+    const fromDate = `${from}T00:00:00.000Z`;
+    const toDate = `${to}T23:59:59.999Z`;
+    return { fromDate, toDate };
+  };
+
+  const handleHardDeleteSubmit = useCallback(async () => {
+    setHardDeleteError(null);
+
+    if (!hardDeleteFrom || !hardDeleteTo) {
+      setHardDeleteError('Debes seleccionar las fechas "desde" y "hasta".');
+      return;
+    }
+
+    const fromTime = new Date(`${hardDeleteFrom}T00:00:00.000Z`).getTime();
+    const toTime = new Date(`${hardDeleteTo}T23:59:59.999Z`).getTime();
+    if (!Number.isFinite(fromTime) || !Number.isFinite(toTime) || fromTime > toTime) {
+      setHardDeleteError('El rango de fechas no es válido.');
+      return;
+    }
+
+    if (!hardDeleteEmail.trim() || !hardDeletePassword) {
+      setHardDeleteError('Debes ingresar email y contraseña.');
+      return;
+    }
+
+    if (!hardDeleteReason.trim()) {
+      setHardDeleteError('Debes indicar un motivo.');
+      return;
+    }
+
+    if (hardDeleteConsent.trim() !== CONSENT_PHRASE) {
+      setHardDeleteError('La frase de consentimiento está mal escrita.');
+      return;
+    }
+
+    try {
+      setHardDeleteSubmitting(true);
+      const { fromDate, toDate } = toUtcRange(hardDeleteFrom, hardDeleteTo);
+
+      await orderService.hardDeleteOrdersByDateRange({
+        fromDate,
+        toDate,
+        email: hardDeleteEmail.trim(),
+        password: hardDeletePassword,
+        reason: hardDeleteReason.trim(),
+      });
+
+      toast.success('Ventas eliminadas de forma definitiva.');
+      handleHardDeleteOpenChange(false);
+      loadData();
+    } catch (error: any) {
+      const status = error?.response?.status;
+      if (status === 401 || status === 403) {
+        router.push('/login');
+        return;
+      }
+
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        'No se pudo eliminar el historial de ventas.';
+      setHardDeleteError(String(message));
+    } finally {
+      setHardDeleteSubmitting(false);
+    }
+  }, [
+    CONSENT_PHRASE,
+    hardDeleteConsent,
+    hardDeleteEmail,
+    hardDeleteFrom,
+    hardDeletePassword,
+    hardDeleteReason,
+    hardDeleteTo,
+    handleHardDeleteOpenChange,
+    loadData,
+    router,
+  ]);
+
+  const handleViewOrder = (orderId: string) => {
+    const order = orders.find(o => o.id === orderId);
+    if (order) {
+      setSelectedOrder(order);
+      setIsDetailsOpen(true);
+    }
+  };
+
+  const handleOrderUpdate = (updatedOrder: Order) => {
+    setOrders(prevOrders =>
+      prevOrders.map(order =>
+        order.id === updatedOrder.id ? updatedOrder : order
+      )
+    );
+    if (selectedOrder?.id === updatedOrder.id) {
+      setSelectedOrder(updatedOrder);
+    }
+    if (updatedOrder?.status === 'COMPLETED') {
+      setIsDetailsOpen(false);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -440,6 +561,18 @@ export default function VentasPage() {
                   >
                     <Plus className="h-4 w-4 mr-2" />
                     <span className="font-medium">Nueva Venta</span>
+                  </Button>
+                )}
+
+                {isAdmin && (
+                  <Button
+                    onClick={() => setIsHardDeleteOpen(true)}
+                    className="w-full sm:w-auto"
+                    size="sm"
+                    variant="destructive"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    <span className="font-medium">Borrar historial</span>
                   </Button>
                 )}
               </div>
@@ -843,6 +976,162 @@ export default function VentasPage() {
         }}
         products={transformStoreProductsToProducts(products)}
       />
+
+      <Dialog open={isHardDeleteOpen} onOpenChange={handleHardDeleteOpenChange}>
+        <DialogContent className="sm:max-w-[560px]" showCloseButton={!hardDeleteSubmitting}>
+          {hardDeleteStep === 'warning' ? (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                  Borrado definitivo de ventas
+                </DialogTitle>
+                <DialogDescription>
+                  Esta acción es absoluta y no hay forma de revertir este cambio. Se eliminarán de forma permanente los datos
+                  del historial de ventas dentro del rango de fechas que indiques.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleHardDeleteOpenChange(false)}
+                  disabled={hardDeleteSubmitting}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => setHardDeleteStep('form')}
+                  disabled={hardDeleteSubmitting}
+                >
+                  Deseo borrar los datos de forma definitiva
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                  Confirmación final
+                </DialogTitle>
+                <DialogDescription>
+                  Para continuar debes reingresar tus credenciales, seleccionar el rango de fechas y escribir la frase de
+                  consentimiento exactamente.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="hard-delete-from">Desde</Label>
+                    <Input
+                      id="hard-delete-from"
+                      type="date"
+                      value={hardDeleteFrom}
+                      onChange={(e) => setHardDeleteFrom(e.target.value)}
+                      disabled={hardDeleteSubmitting}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="hard-delete-to">Hasta</Label>
+                    <Input
+                      id="hard-delete-to"
+                      type="date"
+                      value={hardDeleteTo}
+                      onChange={(e) => setHardDeleteTo(e.target.value)}
+                      disabled={hardDeleteSubmitting}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="hard-delete-reason">Motivo</Label>
+                  <Input
+                    id="hard-delete-reason"
+                    value={hardDeleteReason}
+                    onChange={(e) => setHardDeleteReason(e.target.value)}
+                    placeholder="Ej: Limpieza por error de carga masiva"
+                    disabled={hardDeleteSubmitting}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="hard-delete-email">Email</Label>
+                    <Input
+                      id="hard-delete-email"
+                      type="email"
+                      value={hardDeleteEmail}
+                      onChange={(e) => setHardDeleteEmail(e.target.value)}
+                      autoComplete="email"
+                      disabled={hardDeleteSubmitting}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="hard-delete-password">Contraseña</Label>
+                    <Input
+                      id="hard-delete-password"
+                      type="password"
+                      value={hardDeletePassword}
+                      onChange={(e) => setHardDeletePassword(e.target.value)}
+                      autoComplete="current-password"
+                      disabled={hardDeleteSubmitting}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="hard-delete-consent">
+                    Escriba lo siguiente: "{CONSENT_PHRASE}"
+                  </Label>
+                  <textarea
+                    id="hard-delete-consent"
+                    value={hardDeleteConsent}
+                    onChange={(e) => setHardDeleteConsent(e.target.value)}
+                    disabled={hardDeleteSubmitting}
+                    className="flex h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  ></textarea>
+                </div>
+
+                {hardDeleteError && (
+                  <div className="text-sm text-destructive">
+                    {hardDeleteError}
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setHardDeleteStep('warning')}
+                  disabled={hardDeleteSubmitting}
+                >
+                  Volver
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={handleHardDeleteSubmit}
+                  disabled={hardDeleteSubmitting}
+                >
+                  {hardDeleteSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Procesando...
+                    </>
+                  ) : (
+                    'Borrar definitivamente'
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -476,4 +476,30 @@ export const orderService = {
       throw error;
     }
   },
+
+  async hardDeleteOrdersByDateRange(payload: {
+    fromDate: string;
+    toDate: string;
+    email: string;
+    password: string;
+    reason: string;
+  }): Promise<any> {
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await api.post<any>(
+        'orders/hard-delete/by-date-range',
+        payload,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
+        }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error al borrar ventas por rango de fechas:', error);
+      throw error;
+    }
+  },
 };
