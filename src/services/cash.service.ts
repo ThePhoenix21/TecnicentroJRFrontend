@@ -85,6 +85,17 @@ class CashService {
       throw error;
     }
   }
+
+  // Obtener receipt de cierre de caja por ID
+  async getCashCloseReceipt(sessionId: string): Promise<any> {
+    try {
+      const response = await api.get(`/receipts/cash-close/${sessionId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error al obtener receipt de cierre de caja:', error);
+      throw error;
+    }
+  }
 }
 
 export const cashService = new CashService();

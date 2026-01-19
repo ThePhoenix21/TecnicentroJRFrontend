@@ -460,7 +460,7 @@ export default function ProductsPage() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-2xl font-bold text-primary">
-                    S/ {storeProduct.price.toFixed(2)}
+                    S/ {typeof storeProduct.price === 'string' ? parseFloat(storeProduct.price).toFixed(2) : (storeProduct.price || 0).toFixed(2)}
                   </p>
                   <div className="flex items-center gap-4 text-sm">
                     <span className={`font-medium ${
@@ -481,8 +481,8 @@ export default function ProductsPage() {
               <CardContent className="flex-grow">                
                 {isAdmin && storeProduct.product.buyCost && (
                   <div className="text-xs text-muted-foreground space-y-1">
-                    <p>Costo: S/ {storeProduct.product.buyCost.toFixed(2)}</p>
-                    <p>Ganancia: S/ {(storeProduct.price - storeProduct.product.buyCost).toFixed(2)}</p>
+                    <p>Costo: S/ {typeof storeProduct.product.buyCost === 'string' ? parseFloat(storeProduct.product.buyCost).toFixed(2) : (storeProduct.product.buyCost || 0).toFixed(2)}</p>
+                    <p>Ganancia: S/ {(typeof storeProduct.price === 'string' ? parseFloat(storeProduct.price) : (storeProduct.price || 0) - (typeof storeProduct.product.buyCost === 'string' ? parseFloat(storeProduct.product.buyCost) : (storeProduct.product.buyCost || 0))).toFixed(2)}</p>
                   </div>
                 )}
               </CardContent>

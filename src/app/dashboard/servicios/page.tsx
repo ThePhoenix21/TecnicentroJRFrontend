@@ -189,9 +189,11 @@ export default function ServiciosPage() {
     return statusMap[status] || status;
   };
 
-  const formatPrice = (price?: number) => {
-    if (price === undefined) return "S/0.00";
-    return `S/${price.toFixed(2)}`;
+  const formatPrice = (price?: number | string | null) => {
+    if (price === undefined || price === null) return "S/0.00";
+    const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+    if (isNaN(numPrice)) return "S/0.00";
+    return `S/${numPrice.toFixed(2)}`;  
   };
 
   const formatShortId = (id?: string) => {

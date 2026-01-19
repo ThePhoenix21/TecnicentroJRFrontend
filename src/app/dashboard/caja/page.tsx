@@ -15,7 +15,8 @@ import {
   Power, 
   Calculator,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  Printer
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cashSessionService } from '@/services/cash-session.service';
@@ -57,6 +58,11 @@ export default function CajaPage() {
     password: '',
     declaredAmount: ''
   });
+  
+  // Estado para impresión de cierre histórico
+  const [showPrintHistoricalDialog, setShowPrintHistoricalDialog] = useState(false);
+  const [historicalCashId, setHistoricalCashId] = useState('');
+  const [isPrintingHistorical, setIsPrintingHistorical] = useState(false);
   
   // Estado para paginación de movimientos
   const [currentPage, setCurrentPage] = useState(1);
@@ -286,6 +292,54 @@ export default function CajaPage() {
     return description.replace(/ - Orden [0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/i, '');
   };
 
+  const handlePrintHistoricalClose = async () => {
+    if (!historicalCashId.trim()) {
+      toast.error('Por favor ingrese el ID de la caja cerrada');
+      return;
+    }
+
+    if (!canIssuePdf) {
+      toast.error('No tienes permisos para imprimir PDFs');
+      return;
+    }
+
+    try {
+      setIsPrintingHistorical(true);
+      
+      // Obtener datos del cierre histórico
+      const closingData = await cashService.getCashCloseReceipt(historicalCashId.trim());
+      
+      // Generar e imprimir PDF con el componente adaptador
+      const { default: HistoricalClosingPDF } = await import('./HistoricalClosingPDF');
+      const { pdf } = await import('@react-pdf/renderer');
+
+      const blob = await pdf(
+        <HistoricalClosingPDF data={closingData} />
+      ).toBlob();
+      
+      const pdfUrl = URL.createObjectURL(blob);
+      const printWindow = window.open(pdfUrl, '_blank');
+      
+      if (printWindow) {
+        // Esperar a que cargue el PDF antes de imprimir
+        setTimeout(() => {
+          printWindow.print();
+        }, 1000);
+      }
+
+      // Cerrar diálogo y limpiar
+      setShowPrintHistoricalDialog(false);
+      setHistoricalCashId('');
+      toast.success('Receipt de cierre histórico generado exitosamente');
+      
+    } catch (error: any) {
+      console.error('Error al generar receipt de cierre histórico:', error);
+      toast.error(error.response?.data?.message || 'Error al generar el receipt de cierre histórico');
+    } finally {
+      setIsPrintingHistorical(false);
+    }
+  };
+
   if (loading) {
     if (!canViewCash) {
     return (
@@ -330,6 +384,15 @@ export default function CajaPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          {canIssuePdf && (
+            <Button
+              variant="outline"
+              onClick={() => setShowPrintHistoricalDialog(true)}
+            >
+              <Printer className="h-4 w-4 mr-2" />
+              Imprimir Cierre
+            </Button>
+          )}
           {currentSession?.status === 'OPEN' && canManageCash && (
             <>
               <Button
@@ -917,6 +980,49 @@ export default function CajaPage() {
           </AlertDescription>
         </Alert>
       )}
+
+      {/* Diálogo para imprimir cierre histórico */}
+      <Dialog open={showPrintHistoricalDialog} onOpenChange={setShowPrintHistoricalDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Imprimir Cierre de Caja Histórico</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">ID de Caja Cerrada</label>
+              <Input
+                placeholder="Ingrese el ID de la caja cerrada"
+                value={historicalCashId}
+                onChange={(e) => setHistoricalCashId(e.target.value)}
+                disabled={isPrintingHistorical}
+              />
+              <p className="text-xs text-muted-foreground">
+                Ingrese el ID de la sesión de caja cerrada que desea imprimir
+              </p>
+            </div>
+            <div className="flex gap-2 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowPrintHistoricalDialog(false);
+                  setHistoricalCashId('');
+                }}
+                disabled={isPrintingHistorical}
+                className="flex-1"
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handlePrintHistoricalClose}
+                disabled={isPrintingHistorical || !historicalCashId.trim()}
+                className="flex-1"
+              >
+                {isPrintingHistorical ? 'Imprimiendo...' : 'Imprimir'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
