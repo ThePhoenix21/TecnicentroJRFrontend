@@ -140,6 +140,12 @@ const getSidebarItems = (
       ],
     },
     {
+      name: "Empleados",
+      href: "/dashboard/empleados",
+      icon: Users,
+      roles: ["ADMIN", "USER"],
+    },
+    {
       name: "Configuración",
       href: "/dashboard/configuracion/usuarios",
       icon: Users,
