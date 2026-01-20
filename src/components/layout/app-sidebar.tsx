@@ -15,6 +15,7 @@ import {
   Building,
   DollarSign,
   ClipboardCheck,
+  Warehouse,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from '@/contexts/auth-context';
@@ -121,6 +122,18 @@ const getSidebarItems = (
       requiredTenantFeatures: ["INVENTORY"],
       requiredPermissions: [
         // Inventario (ver/gestionar)
+        "inventory.read",
+        "VIEW_INVENTORY",
+        "MANAGE_INVENTORY",
+      ],
+    },
+    {
+      name: "Almacenes",
+      href: "/warehouses",
+      icon: Warehouse,
+      roles: ["ADMIN", "USER"],
+      requiredTenantFeatures: ["INVENTORY"],
+      requiredPermissions: [
         "inventory.read",
         "VIEW_INVENTORY",
         "MANAGE_INVENTORY",
