@@ -146,6 +146,12 @@ const getSidebarItems = (
       roles: ["ADMIN", "USER"],
     },
     {
+      name: "Proveedores",
+      href: "/dashboard/proveedores",
+      icon: Users,
+      roles: ["ADMIN", "USER"],
+    },
+    {
       name: "Configuración",
       href: "/dashboard/configuracion/usuarios",
       icon: Users,
