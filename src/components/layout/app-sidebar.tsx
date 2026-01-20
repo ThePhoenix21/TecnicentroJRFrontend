@@ -129,7 +129,7 @@ const getSidebarItems = (
     },
     {
       name: "Almacenes",
-      href: "/warehouses",
+      href: "/dashboard/warehouses",
       icon: Warehouse,
       roles: ["ADMIN", "USER"],
       requiredTenantFeatures: ["INVENTORY"],
