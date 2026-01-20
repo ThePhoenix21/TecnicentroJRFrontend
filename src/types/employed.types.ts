@@ -17,22 +17,63 @@ export interface EmployedAssignmentBase {
   assignmentRole?: string;
 }
 
-export interface StoreAssignment extends EmployedAssignmentBase {
-  storeId?: string;
-  storeName?: string;
-  store?: {
+export interface StoreAssignment {
+  id: string;
+  employedId: string;
+  storeId: string;
+  role: string;
+  assignedAt: string;
+  store: {
     id: string;
     name: string;
+    address: string;
+    phone: string;
+    createdAt: string;
+    updatedAt: string;
+    createdById: string;
+    tenantId: string;
   };
 }
 
-export interface WarehouseAssignment extends EmployedAssignmentBase {
-  warehouseId?: string;
-  warehouseName?: string;
-  warehouse?: {
+export interface WarehouseAssignment {
+  id: string;
+  employedId: string;
+  warehouseId: string;
+  role: string;
+  assignedAt: string;
+  warehouse: {
     id: string;
     name: string;
+    address: string;
+    phone: string;
+    createdAt: string;
+    updatedAt: string;
+    createdById: string;
+    tenantId: string;
   };
+}
+
+export interface EmployedHistory {
+  id: string;
+  employedId: string;
+  hiredAt: string;
+  endedAt: string | null;
+  reason: string;
+  updatedByUserId: string | null;
+  createdById: string;
+  createdAt: string;
+  createdBy: {
+    id: string;
+    email: string;
+    name: string;
+  };
+  updatedByUser: null;
+}
+
+export interface CreatedByUser {
+  id: string;
+  email: string;
+  name: string;
 }
 
 export interface EmployedDetail {
@@ -44,15 +85,26 @@ export interface EmployedDetail {
   email?: string | null;
   position: string;
   status: EmployedStatus;
-  storeAssignments?: StoreAssignment[];
-  warehouseAssignments?: WarehouseAssignment[];
+  documentUrls: string[];
+  deletedAt: string | null;
+  userId: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  user: null; // según ejemplo, siempre null
+  createdByUser: CreatedByUser;
+  storeAssignments: StoreAssignment[];
+  warehouseAssignments: WarehouseAssignment[];
+  employedHistories: EmployedHistory[];
 }
 
 export interface UpdateEmployedDto {
   firstName?: string;
+  lastName?: string;
   phone?: string;
   email?: string;
   position?: string;
+  status?: string;
 }
 
 export interface CreateEmployedDto {

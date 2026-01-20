@@ -18,6 +18,15 @@ class EmployedService {
     return response.data;
   }
 
+  async bulkUpdateStatus(ids: string[], status: string, reason: string) {
+    const response = await api.post('/employed/bulk/status', {
+      ids,
+      status,
+      reason,
+    });
+    return response.data;
+  }
+
   async createEmployed(dto: CreateEmployedDto): Promise<any> {
     const response = await api.post('/employed', dto);
     return response.data;

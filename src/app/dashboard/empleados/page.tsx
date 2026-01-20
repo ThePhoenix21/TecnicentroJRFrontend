@@ -69,9 +69,11 @@ export default function EmpleadosPage() {
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editForm, setEditForm] = useState<UpdateEmployedDto>({
     firstName: "",
+    lastName: "",
     phone: "",
     email: "",
     position: "",
+    status: "",
   });
 
   const [isDeletedOpen, setIsDeletedOpen] = useState(false);
@@ -116,6 +118,10 @@ export default function EmpleadosPage() {
     warehouseId: "",
     assignmentRole: "",
   });
+
+  const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
+  const [bulkStatus, setBulkStatus] = useState<string>("");
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
 
   const loadEmployees = useCallback(async () => {
     try {
@@ -168,9 +174,11 @@ export default function EmpleadosPage() {
       setDetail(d);
       setEditForm({
         firstName: d.firstName ?? "",
+        lastName: d.lastName ?? "",
         phone: d.phone ?? "",
         email: d.email ?? "",
         position: d.position ?? "",
+        status: d.status ?? "",
       });
 
       setRecreateForm({
@@ -281,13 +289,8 @@ export default function EmpleadosPage() {
   const assignmentInfo = useMemo(() => {
     if (!detail) return { store: null as string | null, warehouse: null as string | null };
 
-    const storeName = detail.storeAssignments?.[0]?.store?.name ||
-      detail.storeAssignments?.[0]?.storeName ||
-      null;
-
-    const warehouseName = detail.warehouseAssignments?.[0]?.warehouse?.name ||
-      detail.warehouseAssignments?.[0]?.warehouseName ||
-      null;
+    const storeName = detail.storeAssignments?.[0]?.store?.name ?? null;
+    const warehouseName = detail.warehouseAssignments?.[0]?.warehouse?.name ?? null;
 
     return { store: storeName, warehouse: warehouseName };
   }, [detail]);
@@ -299,9 +302,11 @@ export default function EmpleadosPage() {
       setEditSubmitting(true);
       const updated = await employedService.updateEmployed(selectedEmployeeId, {
         firstName: editForm.firstName?.trim() || undefined,
+        lastName: editForm.lastName?.trim() || undefined,
         phone: editForm.phone?.trim() || undefined,
         email: editForm.email?.trim() || undefined,
         position: editForm.position?.trim() || undefined,
+        status: editForm.status?.trim() || undefined,
       });
 
       setDetail(updated);
@@ -335,6 +340,38 @@ export default function EmpleadosPage() {
     setIsDeletedOpen(false);
     setDeletedEmployees([]);
     setDeletedLoading(false);
+  };
+
+  const handleBulkStatusUpdate = async () => {
+    if (selectedEmployees.size === 0) {
+      toast.error("Seleccione al menos un empleado");
+      return;
+    }
+    if (!bulkStatus) {
+      toast.error("Seleccione un estado");
+      return;
+    }
+
+    try {
+      setBulkSubmitting(true);
+      const result = await employedService.bulkUpdateStatus(
+        Array.from(selectedEmployees),
+        bulkStatus,
+        `cambio_masivo_${bulkStatus.toLowerCase()}`
+      );
+
+      toast.success(
+        `${result.updatedCount} de ${result.requestedCount} empleados actualizados a ${bulkStatus}`
+      );
+      setSelectedEmployees(new Set());
+      setBulkStatus("");
+      await loadEmployees();
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.response?.data?.message || error?.message || "Error al actualizar estado");
+    } finally {
+      setBulkSubmitting(false);
+    }
   };
 
   const ensureStoresLoaded = async () => {
@@ -545,12 +582,26 @@ export default function EmpleadosPage() {
               <Table>
                 <TableHeader className="bg-muted/50">
                   <TableRow>
+                    <TableHead className="w-[50px]">
+                      <input
+                        type="checkbox"
+                        checked={filteredEmployees.length > 0 && selectedEmployees.size === filteredEmployees.length}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedEmployees(new Set(filteredEmployees.map((emp) => emp.id)));
+                          } else {
+                            setSelectedEmployees(new Set());
+                          }
+                        }}
+                      />
+                    </TableHead>
                     <TableHead>Nombres</TableHead>
                     <TableHead>Apellidos</TableHead>
                     <TableHead>Cargo</TableHead>
                     <TableHead>Estado</TableHead>
                     <TableHead>Tienda asignada</TableHead>
                     <TableHead>Almacén asignado</TableHead>
+                    <TableHead>Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -563,6 +614,21 @@ export default function EmpleadosPage() {
                         className="cursor-pointer"
                         onClick={() => openDetail(e.id)}
                       >
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedEmployees.has(e.id)}
+                            onChange={(event) => {
+                              const newSelected = new Set(selectedEmployees);
+                              if (event.target.checked) {
+                                newSelected.add(e.id);
+                              } else {
+                                newSelected.delete(e.id);
+                              }
+                              setSelectedEmployees(newSelected);
+                            }}
+                          />
+                        </TableCell>
                         <TableCell className="font-medium">{e.firstName}</TableCell>
                         <TableCell>{e.lastName}</TableCell>
                         <TableCell>{e.position}</TableCell>
@@ -577,6 +643,17 @@ export default function EmpleadosPage() {
                             <span>{assigned.warehouse ?? "-"}</span>
                           </div>
                         </TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openDetail(e.id)}
+                            >
+                              <Search className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -584,11 +661,50 @@ export default function EmpleadosPage() {
               </Table>
             </div>
           )}
+
+          {selectedEmployees.size > 0 && (
+            <div className="mt-4 p-4 border rounded-md bg-muted/30">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                <span className="text-sm font-medium">
+                  {selectedEmployees.size} empleado{selectedEmployees.size !== 1 ? "s" : ""} seleccionado{selectedEmployees.size !== 1 ? "s" : ""}
+                </span>
+                <div className="flex flex-col sm:flex-row gap-2 flex-1">
+                  <Select value={bulkStatus} onValueChange={setBulkStatus}>
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                      <SelectValue placeholder="Seleccionar estado" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ACTIVE">ACTIVE</SelectItem>
+                      <SelectItem value="INACTIVE">INACTIVE</SelectItem>
+                      <SelectItem value="SUSPENDED">SUSPENDED</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    onClick={handleBulkStatusUpdate}
+                    disabled={bulkSubmitting || !bulkStatus}
+                    className="w-full sm:w-auto"
+                  >
+                    {bulkSubmitting ? "Actualizando..." : "Aplicar estado"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedEmployees(new Set());
+                      setBulkStatus("");
+                    }}
+                    className="w-full sm:w-auto"
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
       <Dialog open={isDetailOpen} onOpenChange={(open) => (open ? setIsDetailOpen(true) : closeDetail())}>
-        <DialogContent className="sm:max-w-[720px]">
+        <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Detalle de empleado</DialogTitle>
           </DialogHeader>
@@ -613,7 +729,11 @@ export default function EmpleadosPage() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Apellidos</label>
-                  <Input value={detail.lastName} disabled />
+                  <Input
+                    value={isEditing ? (editForm.lastName ?? "") : detail.lastName}
+                    onChange={(e) => setEditForm((p) => ({ ...p, lastName: e.target.value }))}
+                    disabled={!isEditing}
+                  />
                 </div>
 
                 <div className="space-y-2">
@@ -623,7 +743,23 @@ export default function EmpleadosPage() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Estado</label>
-                  <Input value={`${detail.status} (${statusLabel[detail.status]})`} disabled />
+                  {isEditing ? (
+                    <Select
+                      value={editForm.status ?? ""}
+                      onValueChange={(v) => setEditForm((p) => ({ ...p, status: v }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar estado" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ACTIVE">ACTIVE</SelectItem>
+                        <SelectItem value="INACTIVE">INACTIVE</SelectItem>
+                        <SelectItem value="SUSPENDED">SUSPENDED</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input value={`${detail.status} (${statusLabel[detail.status]})`} disabled />
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -666,6 +802,103 @@ export default function EmpleadosPage() {
                     disabled
                   />
                 </div>
+
+                {detail.storeAssignments && detail.storeAssignments.length > 0 && (
+                  <div className="space-y-2 sm:col-span-2">
+                    <label className="text-sm font-medium">Detalles de asignación a tienda</label>
+                    <div className="rounded-md border p-3 space-y-1 text-sm">
+                      {detail.storeAssignments.map((sa) => (
+                        <div key={sa.id}>
+                          <div><strong>Tienda:</strong> {sa.store.name}</div>
+                          <div><strong>Dirección:</strong> {sa.store.address}</div>
+                          <div><strong>Teléfono:</strong> {sa.store.phone}</div>
+                          <div><strong>Rol:</strong> {sa.role}</div>
+                          <div><strong>Asignado el:</strong> {new Date(sa.assignedAt).toLocaleString()}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {detail.warehouseAssignments && detail.warehouseAssignments.length > 0 && (
+                  <div className="space-y-2 sm:col-span-2">
+                    <label className="text-sm font-medium">Detalles de asignación a almacén</label>
+                    <div className="rounded-md border p-3 space-y-1 text-sm">
+                      {detail.warehouseAssignments.map((wa) => (
+                        <div key={wa.id}>
+                          <div><strong>Almacén:</strong> {wa.warehouse.name}</div>
+                          <div><strong>Dirección:</strong> {wa.warehouse.address}</div>
+                          <div><strong>Teléfono:</strong> {wa.warehouse.phone}</div>
+                          <div><strong>Rol:</strong> {wa.role}</div>
+                          <div><strong>Asignado el:</strong> {new Date(wa.assignedAt).toLocaleString()}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Usuario que lo creó</label>
+                  <Input 
+                    value={detail.createdByUser ? `${detail.createdByUser.name} (${detail.createdByUser.email})` : "-"} 
+                    disabled 
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Acceso al sistema</label>
+                  <Input value={detail.userId ? "Sí (tiene acceso)" : "No (solo empleado)"} disabled />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Fecha de creación</label>
+                  <Input value={new Date(detail.createdAt).toLocaleString()} disabled />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Última actualización</label>
+                  <Input value={new Date(detail.updatedAt).toLocaleString()} disabled />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Fecha de eliminación</label>
+                  <Input value={detail.deletedAt ? new Date(detail.deletedAt).toLocaleString() : "-"} disabled />
+                </div>
+
+                <div className="space-y-2 sm:col-span-2">
+                  <label className="text-sm font-medium">Documentos ({detail.documentUrls?.length || 0})</label>
+                  <div className="rounded-md border p-3 min-h-[60px]">
+                    {detail.documentUrls && detail.documentUrls.length > 0 ? (
+                      <div className="space-y-1">
+                        {detail.documentUrls.map((url, idx) => (
+                          <div key={idx} className="text-xs break-all">
+                            <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                              Documento {idx + 1}
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-muted-foreground text-sm">No hay documentos</div>
+                    )}
+                  </div>
+                </div>
+
+                {detail.employedHistories && detail.employedHistories.length > 0 && (
+                  <div className="space-y-2 sm:col-span-2">
+                    <label className="text-sm font-medium">Historial laboral</label>
+                    <div className="rounded-md border p-3 space-y-2">
+                      {detail.employedHistories.map((hist) => (
+                        <div key={hist.id} className="text-sm border-b pb-2 last:border-0">
+                          <div><strong>Motivo:</strong> {hist.reason}</div>
+                          <div><strong>Contratado el:</strong> {new Date(hist.hiredAt).toLocaleString()}</div>
+                          <div><strong>Estado:</strong> {hist.endedAt ? new Date(hist.endedAt).toLocaleString() : "Activo"}</div>
+                          <div><strong>Editado por:</strong> {hist.createdBy?.name || "-"}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <DialogFooter className="gap-2 sm:gap-2">
@@ -676,9 +909,11 @@ export default function EmpleadosPage() {
                     setIsEditing((v) => !v);
                     setEditForm({
                       firstName: detail.firstName ?? "",
+                      lastName: detail.lastName ?? "",
                       phone: detail.phone ?? "",
                       email: detail.email ?? "",
                       position: detail.position ?? "",
+                      status: detail.status ?? "",
                     });
                   }}
                   disabled={detailLoading || editSubmitting}
@@ -709,7 +944,7 @@ export default function EmpleadosPage() {
       </Dialog>
 
       <Dialog open={isRecreateOpen} onOpenChange={(open) => (open ? setIsRecreateOpen(true) : closeRecreate())}>
-        <DialogContent className="sm:max-w-[720px]">
+        <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Recrear empleado</DialogTitle>
           </DialogHeader>
@@ -887,7 +1122,7 @@ export default function EmpleadosPage() {
       </Dialog>
 
       <Dialog open={isDeletedOpen} onOpenChange={(open) => (open ? setIsDeletedOpen(true) : closeDeleted())}>
-        <DialogContent className="sm:max-w-[900px]">
+        <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Empleados eliminados</DialogTitle>
           </DialogHeader>
@@ -927,7 +1162,7 @@ export default function EmpleadosPage() {
       </Dialog>
 
       <Dialog open={isCreateOpen} onOpenChange={(open) => (open ? setIsCreateOpen(true) : closeCreate())}>
-        <DialogContent className="sm:max-w-[720px]">
+        <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Agregar empleado</DialogTitle>
           </DialogHeader>
