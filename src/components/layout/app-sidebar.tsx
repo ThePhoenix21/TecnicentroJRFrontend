@@ -16,6 +16,7 @@ import {
   DollarSign,
   ClipboardCheck,
   Warehouse,
+  LifeBuoy,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from '@/contexts/auth-context';
@@ -126,6 +127,12 @@ const getSidebarItems = (
         "VIEW_INVENTORY",
         "MANAGE_INVENTORY",
       ],
+    },
+    {
+      name: "Soporte Técnico",
+      href: "/dashboard/support",
+      icon: LifeBuoy,
+      roles: ["ADMIN", "USER"],
     },
     {
       name: "Almacenes",

@@ -144,7 +144,8 @@ export function MainLayout({ children }: MainLayoutProps) {
           "/dashboard/servicios",
           "/dashboard/productos",
           "/dashboard/clientes",
-          "/dashboard/inventario"
+          "/dashboard/inventario",
+          "/dashboard/support"
         ];
         
         // Verificar si la ruta actual está permitida para el rol USER
