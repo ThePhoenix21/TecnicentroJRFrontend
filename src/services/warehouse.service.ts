@@ -8,9 +8,19 @@ import type {
   WarehouseListItem,
 } from "@/types/warehouse.types";
 
+export type WarehouseSimpleItem = {
+  id: string;
+  name: string;
+};
+
 class WarehouseService {
   async getWarehouses(): Promise<WarehouseListItem[]> {
     const response = await api.get<WarehouseListItem[]>("/warehouses");
+    return response.data;
+  }
+
+  async getWarehousesSimple(): Promise<WarehouseSimpleItem[]> {
+    const response = await api.get<WarehouseSimpleItem[]>("/warehouses/simple");
     return response.data;
   }
 

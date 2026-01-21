@@ -6,6 +6,7 @@ import { Search, X, Users, Trash2, Edit2, Save, RotateCcw, Plus } from "lucide-r
 
 import { employedService } from "@/services/employed.service";
 import { storeService } from "@/services/store.service";
+import { warehouseService } from "@/services/warehouse.service";
 import type {
   EmployedDetail,
   EmployedListItem,
@@ -44,6 +45,8 @@ import {
 type AssignmentMode = "STORE" | "WAREHOUSE";
 
 type StoreOption = { id: string; name: string };
+
+type WarehouseOption = { id: string; name: string };
 
 const statusLabel: Record<EmployedStatus, string> = {
   ACTIVE: "ACTIVO",
@@ -92,6 +95,9 @@ export default function EmpleadosPage() {
 
   const [storeOptions, setStoreOptions] = useState<StoreOption[]>([]);
   const [storesLoading, setStoresLoading] = useState(false);
+
+  const [warehouseOptions, setWarehouseOptions] = useState<WarehouseOption[]>([]);
+  const [warehousesLoading, setWarehousesLoading] = useState(false);
 
   const [recreateAssignmentMode, setRecreateAssignmentMode] = useState<AssignmentMode>("STORE");
   const [recreateForm, setRecreateForm] = useState<RecreateEmployedDto>({
@@ -201,6 +207,23 @@ export default function EmpleadosPage() {
     }
   };
 
+  const ensureWarehousesLoaded = async () => {
+    if (warehouseOptions.length > 0 || warehousesLoading) return;
+
+    try {
+      setWarehousesLoading(true);
+      const warehouses = await warehouseService.getWarehousesSimple();
+      const options = (warehouses || []).map((w: any) => ({ id: w.id, name: w.name }));
+      setWarehouseOptions(options);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.message || "No se pudieron cargar los almacenes");
+      setWarehouseOptions([]);
+    } finally {
+      setWarehousesLoading(false);
+    }
+  };
+
   const openCreate = async () => {
     setIsCreateOpen(true);
     setCreateStep("form");
@@ -219,6 +242,7 @@ export default function EmpleadosPage() {
       assignmentRole: "",
     });
     await ensureStoresLoaded();
+    await ensureWarehousesLoaded();
   };
 
   const closeCreate = () => {
@@ -1238,7 +1262,15 @@ export default function EmpleadosPage() {
                   <label className="text-sm font-medium">Tipo de asignación</label>
                   <Select
                     value={createAssignmentMode}
-                    onValueChange={(v) => setCreateAssignmentMode(v as AssignmentMode)}
+                    onValueChange={async (v) => {
+                      const mode = v as AssignmentMode;
+                      setCreateAssignmentMode(mode);
+                      if (mode === "STORE") {
+                        await ensureStoresLoaded();
+                      } else {
+                        await ensureWarehousesLoaded();
+                      }
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -1274,15 +1306,25 @@ export default function EmpleadosPage() {
                   </div>
                 ) : (
                   <div className="space-y-2 sm:col-span-2">
-                    <label className="text-sm font-medium">Almacén asignado (ID)</label>
-                    <Input
-                      value={createForm.warehouseId ?? ""}
-                      onChange={(e) =>
-                        setCreateForm((p) => ({ ...p, warehouseId: e.target.value, storeId: "" }))
+                    <label className="text-sm font-medium">Almacén asignado</label>
+                    <Select
+                      value={createForm.warehouseId || ""}
+                      onValueChange={(v) =>
+                        setCreateForm((p) => ({ ...p, warehouseId: v, storeId: "" }))
                       }
-                      disabled={createSubmitting}
-                      placeholder="Ingrese warehouseId"
-                    />
+                      disabled={createSubmitting || warehousesLoading}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={warehousesLoading ? "Cargando..." : "Seleccione un almacén"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {warehouseOptions.map((w) => (
+                          <SelectItem key={w.id} value={w.id}>
+                            {w.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 )}
               </div>
