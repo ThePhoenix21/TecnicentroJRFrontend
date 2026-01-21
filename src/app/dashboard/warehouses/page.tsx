@@ -453,7 +453,32 @@ export default function WarehousesPage() {
                     </TabsContent>
 
                     <TabsContent value="stores">
-                      <div className="text-sm text-muted-foreground">No implementado aún</div>
+                      {detail.warehouseStores && detail.warehouseStores.length > 0 ? (
+                        <div className="space-y-3">
+                          <h3 className="text-sm font-semibold">Tiendas que abastece</h3>
+                          <div className="space-y-2">
+                            {detail.warehouseStores.map((ws) => (
+                              <div key={ws.id} className="border rounded-lg p-4 bg-muted/20">
+                                <div className="flex justify-between items-start">
+                                  <div>
+                                    <p className="font-medium">{ws.store.name}</p>
+                                    <p className="text-sm text-muted-foreground">{ws.store.address}</p>
+                                  </div>
+                                  <div className="text-right">
+                                    {ws.priority !== null && (
+                                      <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
+                                        Prioridad: {ws.priority}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">Este almacén no abastece a ninguna tienda.</div>
+                      )}
                     </TabsContent>
 
                     <TabsContent value="supply-orders">

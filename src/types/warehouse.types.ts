@@ -5,9 +5,21 @@ export type WarehouseListItem = {
   phone: string;
 };
 
+export type WarehouseStore = {
+  id: string;
+  priority: number | null;
+  createdAt: string;
+  store: {
+    id: string;
+    name: string;
+    address: string;
+  };
+};
+
 export type WarehouseDetail = WarehouseListItem & {
   createdAt?: string;
   updatedAt?: string;
+  warehouseStores?: WarehouseStore[];
 };
 
 export type CreateWarehouseDto = {
