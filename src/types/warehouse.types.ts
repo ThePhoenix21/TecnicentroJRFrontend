@@ -16,10 +16,23 @@ export type WarehouseStore = {
   };
 };
 
+export type WarehouseEmployee = {
+  id: string;
+  role: string;
+  assignedAt: string;
+  employed: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    status: "ACTIVE" | "INACTIVE";
+  };
+};
+
 export type WarehouseDetail = WarehouseListItem & {
   createdAt?: string;
   updatedAt?: string;
   warehouseStores?: WarehouseStore[];
+  warehouseEmployees?: WarehouseEmployee[];
 };
 
 export type CreateWarehouseDto = {

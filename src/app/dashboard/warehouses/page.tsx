@@ -449,7 +449,41 @@ export default function WarehousesPage() {
                     </TabsContent>
 
                     <TabsContent value="employees">
-                      <div className="text-sm text-muted-foreground">No implementado aún</div>
+                      {detail.warehouseEmployees && detail.warehouseEmployees.length > 0 ? (
+                        <div className="space-y-3">
+                          <h3 className="text-sm font-semibold">Empleados asignados</h3>
+                          <div className="space-y-2">
+                            {detail.warehouseEmployees.map((we) => (
+                              <div key={we.id} className="border rounded-lg p-4 bg-muted/20">
+                                <div className="flex justify-between items-start">
+                                  <div>
+                                    <p className="font-medium">
+                                      {we.employed.firstName} {we.employed.lastName}
+                                    </p>
+                                    <p className="text-sm text-muted-foreground">{we.role}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      Asignado: {new Date(we.assignedAt).toLocaleDateString()}
+                                    </p>
+                                  </div>
+                                  <div className="text-right">
+                                    <span
+                                      className={`text-xs px-2 py-1 rounded-full ${
+                                        we.employed.status === "ACTIVE"
+                                          ? "bg-green-100 text-green-800"
+                                          : "bg-gray-100 text-gray-800"
+                                      }`}
+                                    >
+                                      {we.employed.status === "ACTIVE" ? "Activo" : "Inactivo"}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">Este almacén no tiene empleados asignados.</div>
+                      )}
                     </TabsContent>
 
                     <TabsContent value="stores">
