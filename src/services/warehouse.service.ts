@@ -39,6 +39,17 @@ class WarehouseService {
     return response.data;
   }
 
+  async getStoresSimple(): Promise<Array<{ id: string; name: string; address: string }>> {
+    // Obtener tiendas del tenant actual
+    const response = await api.get<Array<{ id: string; name: string; address: string }>>('/store');
+    return response.data;
+  }
+
+  async updateWarehouseStores(warehouseId: string, storeIds: string[]): Promise<{ success: boolean; message: string }> {
+    const response = await api.put<{ success: boolean; message: string }>(`/warehouses/${warehouseId}/stores`, { storeIds });
+    return response.data;
+  }
+
   async deleteWarehouse(warehouseId: string): Promise<DeleteWarehouseResponse> {
     const response = await api.delete<DeleteWarehouseResponse>(`/warehouses/${warehouseId}`);
     return response.data;

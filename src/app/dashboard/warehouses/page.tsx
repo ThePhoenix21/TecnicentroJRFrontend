@@ -13,25 +13,13 @@ import type {
   WarehouseListItem,
 } from '@/types/warehouse.types';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const normalize = (v: unknown) => String(v ?? '').trim().toLowerCase();
 
@@ -63,6 +51,15 @@ export default function WarehousesPage() {
     phone: '',
   });
 
+  const [isEditingStores, setIsEditingStores] = useState(false);
+  const [editStoresSubmitting, setEditStoresSubmitting] = useState(false);
+  const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>([]);
+  const [availableStores, setAvailableStores] = useState<Array<{ id: string; name: string; address: string }>>([]);
+  const [storesLookup, setStoresLookup] = useState<Array<{ id: string; name: string; address: string }>>([]);
+  const [storesLookupLoading, setStoresLookupLoading] = useState(false);
+  const [selectedStoreId, setSelectedStoreId] = useState('');
+  const [localWarehouseStores, setLocalWarehouseStores] = useState<Array<{ id: string; store: { id: string; name: string; address: string } }>>([]);
+
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
   const loadWarehouses = useCallback(async () => {
@@ -90,6 +87,18 @@ export default function WarehousesPage() {
 
   useEffect(() => {
     loadWarehouses();
+    // Cargar tiendas disponibles para el selector de edición
+    const loadStores = async () => {
+      try {
+        console.log('🔍 Cargando tiendas disponibles desde /store...');
+        const stores = await warehouseService.getStoresSimple();
+        console.log('📦 Tiendas disponibles recibidas:', stores);
+        setAvailableStores(stores);
+      } catch (error) {
+        console.error('❌ Error cargando tiendas:', error);
+      }
+    };
+    loadStores();
   }, [loadWarehouses]);
 
   const filteredWarehouses = useMemo(() => {
@@ -163,9 +172,14 @@ export default function WarehousesPage() {
     setDetail(null);
     setDetailLoading(false);
     setIsEditing(false);
+    setIsEditingStores(false);
     setEditSubmitting(false);
+    setEditStoresSubmitting(false);
     setDeleteSubmitting(false);
     setEditForm({ name: '', address: '', phone: '' });
+    setSelectedStoreIds([]);
+    setLocalWarehouseStores([]);
+    setSelectedStoreId('');
   };
 
   const openDetail = async (warehouseId: string) => {
@@ -173,7 +187,9 @@ export default function WarehousesPage() {
     setSelectedWarehouseId(warehouseId);
     setDetail(null);
     setIsEditing(false);
+    setIsEditingStores(false);
     setEditSubmitting(false);
+    setEditStoresSubmitting(false);
     setDeleteSubmitting(false);
 
     try {
@@ -185,6 +201,10 @@ export default function WarehousesPage() {
         address: d.address ?? '',
         phone: d.phone ?? '',
       });
+      // Inicializar IDs de tiendas asociadas y estado local
+      const storeIds = d.warehouseStores?.map((ws) => ws.store.id) ?? [];
+      setSelectedStoreIds(storeIds);
+      setLocalWarehouseStores(d.warehouseStores ?? []);
     } catch (error: any) {
       const status = error?.response?.status;
       if (status === 401 || status === 403) {
@@ -252,6 +272,88 @@ export default function WarehousesPage() {
     } finally {
       setEditSubmitting(false);
     }
+  };
+
+  const ensureStoresLookupLoaded = async () => {
+    if (storesLookup.length > 0) return;
+    try {
+      setStoresLookupLoading(true);
+      const stores = await warehouseService.getStoresSimple();
+      setStoresLookup(stores);
+    } catch (error) {
+      console.error('Error cargando lookup de tiendas:', error);
+    } finally {
+      setStoresLookupLoading(false);
+    }
+  };
+
+  const addSelectedStore = () => {
+    if (!selectedStoreId) return;
+    const store = storesLookup.find((s) => s.id === selectedStoreId);
+    if (!store) return;
+    const exists = localWarehouseStores.some((lws) => lws.store.id === store.id);
+    if (exists) {
+      toast.error('Esta tienda ya está agregada');
+      return;
+    }
+    const newWarehouseStore = {
+      id: `temp-${store.id}-${Date.now()}`,
+      store,
+    };
+    setLocalWarehouseStores((prev) => [...prev, newWarehouseStore]);
+    setSelectedStoreId('');
+  };
+
+  const removeWarehouseStoreLocal = (warehouseStoreId: string) => {
+    setLocalWarehouseStores((prev) => prev.filter((lws) => lws.id !== warehouseStoreId));
+  };
+
+  const handleSaveStoresEdit = async () => {
+    if (!selectedWarehouseId || !detail) return;
+
+    const storeIds = localWarehouseStores.map((lws) => lws.store.id);
+
+    try {
+      setEditStoresSubmitting(true);
+      await warehouseService.updateWarehouseStores(selectedWarehouseId, storeIds);
+      toast.success('Tiendas actualizadas correctamente');
+      // Actualizar localmente el detalle para reflejar los cambios sin recargar todo
+      setDetail((prev) => {
+        if (!prev) return prev;
+        const updatedStores = localWarehouseStores.map((lws) => ({
+          id: lws.id,
+          priority: null,
+          createdAt: new Date().toISOString(),
+          store: lws.store,
+        }));
+        return { ...prev, warehouseStores: updatedStores };
+      });
+      setIsEditingStores(false);
+    } catch (error: any) {
+      const status = error?.response?.status;
+      if (status === 401 || status === 403) {
+        router.push('/login');
+        return;
+      }
+      if (status === 404) {
+        toast.error('No tienes acceso a este almacén');
+        return;
+      }
+      if (status === 429) {
+        toast.error('Demasiadas solicitudes. Inténtelo de nuevo en unos segundos.');
+        return;
+      }
+      toast.error(error?.response?.data?.message || error?.message || 'Error al actualizar tiendas');
+    } finally {
+      setEditStoresSubmitting(false);
+    }
+  };
+
+  const handleCancelStoresEdit = () => {
+    if (!detail) return;
+    setLocalWarehouseStores(detail.warehouseStores ?? []);
+    setSelectedStoreId('');
+    setIsEditingStores(false);
   };
 
   const handleDeleteWarehouse = async () => {
@@ -403,7 +505,27 @@ export default function WarehousesPage() {
 
                     <TabsContent value="general">
                       <div className="space-y-3">
-                        <h3 className="text-sm font-semibold">Datos generales</h3>
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-semibold">Datos generales</h3>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              if (!detail) return;
+                              setIsEditing((v) => !v);
+                              setEditForm({
+                                name: detail.name ?? '',
+                                address: detail.address ?? '',
+                                phone: detail.phone ?? '',
+                              });
+                            }}
+                            disabled={detailLoading || editSubmitting || deleteSubmitting}
+                          >
+                            <Pencil className="h-4 w-4 mr-2" />
+                            {isEditing ? 'Cancelar edición' : 'Editar'}
+                          </Button>
+                        </div>
+
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <label className="text-sm font-medium">Nombre</label>
@@ -418,6 +540,7 @@ export default function WarehousesPage() {
                               }
                             />
                           </div>
+
                           <div className="space-y-2">
                             <label className="text-sm font-medium">Teléfono</label>
                             <Input
@@ -431,6 +554,7 @@ export default function WarehousesPage() {
                               }
                             />
                           </div>
+
                           <div className="space-y-2 sm:col-span-2">
                             <label className="text-sm font-medium">Dirección</label>
                             <Input
@@ -445,6 +569,19 @@ export default function WarehousesPage() {
                             />
                           </div>
                         </div>
+
+                        {isEditing && (
+                          <div className="flex justify-end">
+                            <Button
+                              onClick={handleSaveEdit}
+                              disabled={editSubmitting || deleteSubmitting}
+                              className="bg-emerald-600 text-white hover:bg-emerald-700"
+                            >
+                              <Save className="h-4 w-4 mr-2" />
+                              {editSubmitting ? 'Guardando...' : 'Guardar'}
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </TabsContent>
 
@@ -487,32 +624,115 @@ export default function WarehousesPage() {
                     </TabsContent>
 
                     <TabsContent value="stores">
-                      {detail.warehouseStores && detail.warehouseStores.length > 0 ? (
-                        <div className="space-y-3">
-                          <h3 className="text-sm font-semibold">Tiendas que abastece</h3>
-                          <div className="space-y-2">
-                            {detail.warehouseStores.map((ws) => (
-                              <div key={ws.id} className="border rounded-lg p-4 bg-muted/20">
-                                <div className="flex justify-between items-start">
-                                  <div>
-                                    <p className="font-medium">{ws.store.name}</p>
-                                    <p className="text-sm text-muted-foreground">{ws.store.address}</p>
-                                  </div>
-                                  <div className="text-right">
-                                    {ws.priority !== null && (
-                                      <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
-                                        Prioridad: {ws.priority}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
+                      <div className="space-y-3">
+                        <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-semibold">Tiendas que abastece</h3>
+                            <span className="text-xs text-muted-foreground">
+                              ({localWarehouseStores.length})
+                            </span>
+                          </div>
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            {!isEditingStores ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={async () => {
+                                  setIsEditingStores(true);
+                                  await ensureStoresLookupLoaded();
+                                }}
+                              >
+                                Editar tiendas
+                              </Button>
+                            ) : (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={handleSaveStoresEdit}
+                                  disabled={editStoresSubmitting}
+                                  className="bg-emerald-600 text-white hover:bg-emerald-700"
+                                >
+                                  {editStoresSubmitting ? "Guardando..." : "Guardar cambios"}
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    if (!detail) return;
+                                    setLocalWarehouseStores(Array.isArray(detail.warehouseStores) ? detail.warehouseStores : []);
+                                    setSelectedStoreId("");
+                                    setIsEditingStores(false);
+                                  }}
+                                  disabled={editStoresSubmitting}
+                                >
+                                  Cancelar
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </div>
-                      ) : (
-                        <div className="text-sm text-muted-foreground">Este almacén no abastece a ninguna tienda.</div>
-                      )}
+
+                        {isEditingStores && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">Agregar tienda</label>
+                              <Select value={selectedStoreId} onValueChange={setSelectedStoreId}>
+                                <SelectTrigger disabled={storesLookupLoading || editStoresSubmitting}>
+                                  <SelectValue placeholder={storesLookupLoading ? "Cargando..." : "Seleccionar tienda"} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {storesLookup.map((s) => (
+                                    <SelectItem key={s.id} value={s.id}>
+                                      {s.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div className="flex items-end">
+                              <Button
+                                className="w-full"
+                                onClick={addSelectedStore}
+                                disabled={!selectedStoreId || editStoresSubmitting}
+                              >
+                                Agregar
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="rounded-md border bg-muted/20 overflow-hidden">
+                          {localWarehouseStores.length === 0 ? (
+                            <div className="text-sm text-muted-foreground p-6">No hay tiendas asignadas</div>
+                          ) : (
+                            <div className="divide-y">
+                              {localWarehouseStores.map((lws) => (
+                                <div
+                                  key={lws.id}
+                                  className="flex items-center justify-between gap-3 p-3 bg-background hover:bg-accent/40 transition-colors"
+                                >
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-medium truncate">{lws.store.name}</div>
+                                    <div className="text-xs text-muted-foreground truncate">{lws.store.address}</div>
+                                  </div>
+                                  {isEditingStores && (
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      onClick={() => removeWarehouseStoreLocal(lws.id)}
+                                      disabled={editStoresSubmitting}
+                                    >
+                                      Eliminar
+                                    </Button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </TabsContent>
 
                     <TabsContent value="supply-orders">
@@ -544,34 +764,6 @@ export default function WarehousesPage() {
                 </Button>
 
                 <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:justify-end">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      if (!detail) return;
-                      setIsEditing((v) => !v);
-                      setEditForm({
-                        name: detail.name ?? '',
-                        address: detail.address ?? '',
-                        phone: detail.phone ?? '',
-                      });
-                    }}
-                    disabled={detailLoading || editSubmitting || deleteSubmitting}
-                  >
-                    <Pencil className="h-4 w-4 mr-2" />
-                    {isEditing ? 'Cancelar edición' : 'Editar'}
-                  </Button>
-
-                  {isEditing && (
-                    <Button
-                      onClick={handleSaveEdit}
-                      disabled={editSubmitting || deleteSubmitting}
-                      className="bg-emerald-600 text-white hover:bg-emerald-700"
-                    >
-                      <Save className="h-4 w-4 mr-2" />
-                      {editSubmitting ? 'Guardando...' : 'Guardar'}
-                    </Button>
-                  )}
-
                   <Button variant="outline" onClick={closeDetail} disabled={editSubmitting || deleteSubmitting}>
                     Cerrar
                   </Button>
