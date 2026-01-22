@@ -7,6 +7,8 @@ import { Search, X, Users, Trash2, Edit2, Save, RotateCcw, Plus } from "lucide-r
 import { employedService } from "@/services/employed.service";
 import { storeService } from "@/services/store.service";
 import { warehouseService } from "@/services/warehouse.service";
+import { authService } from "@/services/auth";
+import { userService } from "@/services/user.service";
 import type {
   EmployedDetail,
   EmployedListItem,
@@ -47,6 +49,7 @@ type AssignmentMode = "STORE" | "WAREHOUSE";
 type StoreOption = { id: string; name: string };
 
 type WarehouseOption = { id: string; name: string };
+
 
 const statusLabel: Record<EmployedStatus, string> = {
   ACTIVE: "ACTIVO",
@@ -92,6 +95,14 @@ export default function EmpleadosPage() {
   const [recreateStep, setRecreateStep] = useState<"warning" | "form" | "result">("warning");
   const [recreateSubmitting, setRecreateSubmitting] = useState(false);
   const [recreateResult, setRecreateResult] = useState<any>(null);
+
+  const [isConvertOpen, setIsConvertOpen] = useState(false);
+  const [convertSubmitting, setConvertSubmitting] = useState(false);
+  const [convertStoreId, setConvertStoreId] = useState<string>("");
+  const [convertPassword, setConvertPassword] = useState<string>("");
+  const [convertPermissions, setConvertPermissions] = useState<string[]>([]);
+  const [availablePermissions, setAvailablePermissions] = useState<string[]>([]);
+  const [permissionsLoading, setPermissionsLoading] = useState(false);
 
   const [storeOptions, setStoreOptions] = useState<StoreOption[]>([]);
   const [storesLoading, setStoresLoading] = useState(false);
@@ -207,6 +218,22 @@ export default function EmpleadosPage() {
     }
   };
 
+  const ensurePermissionsLoaded = async () => {
+    if (availablePermissions.length > 0 || permissionsLoading) return;
+
+    try {
+      setPermissionsLoading(true);
+      const permissions = await authService.getPermissions();
+      setAvailablePermissions(Array.isArray(permissions) ? permissions : []);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.message || "No se pudieron cargar los permisos");
+      setAvailablePermissions([]);
+    } finally {
+      setPermissionsLoading(false);
+    }
+  };
+
   const ensureWarehousesLoaded = async () => {
     if (warehouseOptions.length > 0 || warehousesLoading) return;
 
@@ -308,6 +335,125 @@ export default function EmpleadosPage() {
     setDetail(null);
     setIsEditing(false);
     setEditSubmitting(false);
+  };
+
+  const openConvert = async () => {
+    if (!detail) return;
+    setIsConvertOpen(true);
+    setConvertSubmitting(false);
+    setConvertStoreId("");
+    setConvertPassword("");
+    setConvertPermissions([]);
+    await ensureStoresLoaded();
+    await ensurePermissionsLoaded();
+  };
+
+  const closeConvert = () => {
+    setIsConvertOpen(false);
+    setConvertSubmitting(false);
+  };
+
+  const formatPermissionLabel = (permission: string): string => {
+    if (!permission) return "";
+    if (permission === "VIEW_ORDERS") return "Ver ventas";
+    if (permission === "MANAGE_ORDERS") return "Gestionar ventas";
+
+    const tokens = permission
+      .toLowerCase()
+      .split(/[.:/_-]+/)
+      .filter(Boolean);
+
+    const dictionary: Record<string, string> = {
+      users: "Usuarios",
+      user: "Usuario",
+      roles: "Roles",
+      role: "Rol",
+      permissions: "Permisos",
+      permission: "Permiso",
+      products: "Productos",
+      product: "Producto",
+      services: "Servicios",
+      service: "Servicio",
+      orders: "Órdenes",
+      order: "Orden",
+      sales: "Ventas",
+      sale: "Venta",
+      inventory: "Inventario",
+      stores: "Tiendas",
+      store: "Tienda",
+      dashboard: "Dashboard",
+      reports: "Reportes",
+      report: "Reporte",
+      clients: "Clientes",
+      client: "Cliente",
+      prices: "Precios",
+      price: "Precio",
+      cash: "Caja",
+      caja: "Caja",
+      read: "Ver",
+      view: "Ver",
+      list: "Listar",
+      create: "Crear",
+      add: "Agregar",
+      update: "Editar",
+      edit: "Editar",
+      delete: "Eliminar",
+      remove: "Eliminar",
+      manage: "Gestionar",
+      export: "Exportar",
+      print: "Imprimir",
+      approve: "Aprobar",
+      close: "Cerrar",
+    };
+
+    const translated = tokens.map((token) => {
+      const key = token.toLowerCase();
+      if (dictionary[key]) return dictionary[key];
+      return key.charAt(0).toUpperCase() + key.slice(1);
+    });
+
+    if (translated.length === 2) {
+      return `${translated[0]} · ${translated[1]}`;
+    }
+
+    return translated.join(" · ");
+  };
+
+  const submitConvert = async () => {
+    if (!detail) return;
+
+    if (!convertPassword.trim()) {
+      toast.error("La contraseña es obligatoria");
+      return;
+    }
+
+    if (!convertStoreId.trim()) {
+      toast.error("Seleccione una tienda");
+      return;
+    }
+
+    try {
+      setConvertSubmitting(true);
+      await userService.createUserFromEmployed({
+        employedId: detail.id,
+        role: "USER",
+        storeId: convertStoreId,
+        password: convertPassword,
+        permissions: convertPermissions,
+      });
+      toast.success("Usuario creado desde empleado");
+      closeConvert();
+      await loadEmployees();
+      if (selectedEmployeeId) {
+        const refreshed = await employedService.getEmployedById(selectedEmployeeId);
+        setDetail(refreshed);
+      }
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.response?.data?.message || error?.message || "Error al crear usuario");
+    } finally {
+      setConvertSubmitting(false);
+    }
   };
 
   const assignmentInfo = useMemo(() => {
@@ -728,20 +874,24 @@ export default function EmpleadosPage() {
       </Card>
 
       <Dialog open={isDetailOpen} onOpenChange={(open) => (open ? setIsDetailOpen(true) : closeDetail())}>
-        <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Detalle de empleado</DialogTitle>
-          </DialogHeader>
-
-          {detailLoading ? (
-            <div className="flex justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <DialogContent className="sm:max-w-[720px] max-h-[90vh] p-0 overflow-hidden">
+          <div className="flex flex-col max-h-[90vh]">
+            <div className="p-6 pb-2">
+              <DialogHeader>
+                <DialogTitle>Detalle de empleado</DialogTitle>
+              </DialogHeader>
             </div>
-          ) : !detail ? (
-            <div className="text-center py-6 text-muted-foreground">Sin información</div>
-          ) : (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+            <div className="flex-1 overflow-y-auto px-6 pb-6">
+              {detailLoading ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              ) : !detail ? (
+                <div className="text-center py-6 text-muted-foreground">Sin información</div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Nombres</label>
                   <Input
@@ -923,47 +1073,149 @@ export default function EmpleadosPage() {
                     </div>
                   </div>
                 )}
-              </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
-              <DialogFooter className="gap-2 sm:gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    if (!detail) return;
-                    setIsEditing((v) => !v);
-                    setEditForm({
-                      firstName: detail.firstName ?? "",
-                      lastName: detail.lastName ?? "",
-                      phone: detail.phone ?? "",
-                      email: detail.email ?? "",
-                      position: detail.position ?? "",
-                      status: detail.status ?? "",
-                    });
-                  }}
-                  disabled={detailLoading || editSubmitting}
-                >
-                  <Edit2 className="h-4 w-4 mr-2" />
-                  {isEditing ? "Cancelar edición" : "Editar"}
-                </Button>
-
-                {isEditing && (
-                  <Button onClick={handleSaveEdit} disabled={editSubmitting}>
-                    <Save className="h-4 w-4 mr-2" />
-                    Guardar
-                  </Button>
-                )}
-
+            <div className="border-t bg-background px-6 py-4">
+              <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
                 <Button
                   variant="destructive"
                   onClick={openRecreate}
                   disabled={detailLoading || editSubmitting}
+                  className="sm:mr-auto"
                 >
                   <RotateCcw className="h-4 w-4 mr-2" />
                   Recrear empleado
                 </Button>
-              </DialogFooter>
+
+                <DialogFooter className="gap-2 sm:gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={openConvert}
+                    disabled={detailLoading || editSubmitting || !!detail?.userId}
+                  >
+                    {detail?.userId ? "Ya es usuario" : "Convertir a usuario"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (!detail) return;
+                      setIsEditing((v) => !v);
+                      setEditForm({
+                        firstName: detail.firstName ?? "",
+                        lastName: detail.lastName ?? "",
+                        phone: detail.phone ?? "",
+                        email: detail.email ?? "",
+                        position: detail.position ?? "",
+                        status: detail.status ?? "",
+                      });
+                    }}
+                    disabled={detailLoading || editSubmitting}
+                  >
+                    <Edit2 className="h-4 w-4 mr-2" />
+                    {isEditing ? "Cancelar edición" : "Editar"}
+                  </Button>
+
+                  {isEditing && (
+                    <Button onClick={handleSaveEdit} disabled={editSubmitting}>
+                      <Save className="h-4 w-4 mr-2" />
+                      Guardar
+                    </Button>
+                  )}
+                </DialogFooter>
+              </div>
             </div>
-          )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isConvertOpen} onOpenChange={(open) => (open ? setIsConvertOpen(true) : closeConvert())}>
+        <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Convertir empleado a usuario</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Contraseña</label>
+                <Input
+                  type="password"
+                  value={convertPassword}
+                  onChange={(e) => setConvertPassword(e.target.value)}
+                  disabled={convertSubmitting}
+                />
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <label className="text-sm font-medium">Tienda asignada</label>
+                <Select
+                  value={convertStoreId}
+                  onValueChange={setConvertStoreId}
+                  disabled={convertSubmitting || storesLoading}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={storesLoading ? "Cargando..." : "Seleccione una tienda"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {storeOptions.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold">Permisos</h3>
+                  <p className="text-xs text-muted-foreground">Selecciona los permisos para el usuario</p>
+                </div>
+              </div>
+
+              {permissionsLoading ? (
+                <div className="text-sm text-muted-foreground">Cargando permisos...</div>
+              ) : (
+                <div className="max-h-56 overflow-y-auto pr-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {availablePermissions.map((permission) => (
+                      <label key={permission} className="flex items-start gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={convertPermissions.includes(permission)}
+                          onChange={(e) => {
+                            setConvertPermissions((prev) =>
+                              e.target.checked
+                                ? [...prev, permission]
+                                : prev.filter((p) => p !== permission)
+                            );
+                          }}
+                          className="mt-1"
+                        />
+                        <span>{formatPermissionLabel(permission)}</span>
+                      </label>
+                    ))}
+                    {availablePermissions.length === 0 && (
+                      <div className="text-sm text-muted-foreground">No hay permisos disponibles</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-2">
+              <Button variant="outline" onClick={closeConvert} disabled={convertSubmitting}>
+                Cancelar
+              </Button>
+              <Button onClick={submitConvert} disabled={convertSubmitting}>
+                {convertSubmitting ? "Creando..." : "Crear usuario"}
+              </Button>
+            </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
