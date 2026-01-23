@@ -8,6 +8,20 @@ import {
 } from '@/types/store-product.types';
 
 class StoreProductService {
+  // Obtener productos simples de la tienda para el formulario de ventas
+  async getStoreProductsSimple(storeId: string): Promise<{data: StoreProduct[], total: number}> {
+    try {
+      // Endpoint: GET /store/products/store/{storeId}/simple
+      console.log('🔍 Intentando endpoint simple:', `/store/products/store/${storeId}/simple`);
+      const response = await api.get(`/store/products/store/${storeId}/simple`);
+      return response.data; // El backend devuelve {data: Array, total}
+    } catch (error) {
+      const anyError = error as any;
+      console.error('[StoreProductService.getStoreProductsSimple] Error:', anyError);
+      throw error;
+    }
+  }
+
   // Obtener productos de la tienda actual
   async getStoreProducts(storeId: string, page = 1, limit = 20, search = ''): Promise<{data: StoreProduct[], total: number, page: number, limit: number, totalPages: number}> {
     try {

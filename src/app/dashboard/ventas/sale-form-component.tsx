@@ -661,7 +661,7 @@ export function SaleForm({
           let unitPrice = 0;
 
           if (prev.price) {
-            const customPrice = parseFloat(prev.price);
+            const customPrice = Number(parseFloat(prev.price));
             if (!isNaN(customPrice) && customPrice >= 0) {
               unitPrice = customPrice;
             }
@@ -729,7 +729,7 @@ export function SaleForm({
       isNaN(parseInt(newItem.quantity as string, 10)) ? 1 : parseInt(newItem.quantity as string, 10)
     );
 
-    const price = parseFloat(newItem.price) || 0;
+    const price = Number(parseFloat(newItem.price)) || 0;
     const images = newItem.images || [];
     const notes = newItem.notes || "";
 
@@ -941,7 +941,7 @@ export function SaleForm({
         id: item.id || `temp-${Date.now()}-${Math.random()
           .toString(36)
           .substr(2, 9)}`,
-        price: item.price, // Mantener siempre el precio original
+        price: Number(item.price), // Mantener siempre el precio original
         quantity: quantityToAdd,
         type,
         notes: type === "service" ? notes : "",
@@ -950,8 +950,8 @@ export function SaleForm({
           productId: item.productId || item.id,
           storeProductId: item.productId || item.id,
           // Guardar el precio personalizado si es diferente al precio base
-          ...(customPrice !== undefined && customPrice > 0 && customPrice !== item.price && {
-            customPrice: customPrice
+          ...(customPrice !== undefined && customPrice > 0 && Number(customPrice) !== Number(item.price) && {
+            customPrice: Number(customPrice)
           })
         }),
         ...(type === "service" && { images }),
@@ -1085,8 +1085,8 @@ export function SaleForm({
       const productsData = selectedItems
         .filter((item) => item.type === "product")
         .map((item) => {
-          const hasCustomPrice = item.customPrice !== undefined && item.customPrice > 0 && item.customPrice !== item.price;
-          const finalPrice = hasCustomPrice ? item.customPrice! : item.price;
+          const hasCustomPrice = item.customPrice !== undefined && Number(item.customPrice) > 0 && Number(item.customPrice) !== Number(item.price);
+          const finalPrice = hasCustomPrice ? Number(item.customPrice) : Number(item.price);
           
           // Usar los métodos de pago del formulario
           const payments = item.paymentMethods.map(pm => ({
@@ -1097,7 +1097,7 @@ export function SaleForm({
           return {
             productId: item.storeProductId || item.productId || item.id, // Usar storeProductId si existe
             quantity: item.quantity,
-            ...(hasCustomPrice ? { customPrice: finalPrice } : { price: item.price }),
+            ...(hasCustomPrice ? { customPrice: finalPrice } : { price: Number(item.price) }),
             payments
           };
         });
@@ -1130,7 +1130,7 @@ export function SaleForm({
 
             return {
               name: item.name?.trim() || 'Defauld_Service',              
-              price: typeof item.price === "string" ? parseFloat(item.price) : item.price,
+              price: Number(typeof item.price === "string" ? parseFloat(item.price) : item.price),
               type: (item.serviceType || (tenantDefaultServiceLoaded ? tenantDefaultService : "REPAIR")),
               description: item.notes,
               photoUrls,
@@ -1182,7 +1182,7 @@ export function SaleForm({
         return;
       }
 
-      const totalAmount = orderPaymentMethodsToUse.reduce((sum, pm) => sum + pm.amount, 0);
+      const totalAmount = Number(orderPaymentMethodsToUse.reduce((sum, pm) => sum + pm.amount, 0));
 
       // Validar que haya una sesión de caja activa
       if (!currentCashSession) {
@@ -1937,22 +1937,39 @@ export function SaleForm({
                           }
                         })()
                       }
-                      required={newItem.type === 'product'}
                     />
                     {isDropdownOpen && newItem.type === "product" && (
                       <div className="absolute z-10 w-full mt-1 bg-card text-card-foreground border rounded-md shadow-lg max-h-60 overflow-auto dark:bg-gray-800 dark:border-gray-700">
-                        {filteredItems().map((item) => (
-                          <div
-                            key={item.id}
-                            className="px-4 py-2 hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors duration-200 dark:hover:bg-gray-700"
-                            onClick={() => handleItemSelect(item)}
-                          >
-                            <div className="font-medium">{item.name}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {formatCurrency(item.price)}
+                        {filteredItems().map((item) => {
+                          const isProduct = "stock" in item;
+                          const stock = isProduct ? (item as any).stock : 0;
+                          const hasStock = isProduct && stock > 0;
+                          
+                          return (
+                            <div
+                              key={item.id}
+                              className={`px-4 py-2 hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors duration-200 dark:hover:bg-gray-700 ${
+                                isProduct && !hasStock ? 'border-l-4 border-red-500 bg-red-50' : ''
+                              }`}
+                              onClick={() => handleItemSelect(item)}
+                            >
+                              <div className="font-medium flex items-center justify-between">
+                                <span>{item.name}</span>
+                                {isProduct && !hasStock && (
+                                  <span className="text-xs text-red-600 font-semibold">SIN STOCK</span>
+                                )}
+                              </div>
+                              <div className="text-sm text-muted-foreground flex items-center justify-between">
+                                <span>{formatCurrency(item.price)}</span>
+                                {isProduct && (
+                                  <span className={`text-xs ${hasStock ? 'text-green-600' : 'text-red-600'}`}>
+                                    Stock: {stock}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                         {filteredItems().length === 0 && (
                           <div className="p-2 text-gray-500">
                             No se encontraron productos
@@ -1985,7 +2002,7 @@ export function SaleForm({
                       let unitPrice = 0;
 
                       if (newItem.price) {
-                        const customPrice = parseFloat(newItem.price as string);
+                        const customPrice = Number(parseFloat(newItem.price as string));
                         if (!isNaN(customPrice) && customPrice >= 0) {
                           unitPrice = customPrice;
                         }
@@ -1998,7 +2015,7 @@ export function SaleForm({
                       expectedTotal = unitPrice * quantityNumber;
                     } else {
                       // Para servicios: usar el precio ingresado y la cantidad (1 para servicio)
-                      const unitPrice = parseFloat(newItem.price as string) || 0;
+                      const unitPrice = Number(parseFloat(newItem.price as string)) || 0;
                       const qty = showQuantity ? quantityNumber : 1;
                       expectedTotal = unitPrice * qty;
                     }
@@ -2283,7 +2300,7 @@ export function SaleForm({
                                       }
                                       className="w-20 px-1 border rounded text-sm text-right"
                                       min="0"
-                                      step="0.01"
+                                      step="0.1"
                                     />
                                   </>
                                 ) : (

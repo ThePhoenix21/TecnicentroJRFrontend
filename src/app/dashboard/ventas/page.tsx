@@ -76,10 +76,12 @@ export default function VentasPage() {
   const hasProductsFeature = normalizedTenantFeatures.includes('PRODUCTS');
   const hasSalesFeatureGate = hasSalesOfProducts || hasSalesOfServices;
 
-  const tableColSpan = 8 + (isAdmin ? 1 : 0) + (hasProductsFeature ? 1 : 0);
+  const tableColSpan = 7 + (isAdmin ? 1 : 0) + (hasProductsFeature ? 1 : 0);
 
   const canSellProducts = !tenantFeaturesLoaded || !hasSalesFeatureGate || hasSalesOfProducts;
   const canViewInventory = isAdmin || hasPermission?.('VIEW_INVENTORY') || hasPermission?.('MANAGE_INVENTORY') || hasPermission?.('inventory.read') || hasPermission?.('inventory.manage');
+  // Los usuarios que pueden vender deben poder ver los productos para crear órdenes
+  const canViewProductsForSales = canSellProducts && (isAdmin || hasPermission?.('MANAGE_ORDERS') || hasPermission?.('CREATE_ORDERS') || hasPermission?.('orders.create') || hasPermission?.('orders.manage'));
 
   const canManageOrders = isAdmin || hasPermission?.("MANAGE_ORDERS");
 
@@ -87,11 +89,11 @@ export default function VentasPage() {
     try {
       setLoading(true);
       
-      // Usar storeProductService para obtener productos de la tienda actual
+      // Usar storeProductService para obtener productos simples de la tienda actual
       if (currentStore) {
-        if (canSellProducts && canViewInventory) {
+        if (canSellProducts && (canViewInventory || canViewProductsForSales)) {
           try {
-            const productsResponse = await storeProductService.getStoreProducts(currentStore.id, 1, 100);
+            const productsResponse = await storeProductService.getStoreProductsSimple(currentStore.id);
             const productsArray = productsResponse.data || [];
             setProducts(productsArray);
           } catch (error) {
@@ -122,7 +124,7 @@ export default function VentasPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentStore, canSellProducts, canViewInventory]);
+  }, [currentStore, canSellProducts, canViewInventory, canViewProductsForSales]);
 
   const resetHardDeleteModal = useCallback(() => {
     setHardDeleteStep("warning");
@@ -305,20 +307,20 @@ export default function VentasPage() {
   // Transformar StoreProduct[] a Product[] para compatibilidad con SaleForm
   const transformStoreProductsToProducts = useCallback((storeProducts: StoreProduct[]): Product[] => {
     const transformed = storeProducts.map(sp => ({
-      id: sp.productId,
+      id: sp.product.id, // Usar el ID del producto base
       storeProductId: sp.id, // Agregar el ID del store-product para que SaleForm lo use
       name: sp.product.name,
-      description: sp.product.description || '',
-      buycost: sp.product.buyCost || 0,
-      createdById: sp.product.createdById || '',
-      isDeleted: sp.product.isDeleted || false,
-      createdAt: sp.product.createdAt || new Date().toISOString(),
-      updatedAt: sp.product.updatedAt || new Date().toISOString(),
-      // Campos adicionales que necesita SaleForm
-      price: sp.price,
+      description: '', // El endpoint simple no incluye descripción
+      buycost: 0, // El endpoint simple no incluye buyCost
+      createdById: '',
+      isDeleted: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      // Campos del endpoint simple
+      price: Number(sp.price) || 0,
       stock: sp.stock,
-      stockThreshold: sp.stockThreshold,
-      basePrice: sp.product.basePrice || 0,
+      stockThreshold: 0, // El endpoint simple no incluye stockThreshold
+      basePrice: Number(sp.price) || 0, // Usar el price como basePrice
     }));
     return transformed;
   }, []);
@@ -649,7 +651,6 @@ export default function VentasPage() {
               <Table className="w-full">
                 <TableHeader className="bg-muted/50">
                   <TableRow>
-                    <TableHead className="w-[80px] px-2 text-center hidden sm:table-cell">Order #</TableHead>
                     <TableHead className="w-[90px] px-2 text-center">Fecha</TableHead>
                     <TableHead className="min-w-[120px] px-2 text-center">{hasNamedServices ? 'Nombre' : 'Cliente'}</TableHead>
                     {isAdmin && (
@@ -730,17 +731,9 @@ export default function VentasPage() {
                       const fromOpenSession = isOrderFromOpenCashSession(order);
                       return (
                         <TableRow
-                          key={order.id || order.orderNumber || index}
+                          key={order.id || index}
                           className={`hover:bg-muted/50 group ${!fromOpenSession ? "opacity-60 bg-muted/40" : ""}`}
                         >
-                          <TableCell className="px-2 py-3 text-center hidden sm:table-cell">
-                            <div
-                              className="text-xs font-mono font-medium text-muted-foreground"
-                              title={order.orderNumber}
-                            >
-                              {order.orderNumber || 'N/A'}
-                            </div>
-                          </TableCell>
                           <TableCell className="px-2 py-3 text-center">
                             <div className="flex flex-col items-center">
                               <span className="text-xs sm:text-sm font-medium">
@@ -975,7 +968,7 @@ export default function VentasPage() {
           const result = await handleCreateOrder(transformedData);
           return result;
         }}
-        products={transformStoreProductsToProducts(products)}
+        products={canViewProductsForSales ? transformStoreProductsToProducts(products) : []}
       />
 
       <Dialog open={isHardDeleteOpen} onOpenChange={handleHardDeleteOpenChange}>

@@ -51,12 +51,12 @@ export function PaymentConfirmationDialog({
               <div className="space-y-2">
                 <p className="font-medium">{itemName}</p>
                 <div className="text-sm space-y-1">
-                  <div>Precio esperado: S/{expectedTotal.toFixed(2)}</div>
+                  <div>Precio esperado: S/{Number(expectedTotal).toFixed(2)}</div>
                   <div>
-                    Total métodos de pago: S/{paymentTotal.toFixed(2)}
+                    Total métodos de pago: S/{Number(paymentTotal).toFixed(2)}
                   </div>
                   <div className="font-semibold">
-                    Diferencia: S/{difference.toFixed(2)} (
+                    Diferencia: S/{Number(difference).toFixed(2)} (
                     {isHigher ? "mayor" : "menor"})
                   </div>
                 </div>

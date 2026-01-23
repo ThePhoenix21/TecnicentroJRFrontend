@@ -314,7 +314,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                 </div>
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Total</p>
-                  <p className="font-medium">S/{(order.totalAmount || 0).toFixed(2)}</p>
+                  <p className="font-medium">S/{Number(order.totalAmount || 0).toFixed(2)}</p>
                 </div>
                 {hasNamedServices ? (
                   <div className="space-y-1">
@@ -482,7 +482,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                 <div className="flex justify-between items-center">
                   <h3 className="font-medium">Total General</h3>
                   <p className="text-lg font-bold">
-                    S/{(order.totalAmount || 0).toFixed(2)}
+                    S/{Number(order.totalAmount || 0).toFixed(2)}
                   </p>
                 </div>
               </div>
