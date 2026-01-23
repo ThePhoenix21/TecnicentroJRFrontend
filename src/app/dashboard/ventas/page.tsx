@@ -50,7 +50,7 @@ export default function VentasPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10); // Mostrar 10 elementos por página
-  const [hideOutsideCashSession, setHideOutsideCashSession] = useState(false);
+  const [hideOutsideCashSession, setHideOutsideCashSession] = useState(true);
 
   const CONSENT_PHRASE =
     "soy conciente de que los datos no se podran recuperar";
@@ -70,6 +70,7 @@ export default function VentasPage() {
 
   const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
   const hasSalesOfProducts = normalizedTenantFeatures.includes('SALESOFPRODUCTS');
+  const hasHardDeleteSalesHistory = normalizedTenantFeatures.includes('HARD_DELETE_SALES_HISTORY');
   const hasSalesOfServices = normalizedTenantFeatures.includes('SALESOFSERVICES');
   const hasNamedServices = normalizedTenantFeatures.includes('NAMEDSERVICES');
   const hasProductsFeature = normalizedTenantFeatures.includes('PRODUCTS');
@@ -564,7 +565,7 @@ export default function VentasPage() {
                   </Button>
                 )}
 
-                {isAdmin && (
+                {isAdmin && hasHardDeleteSalesHistory && (
                   <Button
                     onClick={() => setIsHardDeleteOpen(true)}
                     className="w-full sm:w-auto"

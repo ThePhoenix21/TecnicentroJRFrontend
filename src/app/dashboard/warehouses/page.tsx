@@ -90,7 +90,7 @@ export default function WarehousesPage() {
     // Cargar tiendas disponibles para el selector de edición
     const loadStores = async () => {
       try {
-        console.log('🔍 Cargando tiendas disponibles desde /store...');
+        console.log('🔍 Cargando tiendas disponibles desde /store/simple...');
         const stores = await warehouseService.getStoresSimple();
         console.log('📦 Tiendas disponibles recibidas:', stores);
         setAvailableStores(stores);

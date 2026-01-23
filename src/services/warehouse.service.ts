@@ -41,7 +41,7 @@ class WarehouseService {
 
   async getStoresSimple(): Promise<Array<{ id: string; name: string; address: string }>> {
     // Obtener tiendas del tenant actual
-    const response = await api.get<Array<{ id: string; name: string; address: string }>>('/store');
+    const response = await api.get<Array<{ id: string; name: string; address: string }>>('/store/simple');
     return response.data;
   }
 

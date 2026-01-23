@@ -1,6 +1,6 @@
-export type TicketStatus = 'OPEN' | 'CLOSED' | 'CANCELLED';
+export type TicketStatus = 'OPEN' | 'CANCELLED' | 'IN_PROGRESS' | 'REFUSED' | 'COMPLETED';
 
-export type TicketPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+export type TicketPriority = 'LOW' | 'NORMAL' | 'HIGH';
 
 export type SupportTicketListItem = {
   id: string;

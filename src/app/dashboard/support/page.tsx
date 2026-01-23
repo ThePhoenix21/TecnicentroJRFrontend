@@ -37,25 +37,25 @@ const normalize = (v: unknown) => String(v ?? '').trim().toLowerCase();
 
 const statusLabel: Record<TicketStatus, string> = {
   OPEN: 'Abierto',
-  CLOSED: 'Cerrado',
+  REFUSED: 'Rechazado',
   CANCELLED: 'Cancelado',
+  IN_PROGRESS: 'En progreso',
+  COMPLETED: 'Completado',
 };
 
 const priorityLabel: Record<TicketPriority, string> = {
   LOW: 'Baja',
   NORMAL: 'Normal',
   HIGH: 'Alta',
-  URGENT: 'Urgente',
 };
 
 const getStatusClasses = (status: TicketStatus) => {
-  if (status === 'OPEN') return 'bg-emerald-100 text-emerald-800';
-  if (status === 'CLOSED') return 'bg-slate-100 text-slate-800';
+  if (status === 'OPEN' || status === 'IN_PROGRESS' || status === 'COMPLETED') return 'bg-emerald-100 text-emerald-800';
+  if (status === 'REFUSED' || status === 'CANCELLED') return 'bg-slate-100 text-slate-800';
   return 'bg-rose-100 text-rose-800';
 };
 
 const getPriorityClasses = (priority: TicketPriority) => {
-  if (priority === 'URGENT') return 'bg-rose-100 text-rose-800';
   if (priority === 'HIGH') return 'bg-amber-100 text-amber-800';
   if (priority === 'LOW') return 'bg-slate-100 text-slate-800';
   return 'bg-blue-100 text-blue-800';
