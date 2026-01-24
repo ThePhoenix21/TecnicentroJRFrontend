@@ -43,7 +43,7 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
     try {
       // Cargamos una cantidad razonable de productos. 
       // TODO: Implementar búsqueda asíncrona si hay muchos productos
-      const response = await storeProductService.getStoreProducts(storeId, 1, 100);
+      const response = await storeProductService.getStoreProducts(storeId, 1, 1000);
       setProducts(response.data);
     } catch (error) {
       console.error("Error loading products:", error);
