@@ -73,7 +73,7 @@ export default function ProductsPage() {
     
     try {
       setLoading(true);
-      const response = await storeProductService.getStoreProducts(currentStore.id, 1, 100, searchTerm);
+      const response = await storeProductService.getStoreProducts(currentStore.id, 1, 1000, searchTerm);
       console.log('📦 Datos recibidos de storeProductService:', response);
       
       // El backend devuelve {data: Array(1), total: 1, page: 1, limit: 100, totalPages: 1}

@@ -90,7 +90,7 @@ export default function VentasPage() {
       if (currentStore) {
         if (canSellProducts && canViewInventory) {
           try {
-            const productsResponse = await storeProductService.getStoreProducts(currentStore.id, 1, 100);
+            const productsResponse = await storeProductService.getStoreProducts(currentStore.id, 1, 1000);
             const productsArray = productsResponse.data || [];
             setProducts(productsArray);
           } catch (error) {
