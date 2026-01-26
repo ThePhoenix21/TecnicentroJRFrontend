@@ -1148,9 +1148,8 @@ export function SaleForm({
       // Generar DNI único para ventas de productos si no se ingresó
       let finalDni = customerData.documentNumber?.trim();
       if (!finalDni && hasProducts && !hasServices) {
-        // Generar DNI único con timestamp para evitar colisiones
-        const timestamp = Date.now().toString().slice(-6);
-        finalDni = `00${timestamp}`;
+        // Usar DNI por defecto fijo ya que no hay colisiones en el backend
+        finalDni = "00000000";
       }
 
       // Usar los datos del cliente si hay servicios o productos, de lo contrario usar los valores por defecto
