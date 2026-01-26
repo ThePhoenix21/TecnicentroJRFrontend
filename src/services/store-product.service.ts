@@ -9,11 +9,14 @@ import {
 
 class StoreProductService {
   // Obtener productos simples de la tienda para el formulario de ventas
-  async getStoreProductsSimple(storeId: string): Promise<{data: StoreProduct[], total: number}> {
+  async getStoreProductsSimple(storeId: string, limit = 1000): Promise<{data: StoreProduct[], total: number}> {
     try {
-      // Endpoint: GET /store/products/store/{storeId}/simple
-      console.log('🔍 Intentando endpoint simple:', `/store/products/store/${storeId}/simple`);
-      const response = await api.get(`/store/products/store/${storeId}/simple`);
+      // Endpoint: GET /store/products/store/{storeId}/simple?limit=1000
+      const params = new URLSearchParams({
+        limit: limit.toString(),
+      });
+      console.log('🔍 Intentando endpoint simple:', `/store/products/store/${storeId}/simple?${params}`);
+      const response = await api.get(`/store/products/store/${storeId}/simple?${params}`);
       return response.data; // El backend devuelve {data: Array, total}
     } catch (error) {
       const anyError = error as any;
