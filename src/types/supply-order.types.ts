@@ -1,0 +1,128 @@
+export type SupplyOrderStatus =
+  | "ISSUED"
+  | "PENDING"
+  | "PARTIAL"
+  | "PARTIALLY_RECEIVED"
+  | "RECEIVED"
+  | "CANCELLED";
+
+export interface SupplyOrderItem {
+  id: string;
+  code: string;
+  status: SupplyOrderStatus;
+  createdAt: string;
+  providerId: string;
+  storeId: string;
+  warehouseId: string | null;
+}
+
+export interface SupplyOrderListResponse {
+  data: SupplyOrderItem[];
+  total: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface SupplyOrderUserInfo {
+  id: string;
+  email: string;
+  name: string;
+  phone?: string | null;
+  username?: string | null;
+  status?: string | null;
+  avatarUrl?: string | null;
+  accessProfileId?: string | null;
+}
+
+export interface SupplyOrderProviderInfo {
+  id: string;
+  name: string;
+  ruc?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+}
+
+export interface SupplyOrderStoreInfo {
+  id: string;
+  name: string;
+  address?: string | null;
+  phone?: string | null;
+}
+
+export interface SupplyOrderWarehouseInfo {
+  id: string;
+  name: string;
+  address?: string | null;
+  phone?: string | null;
+}
+
+export interface SupplyOrderProductInfo {
+  id: string;
+  productId: string;
+  quantity: number;
+  note?: string | null;
+  product?: {
+    id: string;
+    name: string;
+  } | null;
+}
+
+export interface SupplyOrderReceptionProductInfo {
+  id: string;
+  productId: string;
+  quantity: number;
+  createdAt?: string | null;
+}
+
+export interface SupplyOrderReceptionInfo {
+  id: string;
+  receivedAt: string;
+  reference?: string | null;
+  notes?: string | null;
+  products: SupplyOrderReceptionProductInfo[];
+}
+
+export interface SupplyOrderDetail {
+  id: string;
+  code: string;
+  status: SupplyOrderStatus;
+  description?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  providerId: string;
+  createdById: string;
+  warehouseId?: string | null;
+  storeId?: string | null;
+  createdBy?: SupplyOrderUserInfo | null;
+  provider?: SupplyOrderProviderInfo | null;
+  store?: SupplyOrderStoreInfo | null;
+  warehouse?: SupplyOrderWarehouseInfo | null;
+  products: SupplyOrderProductInfo[];
+  warehouseReceptions: SupplyOrderReceptionInfo[];
+  storeReceptions: SupplyOrderReceptionInfo[];
+}
+
+export interface SupplyOrderFilters {
+  page?: number;
+  pageSize?: number;
+  status?: SupplyOrderStatus;
+  userId?: string;
+  fromDate?: string;
+  toDate?: string;
+}
+
+export interface CreateSupplyOrderProductDto {
+  productId: string;
+  quantity: number;
+  note?: string | null;
+}
+
+export interface CreateSupplyOrderDto {
+  providerId: string;
+  storeId?: string;
+  warehouseId?: string;
+  description?: string | null;
+  products: CreateSupplyOrderProductDto[];
+}

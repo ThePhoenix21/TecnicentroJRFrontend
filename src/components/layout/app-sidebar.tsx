@@ -172,6 +172,14 @@ const getSidebarItems = (
       roles: ["ADMIN", "USER"],
     },
     {
+      name: "Órdenes de suministro",
+      href: "/dashboard/ordenes-suministro",
+      icon: ClipboardCheck,
+      roles: ["ADMIN", "USER"],
+      requiredTenantFeatures: ["INVENTORY"],
+      requiredPermissions: ["VIEW_INVENTORY", "MANAGE_INVENTORY"],
+    },
+    {
       name: "Configuración",
       href: "/dashboard/configuracion/usuarios",
       icon: Users,

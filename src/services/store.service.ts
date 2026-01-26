@@ -1,5 +1,5 @@
 import { api, ApiError } from './api';
-import { Store, CreateStoreDto, UpdateStoreDto, StoreResponse, StoreListResponse } from '@/types/store';
+import { Store, CreateStoreDto, UpdateStoreDto, StoreResponse, StoreListResponse, StoreLookupItem } from '@/types/store';
 
 class StoreService {
     private baseUrl = '/store';
@@ -37,6 +37,16 @@ class StoreService {
     async getStoreById(id: string): Promise<Store> {
         try {
             const response = await api.get<Store>(`${this.baseUrl}/${id}`);
+            return response.data;
+        } catch (error) {
+            this.handleError(error);
+            throw error;
+        }
+    }
+
+    async getStoresLookup(): Promise<StoreLookupItem[]> {
+        try {
+            const response = await api.get<StoreLookupItem[]>(`${this.baseUrl}/lookup`);
             return response.data;
         } catch (error) {
             this.handleError(error);

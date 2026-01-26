@@ -3,6 +3,7 @@ import type {
   CreateProviderDto,
   CreateProviderResponse,
   ProductLookupItem,
+  ProviderLookupItem,
   ProviderDetail,
   ProviderListItem,
   SaveProviderProductsResponse,
@@ -43,6 +44,11 @@ class ProviderService {
 
   async getProductsLookup(): Promise<ProductLookupItem[]> {
     const response = await api.get<ProductLookupItem[]>("/catalog/products/lookup");
+    return response.data;
+  }
+
+  async getProvidersLookup(): Promise<ProviderLookupItem[]> {
+    const response = await api.get<ProviderLookupItem[]>("/providers/lookup");
     return response.data;
   }
 }

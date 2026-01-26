@@ -66,3 +66,8 @@ export interface ProductLookupItem {
   id: string;
   name: string;
 }
+
+export interface ProviderLookupItem {
+  id: string;
+  name: string;
+}
