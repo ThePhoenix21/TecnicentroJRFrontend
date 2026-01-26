@@ -1,6 +1,7 @@
 import { api } from "./api";
 import type {
   CreateSupplyOrderDto,
+  ReceiveSupplyOrderDto,
   SupplyOrderDetail,
   SupplyOrderFilters,
   SupplyOrderListResponse,
@@ -32,6 +33,14 @@ class SupplyOrderService {
 
   async annullSupplyOrder(orderId: string): Promise<void> {
     await api.post(`${this.baseUrl}/${orderId}/annull`);
+  }
+
+  async approveSupplyOrder(orderId: string): Promise<void> {
+    await api.post(`${this.baseUrl}/${orderId}/approve`);
+  }
+
+  async receiveSupplyOrder(orderId: string, payload: ReceiveSupplyOrderDto): Promise<void> {
+    await api.post(`${this.baseUrl}/${orderId}/receive`, payload);
   }
 
   async createSupplyOrder(payload: CreateSupplyOrderDto): Promise<string> {

@@ -12,9 +12,11 @@ export interface SupplyOrderItem {
   code: string;
   status: SupplyOrderStatus;
   createdAt: string;
-  providerId: string;
-  storeId: string;
-  warehouseId: string | null;
+  providerName?: string | null;
+  storeName?: string | null;
+  warehouseName?: string | null;
+  creatorUser?: string | null;
+  creatorUserEmail?: string | null;
 }
 
 export interface SupplyOrderListResponse {
@@ -126,4 +128,23 @@ export interface CreateSupplyOrderDto {
   warehouseId?: string;
   description?: string | null;
   products: CreateSupplyOrderProductDto[];
+}
+
+export interface ReceiveSupplyOrderBatchDto {
+  quantity: number;
+  productionDate?: string | Date;
+  expirationDate?: string | Date;
+}
+
+export interface ReceiveSupplyOrderProductDto {
+  productId: string;
+  quantity: number;
+  batches?: ReceiveSupplyOrderBatchDto[];
+}
+
+export interface ReceiveSupplyOrderDto {
+  reference?: string | null;
+  notes?: string | null;
+  closePartial?: boolean;
+  products: ReceiveSupplyOrderProductDto[];
 }

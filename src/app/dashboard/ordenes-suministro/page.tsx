@@ -10,6 +10,7 @@ import { supplyOrderService } from "@/services/supply-order.service";
 import { warehouseService } from "@/services/warehouse.service";
 import type {
   CreateSupplyOrderDto,
+  ReceiveSupplyOrderDto,
   SupplyOrderDetail,
   SupplyOrderItem,
   SupplyOrderStatus,
@@ -19,6 +20,7 @@ import type { StoreLookupItem } from "@/types/store";
 import type { WarehouseSimpleItem } from "@/services/warehouse.service";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -43,6 +45,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const PAGE_SIZE = 12;
 
@@ -89,6 +92,7 @@ const shortId = (value?: string | null) => {
 };
 
 export default function OrdenesSuministroPage() {
+  const [activeTab, setActiveTab] = useState<"manage" | "receive">("manage");
   const [orders, setOrders] = useState<SupplyOrderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -105,6 +109,22 @@ export default function OrdenesSuministroPage() {
   const [detailSubmitting, setDetailSubmitting] = useState(false);
   const [detail, setDetail] = useState<SupplyOrderDetail | null>(null);
 
+  const [receiveOrders, setReceiveOrders] = useState<SupplyOrderItem[]>([]);
+  const [receiveLoading, setReceiveLoading] = useState(false);
+  const [receivePage, setReceivePage] = useState(1);
+  const [receiveTotalPages, setReceiveTotalPages] = useState(1);
+  const [receiveTotal, setReceiveTotal] = useState(0);
+  const [receiveOpen, setReceiveOpen] = useState(false);
+  const [receiveDetailLoading, setReceiveDetailLoading] = useState(false);
+  const [receiveSubmitting, setReceiveSubmitting] = useState(false);
+  const [receiveDetail, setReceiveDetail] = useState<SupplyOrderDetail | null>(null);
+  const [receiveForm, setReceiveForm] = useState<ReceiveSupplyOrderDto>({
+    reference: "",
+    notes: "",
+    closePartial: false,
+    products: [],
+  });
+
   const [createOpen, setCreateOpen] = useState(false);
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [lookupLoading, setLookupLoading] = useState(false);
@@ -117,6 +137,15 @@ export default function OrdenesSuministroPage() {
     providerId: "",
     description: "",
     products: [{ productId: "", quantity: 1, note: "" }],
+  });
+  const [createErrors, setCreateErrors] = useState<{
+    providerId: boolean;
+    locationId: boolean;
+    products: { productId: boolean; quantity: boolean }[];
+  }>({
+    providerId: false,
+    locationId: false,
+    products: [],
   });
 
   const filtersKey = useMemo(
@@ -161,6 +190,11 @@ export default function OrdenesSuministroPage() {
   }, [loadOrders]);
 
   useEffect(() => {
+    if (activeTab !== "receive") return;
+    loadReceiveOrders(1);
+  }, [activeTab]);
+
+  useEffect(() => {
     const timeout = setTimeout(() => {
       setPage(1);
       loadOrders(1);
@@ -175,11 +209,59 @@ export default function OrdenesSuministroPage() {
     loadOrders(nextPage);
   };
 
+  const loadReceiveOrders = useCallback(async (targetPage = 1) => {
+    try {
+      setReceiveLoading(true);
+      const response = await supplyOrderService.getSupplyOrders({
+        page: targetPage,
+        pageSize: PAGE_SIZE,
+        status: "PENDING",
+      });
+      setReceiveOrders(response.data || []);
+      setReceiveTotal(response.total || 0);
+      setReceiveTotalPages(response.totalPages || 1);
+      setReceivePage(response.page || targetPage);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.response?.data?.message || error?.message || "No se pudieron cargar las órdenes aprobadas");
+      setReceiveOrders([]);
+      setReceiveTotal(0);
+      setReceiveTotalPages(1);
+    } finally {
+      setReceiveLoading(false);
+    }
+  }, []);
+
   const clearFilters = () => {
     setStatusFilter("all");
     setUserIdFilter("");
     setFromDate("");
     setToDate("");
+  };
+
+  const openReceive = async (orderId: string) => {
+    setReceiveOpen(true);
+    setReceiveDetailLoading(true);
+    setReceiveDetail(null);
+
+    try {
+      const response = await supplyOrderService.getSupplyOrderById(orderId);
+      setReceiveDetail(response);
+      setReceiveForm({
+        reference: "",
+        notes: "",
+        closePartial: false,
+        products: response.products.map((product) => ({
+          productId: product.productId,
+          quantity: product.quantity,
+        })),
+      });
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.response?.data?.message || error?.message || "No se pudo cargar la orden");
+    } finally {
+      setReceiveDetailLoading(false);
+    }
   };
 
   const openDetail = async (orderId: string) => {
@@ -205,6 +287,11 @@ export default function OrdenesSuministroPage() {
       products: [{ productId: "", quantity: 1, note: "" }],
     });
     setLocationType("store");
+    setCreateErrors({
+      providerId: false,
+      locationId: false,
+      products: [],
+    });
   };
 
   const ensureLookupsLoaded = async () => {
@@ -232,29 +319,37 @@ export default function OrdenesSuministroPage() {
   };
 
   const handleCreate = async () => {
-    if (!createForm.providerId.trim()) {
-      toast.error("Selecciona un proveedor");
-      return;
+    const nextErrors = {
+      providerId: !createForm.providerId.trim(),
+      locationId:
+        locationType === "store"
+          ? !createForm.storeId?.trim()
+          : !createForm.warehouseId?.trim(),
+      products: createForm.products.map((item) => ({
+        productId: !item.productId.trim(),
+        quantity: !item.quantity || item.quantity <= 0,
+      })),
+    };
+
+    setCreateErrors(nextErrors);
+
+    if (nextErrors.providerId) toast.error("Selecciona un proveedor");
+    if (nextErrors.locationId) {
+      toast.error(locationType === "store" ? "Selecciona una tienda" : "Selecciona un almacén");
     }
 
-    if (locationType === "store" && !createForm.storeId?.trim()) {
-      toast.error("Selecciona una tienda");
-      return;
+    const hasProductErrors = nextErrors.products.some((item) => item.productId || item.quantity);
+    if (hasProductErrors) {
+      toast.error("Completa los productos con cantidades válidas");
     }
 
-    if (locationType === "warehouse" && !createForm.warehouseId?.trim()) {
-      toast.error("Selecciona un almacén");
+    if (nextErrors.providerId || nextErrors.locationId || hasProductErrors) {
       return;
     }
 
     const validProducts = createForm.products.filter(
       (item) => item.productId.trim() && item.quantity > 0
     );
-
-    if (validProducts.length === 0) {
-      toast.error("Agrega al menos un producto válido");
-      return;
-    }
 
     try {
       setCreateSubmitting(true);
@@ -288,6 +383,19 @@ export default function OrdenesSuministroPage() {
     setDetailSubmitting(false);
   };
 
+  const closeReceive = () => {
+    setReceiveOpen(false);
+    setReceiveDetail(null);
+    setReceiveDetailLoading(false);
+    setReceiveSubmitting(false);
+    setReceiveForm({
+      reference: "",
+      notes: "",
+      closePartial: false,
+      products: [],
+    });
+  };
+
   const handleAnnull = async () => {
     if (!detail) return;
 
@@ -308,177 +416,343 @@ export default function OrdenesSuministroPage() {
     }
   };
 
+  const handleReceive = async () => {
+    if (!receiveDetail) return;
+
+    if (receiveDetail.status !== "PENDING") {
+      toast.error("Solo se pueden recibir órdenes aprobadas");
+      return;
+    }
+
+    const validProducts = receiveForm.products.filter((item) => item.productId && item.quantity > 0);
+    if (validProducts.length === 0) {
+      toast.error("Debes ingresar al menos una cantidad válida");
+      return;
+    }
+
+    try {
+      setReceiveSubmitting(true);
+      await supplyOrderService.receiveSupplyOrder(receiveDetail.id, {
+        reference: receiveForm.reference?.trim() || undefined,
+        notes: receiveForm.notes?.trim() || undefined,
+        closePartial: receiveForm.closePartial,
+        products: validProducts,
+      });
+      toast.success("Recepción registrada");
+      closeReceive();
+      loadReceiveOrders(receivePage);
+      loadOrders(page);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.response?.data?.message || error?.message || "No se pudo registrar la recepción");
+    } finally {
+      setReceiveSubmitting(false);
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!detail) return;
+
+    const confirmed = window.confirm("¿Deseas aprobar esta orden de suministro?");
+    if (!confirmed) return;
+
+    try {
+      setDetailSubmitting(true);
+      await supplyOrderService.approveSupplyOrder(detail.id);
+      toast.success("Orden aprobada");
+      closeDetail();
+      loadOrders(page);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.response?.data?.message || error?.message || "No se pudo aprobar la orden");
+    } finally {
+      setDetailSubmitting(false);
+    }
+  };
+
   return (
     <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
-      <Card className="shadow-sm">
-        <CardHeader className="p-4 sm:p-6 pb-0 sm:pb-0">
-          <div className="flex flex-col space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="space-y-1">
-                <CardTitle className="text-xl sm:text-2xl font-semibold tracking-tight">
-                  Órdenes de suministro
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Lista de órdenes con filtros dinámicos por estado, usuario y fecha
-                </p>
-              </div>
-              <Button
-                onClick={() => {
-                  ensureLookupsLoaded();
-                  setCreateOpen(true);
-                }}
-              >
-                Crear orden
-              </Button>
-            </div>
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "manage" | "receive")} className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="manage">Órdenes de suministro</TabsTrigger>
+          <TabsTrigger value="receive">Recepciones</TabsTrigger>
+        </TabsList>
 
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    type="search"
-                    placeholder="Buscar por ID de usuario creador..."
-                    className="pl-9"
-                    value={userIdFilter}
-                    onChange={(e) => setUserIdFilter(e.target.value)}
-                  />
-                  {userIdFilter && (
-                    <button
-                      type="button"
-                      onClick={() => setUserIdFilter("")}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                      title="Limpiar búsqueda"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
+        <TabsContent value="manage">
+          <Card className="shadow-sm">
+            <CardHeader className="p-4 sm:p-6 pb-0 sm:pb-0">
+              <div className="flex flex-col space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="space-y-1">
+                    <CardTitle className="text-xl sm:text-2xl font-semibold tracking-tight">
+                      Órdenes de suministro
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Lista de órdenes con filtros dinámicos por estado, usuario y fecha
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => {
+                      ensureLookupsLoaded();
+                      setCreateOpen(true);
+                    }}
+                  >
+                    Crear orden
+                  </Button>
                 </div>
 
-                <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as SupplyOrderStatus | "all")}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Estado" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="PENDING">Pendiente</SelectItem>
-                    <SelectItem value="PARTIAL">Parcial</SelectItem>
-                    <SelectItem value="PARTIALLY_RECEIVED">Parcialmente recibido</SelectItem>
-                    <SelectItem value="RECEIVED">Recibido</SelectItem>
-                    <SelectItem value="CANCELLED">Cancelado</SelectItem>
-                    <SelectItem value="ANNULLATED">Anulada</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="search"
+                        placeholder="Buscar por ID de usuario creador..."
+                        className="pl-9"
+                        value={userIdFilter}
+                        onChange={(e) => setUserIdFilter(e.target.value)}
+                      />
+                      {userIdFilter && (
+                        <button
+                          type="button"
+                          onClick={() => setUserIdFilter("")}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                          title="Limpiar búsqueda"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
 
-                <Input
-                  type="date"
-                  value={fromDate}
-                  onChange={(e) => setFromDate(e.target.value)}
-                />
-                <Input
-                  type="date"
-                  value={toDate}
-                  onChange={(e) => setToDate(e.target.value)}
-                />
+                    <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as SupplyOrderStatus | "all")}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Estado" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="ISSUED">Emitida</SelectItem>
+                        <SelectItem value="PENDING">Pendiente</SelectItem>
+                        <SelectItem value="PARTIAL">Parcial</SelectItem>
+                        <SelectItem value="PARTIALLY_RECEIVED">Parcialmente recibida</SelectItem>
+                        <SelectItem value="RECEIVED">Recibida</SelectItem>
+                        <SelectItem value="ANNULLATED">Anulada</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    <Input
+                      type="date"
+                      value={fromDate}
+                      onChange={(e) => setFromDate(e.target.value)}
+                    />
+                    <Input
+                      type="date"
+                      value={toDate}
+                      onChange={(e) => setToDate(e.target.value)}
+                    />
+                  </div>
+
+                  {(userIdFilter || statusFilter !== "all" || fromDate || toDate) && (
+                    <div className="flex justify-between items-center text-xs text-muted-foreground">
+                      <span>Filtros activos</span>
+                      <Button variant="ghost" size="sm" onClick={clearFilters} className="h-7 px-2">
+                        Limpiar filtros
+                      </Button>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>
+                      Mostrando <strong>{orders.length}</strong> de <strong>{total}</strong> órdenes
+                      {totalPages > 1 && ` · página ${page} de ${totalPages}`}
+                    </span>
+                  </div>
+                </div>
               </div>
+            </CardHeader>
 
-              {(userIdFilter || statusFilter !== "all" || fromDate || toDate) && (
-                <div className="flex justify-between items-center text-xs text-muted-foreground">
-                  <span>Filtros activos</span>
-                  <Button variant="ghost" size="sm" onClick={clearFilters} className="h-7 px-2">
-                    Limpiar filtros
-                  </Button>
+            <CardContent className="p-0 sm:p-6 pt-0">
+              {loading ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              ) : orders.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground">
+                  No se encontraron órdenes de suministro.
+                </div>
+              ) : (
+                <div className="rounded-md border overflow-hidden">
+                  <Table>
+                    <TableHeader className="bg-muted/50">
+                      <TableRow>
+                        <TableHead>Código</TableHead>
+                        <TableHead>Estado</TableHead>
+                        <TableHead>Emisión</TableHead>
+                        <TableHead>Proveedor</TableHead>
+                        <TableHead>Creado por</TableHead>
+                        <TableHead>Tienda</TableHead>
+                        <TableHead>Almacén</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {orders.map((order) => {
+                        const status = statusLabels[order.status];
+                        return (
+                          <TableRow key={order.id} className="cursor-pointer" onClick={() => openDetail(order.id)}>
+                            <TableCell className="font-medium">{order.code}</TableCell>
+                            <TableCell>
+                              <span
+                                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${status.className}`}
+                              >
+                                {status.label}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              {order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">{order.providerName || "-"}</TableCell>
+                            <TableCell>
+                              <div className="text-sm leading-tight">
+                                <div className="font-medium">{order.creatorUser || "-"}</div>
+                                <div className="text-xs text-muted-foreground">{order.creatorUserEmail || "-"}</div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">{order.storeName || "-"}</TableCell>
+                            <TableCell className="text-muted-foreground">{order.warehouseName || "-"}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
                 </div>
               )}
 
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>
-                  Mostrando <strong>{orders.length}</strong> de <strong>{total}</strong> órdenes
-                  {totalPages > 1 && ` · página ${page} de ${totalPages}`}
-                </span>
-              </div>
-            </div>
-          </div>
-        </CardHeader>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <div className="text-sm text-muted-foreground">
+                    Página {page} de {totalPages}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(page - 1)}
+                      disabled={page <= 1}
+                      className="h-8"
+                    >
+                      Anterior
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(page + 1)}
+                      disabled={page >= totalPages}
+                      className="h-8"
+                    >
+                      Siguiente
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-        <CardContent className="p-0 sm:p-6 pt-0">
-          {loading ? (
-            <div className="flex justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            </div>
-          ) : orders.length === 0 ? (
-            <div className="text-center py-10 text-muted-foreground">
-              No se encontraron órdenes de suministro.
-            </div>
-          ) : (
-            <div className="rounded-md border overflow-hidden">
-              <Table>
-                <TableHeader className="bg-muted/50">
-                  <TableRow>
-                    <TableHead>Código</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead>Emisión</TableHead>
-                    <TableHead>Proveedor</TableHead>
-                    <TableHead>Tienda</TableHead>
-                    <TableHead>Almacén</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {orders.map((order) => {
-                    const status = statusLabels[order.status];
-                    return (
-                      <TableRow key={order.id} className="cursor-pointer" onClick={() => openDetail(order.id)}>
-                        <TableCell className="font-medium">{order.code}</TableCell>
-                        <TableCell>
-                          <span
-                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${status.className}`}
-                          >
-                            {status.label}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          {order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">{shortId(order.providerId)}</TableCell>
-                        <TableCell className="text-muted-foreground">{shortId(order.storeId)}</TableCell>
-                        <TableCell className="text-muted-foreground">{shortId(order.warehouseId)}</TableCell>
+        <TabsContent value="receive">
+          <Card className="shadow-sm">
+            <CardHeader className="p-4 sm:p-6 pb-0 sm:pb-0">
+              <div className="flex flex-col space-y-2">
+                <CardTitle className="text-xl sm:text-2xl font-semibold tracking-tight">
+                  Recepciones de órdenes
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Solo se pueden recibir órdenes aprobadas (estado pendiente).
+                </p>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0 sm:p-6 pt-0">
+              {receiveLoading ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              ) : receiveOrders.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground">No hay órdenes aprobadas.</div>
+              ) : (
+                <div className="rounded-md border overflow-hidden">
+                  <Table>
+                    <TableHeader className="bg-muted/50">
+                      <TableRow>
+                        <TableHead>Código</TableHead>
+                        <TableHead>Estado</TableHead>
+                        <TableHead>Emisión</TableHead>
+                        <TableHead>Proveedor</TableHead>
+                        <TableHead>Tienda</TableHead>
+                        <TableHead>Almacén</TableHead>
+                        <TableHead className="text-right">Acción</TableHead>
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+                    </TableHeader>
+                    <TableBody>
+                      {receiveOrders.map((order) => {
+                        const status = statusLabels[order.status];
+                        return (
+                          <TableRow key={order.id}>
+                            <TableCell className="font-medium">{order.code}</TableCell>
+                            <TableCell>
+                              <span
+                                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${status.className}`}
+                              >
+                                {status.label}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              {order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">{order.providerName || "-"}</TableCell>
+                            <TableCell className="text-muted-foreground">{order.storeName || "-"}</TableCell>
+                            <TableCell className="text-muted-foreground">{order.warehouseName || "-"}</TableCell>
+                            <TableCell className="text-right">
+                              <Button size="sm" onClick={() => openReceive(order.id)}>
+                                Recibir
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
 
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t">
-              <div className="text-sm text-muted-foreground">
-                Página {page} de {totalPages}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(page - 1)}
-                  disabled={page <= 1}
-                  className="h-8"
-                >
-                  Anterior
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(page + 1)}
-                  disabled={page >= totalPages}
-                  className="h-8"
-                >
-                  Siguiente
-                </Button>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              {receiveTotalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <div className="text-sm text-muted-foreground">
+                    Página {receivePage} de {receiveTotalPages}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => loadReceiveOrders(receivePage - 1)}
+                      disabled={receivePage <= 1}
+                      className="h-8"
+                    >
+                      Anterior
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => loadReceiveOrders(receivePage + 1)}
+                      disabled={receivePage >= receiveTotalPages}
+                      className="h-8"
+                    >
+                      Siguiente
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={detailOpen} onOpenChange={(open) => (open ? setDetailOpen(true) : closeDetail())}>
         <DialogContent className="sm:max-w-[760px] max-h-[90vh] p-0 overflow-hidden">
@@ -623,21 +897,150 @@ export default function OrdenesSuministroPage() {
               )}
             </div>
 
-            <DialogFooter className="px-6 py-4 border-t flex flex-col sm:flex-row gap-2 sm:gap-2">
-              <Button variant="muted" onClick={closeDetail} disabled={detailSubmitting}>
-                Cerrar
+            <DialogFooter className="px-6 py-4 border-t flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button
+                  variant="destructive"
+                  onClick={handleAnnull}
+                  disabled={
+                    detailSubmitting ||
+                    detailLoading ||
+                    !detail ||
+                    !["ISSUED", "PENDING"].includes(detail.status)
+                  }
+                >
+                  {detailSubmitting ? "Anulando..." : "Anular orden"}
+                </Button>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
+                <Button variant="muted" onClick={closeDetail} disabled={detailSubmitting}>
+                  Cerrar
+                </Button>
+                <Button
+                  onClick={handleApprove}
+                  disabled={detailSubmitting || detailLoading || !detail || detail.status !== "ISSUED"}
+                >
+                  {detailSubmitting ? "Aprobando..." : "Aprobar orden"}
+                </Button>
+              </div>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={receiveOpen} onOpenChange={(open) => (open ? setReceiveOpen(true) : closeReceive())}>
+        <DialogContent className="sm:max-w-[760px] max-h-[90vh] p-0 overflow-hidden">
+          <div className="flex flex-col max-h-[90vh]">
+            <div className="p-6 pb-2">
+              <DialogHeader>
+                <DialogTitle>Recepción de orden de suministro</DialogTitle>
+              </DialogHeader>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 pb-6">
+              {receiveDetailLoading ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              ) : !receiveDetail ? (
+                <div className="text-center py-6 text-muted-foreground">Sin información</div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-lg border bg-muted/30 p-4">
+                    <div className="space-y-1">
+                      <span className="text-xs text-muted-foreground">Código</span>
+                      <div className="text-sm font-medium">{receiveDetail.code}</div>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-xs text-muted-foreground">Estado</span>
+                      <div>
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                            statusLabels[receiveDetail.status].className
+                          }`}
+                        >
+                          {statusLabels[receiveDetail.status].label}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2 rounded-lg border bg-background p-4">
+                      <label className="text-sm font-semibold">Referencia</label>
+                      <Input
+                        value={receiveForm.reference ?? ""}
+                        onChange={(e) => setReceiveForm((prev) => ({ ...prev, reference: e.target.value }))}
+                        placeholder="Guía o referencia"
+                      />
+                    </div>
+                    <div className="space-y-2 rounded-lg border bg-background p-4">
+                      <label className="text-sm font-semibold">Notas</label>
+                      <Input
+                        value={receiveForm.notes ?? ""}
+                        onChange={(e) => setReceiveForm((prev) => ({ ...prev, notes: e.target.value }))}
+                        placeholder="Notas de recepción"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 rounded-lg border bg-background p-4">
+                    <h3 className="text-sm font-semibold">Productos a recibir</h3>
+                    <div className="space-y-3">
+                      {receiveDetail.products.map((product, index) => (
+                        <div key={product.id} className="rounded-md border p-3 text-sm space-y-2">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                            <div className="font-medium">{product.product?.name || "Producto"}</div>
+                            <div className="text-xs text-muted-foreground">Solicitado: {product.quantity}</div>
+                          </div>
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                            <div className="flex-1">
+                              <label className="text-xs text-muted-foreground">Cantidad recibida</label>
+                              <Input
+                                type="number"
+                                min={0}
+                                value={receiveForm.products[index]?.quantity ?? 0}
+                                onChange={(e) => {
+                                  const value = Number(e.target.value);
+                                  setReceiveForm((prev) => {
+                                    const nextProducts = [...prev.products];
+                                    nextProducts[index] = {
+                                      productId: product.productId,
+                                      quantity: Number.isFinite(value) ? value : 0,
+                                    };
+                                    return { ...prev, products: nextProducts };
+                                  });
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 rounded-lg border bg-muted/30 p-4">
+                    <Checkbox
+                      id="close-partial"
+                      checked={receiveForm.closePartial}
+                      onCheckedChange={(checked) =>
+                        setReceiveForm((prev) => ({ ...prev, closePartial: Boolean(checked) }))
+                      }
+                    />
+                    <label htmlFor="close-partial" className="text-sm">
+                      Cerrar como parcialmente recibida si no se recibe todo
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="px-6 py-4 border-t flex flex-col sm:flex-row gap-2 sm:justify-end">
+              <Button variant="muted" onClick={closeReceive} disabled={receiveSubmitting}>
+                Cancelar
               </Button>
-              <Button
-                variant="destructive"
-                onClick={handleAnnull}
-                disabled={
-                  detailSubmitting ||
-                  detailLoading ||
-                  !detail ||
-                  !["ISSUED", "PENDING"].includes(detail.status)
-                }
-              >
-                {detailSubmitting ? "Anulando..." : "Anular orden"}
+              <Button onClick={handleReceive} disabled={receiveSubmitting || receiveDetailLoading || !receiveDetail}>
+                {receiveSubmitting ? "Registrando..." : "Registrar recepción"}
               </Button>
             </DialogFooter>
           </div>
@@ -666,9 +1069,14 @@ export default function OrdenesSuministroPage() {
                 <label className="text-sm font-medium">Proveedor</label>
                 <Select
                   value={createForm.providerId}
-                  onValueChange={(value) => setCreateForm((prev) => ({ ...prev, providerId: value }))}
+                  onValueChange={(value) => {
+                    setCreateForm((prev) => ({ ...prev, providerId: value }));
+                    setCreateErrors((prev) => ({ ...prev, providerId: false }));
+                  }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger
+                    className={createErrors.providerId ? "border-destructive focus-visible:ring-destructive/30" : undefined}
+                  >
                     <SelectValue placeholder={lookupLoading ? "Cargando..." : "Selecciona proveedor"} />
                   </SelectTrigger>
                   <SelectContent>
@@ -701,11 +1109,14 @@ export default function OrdenesSuministroPage() {
               {locationType === "store" ? (
                 <Select
                   value={createForm.storeId ?? ""}
-                  onValueChange={(value) =>
-                    setCreateForm((prev) => ({ ...prev, storeId: value, warehouseId: undefined }))
-                  }
+                  onValueChange={(value) => {
+                    setCreateForm((prev) => ({ ...prev, storeId: value, warehouseId: undefined }));
+                    setCreateErrors((prev) => ({ ...prev, locationId: false }));
+                  }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger
+                    className={createErrors.locationId ? "border-destructive focus-visible:ring-destructive/30" : undefined}
+                  >
                     <SelectValue placeholder={lookupLoading ? "Cargando..." : "Selecciona tienda"} />
                   </SelectTrigger>
                   <SelectContent>
@@ -719,11 +1130,14 @@ export default function OrdenesSuministroPage() {
               ) : (
                 <Select
                   value={createForm.warehouseId ?? ""}
-                  onValueChange={(value) =>
-                    setCreateForm((prev) => ({ ...prev, warehouseId: value, storeId: undefined }))
-                  }
+                  onValueChange={(value) => {
+                    setCreateForm((prev) => ({ ...prev, warehouseId: value, storeId: undefined }));
+                    setCreateErrors((prev) => ({ ...prev, locationId: false }));
+                  }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger
+                    className={createErrors.locationId ? "border-destructive focus-visible:ring-destructive/30" : undefined}
+                  >
                     <SelectValue placeholder={lookupLoading ? "Cargando..." : "Selecciona almacén"} />
                   </SelectTrigger>
                   <SelectContent>
@@ -754,10 +1168,16 @@ export default function OrdenesSuministroPage() {
                   variant="outline"
                   size="sm"
                   onClick={() =>
-                    setCreateForm((prev) => ({
-                      ...prev,
-                      products: [...prev.products, { productId: "", quantity: 1, note: "" }],
-                    }))
+                    {
+                      setCreateForm((prev) => ({
+                        ...prev,
+                        products: [...prev.products, { productId: "", quantity: 1, note: "" }],
+                      }));
+                      setCreateErrors((prev) => ({
+                        ...prev,
+                        products: [...prev.products, { productId: false, quantity: false }],
+                      }));
+                    }
                   }
                 >
                   Agregar producto
@@ -776,10 +1196,16 @@ export default function OrdenesSuministroPage() {
                             variant="ghost"
                             size="sm"
                             onClick={() =>
-                              setCreateForm((prev) => ({
-                                ...prev,
-                                products: prev.products.filter((_, idx) => idx !== index),
-                              }))
+                              {
+                                setCreateForm((prev) => ({
+                                  ...prev,
+                                  products: prev.products.filter((_, idx) => idx !== index),
+                                }));
+                                setCreateErrors((prev) => ({
+                                  ...prev,
+                                  products: prev.products.filter((_, idx) => idx !== index),
+                                }));
+                              }
                             }
                             className="h-7 px-2 text-muted-foreground"
                           >
@@ -792,16 +1218,29 @@ export default function OrdenesSuministroPage() {
                           <label className="text-sm font-medium">Producto</label>
                           <Select
                             value={item.productId}
-                            onValueChange={(value) =>
+                            onValueChange={(value) => {
                               setCreateForm((prev) => ({
                                 ...prev,
                                 products: prev.products.map((prod, idx) =>
                                   idx === index ? { ...prod, productId: value } : prod
                                 ),
-                              }))
-                            }
+                              }));
+                              setCreateErrors((prev) => ({
+                                ...prev,
+                                products: prev.products.map((prod, idx) =>
+                                  idx === index ? { ...prod, productId: false } : prod
+                                ),
+                              }));
+                            }}
                           >
-                            <SelectTrigger className="w-full truncate" title={selectedProductName || undefined}>
+                            <SelectTrigger
+                              className={`w-full truncate ${
+                                createErrors.products[index]?.productId
+                                  ? "border-destructive focus-visible:ring-destructive/30"
+                                  : ""
+                              }`}
+                              title={selectedProductName || undefined}
+                            >
                               <SelectValue
                                 className="truncate"
                                 placeholder={lookupLoading ? "Cargando..." : "Selecciona producto"}
@@ -824,15 +1263,25 @@ export default function OrdenesSuministroPage() {
                             type="number"
                             min={1}
                             value={item.quantity ?? 1}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              const value = Number(e.target.value);
                               setCreateForm((prev) => ({
                                 ...prev,
                                 products: prev.products.map((prod, idx) =>
-                                  idx === index
-                                    ? { ...prod, quantity: Math.max(1, Number(e.target.value) || 1) }
-                                    : prod
+                                  idx === index ? { ...prod, quantity: value } : prod
                                 ),
-                              }))
+                              }));
+                              setCreateErrors((prev) => ({
+                                ...prev,
+                                products: prev.products.map((prod, idx) =>
+                                  idx === index ? { ...prod, quantity: false } : prod
+                                ),
+                              }));
+                            }}
+                            className={
+                              createErrors.products[index]?.quantity
+                                ? "border-destructive focus-visible:ring-destructive/30"
+                                : undefined
                             }
                           />
                         </div>
