@@ -71,6 +71,10 @@ const statusLabels: Record<SupplyOrderStatus, { label: string; className: string
     label: "Cancelado",
     className: "bg-red-100 text-red-800",
   },
+  ANNULLATED: {
+    label: "Anulada",
+    className: "bg-red-100 text-red-800",
+  },
 };
 
 const toUtcRange = (from: string, to: string) => {
@@ -362,6 +366,7 @@ export default function OrdenesSuministroPage() {
                     <SelectItem value="PARTIALLY_RECEIVED">Parcialmente recibido</SelectItem>
                     <SelectItem value="RECEIVED">Recibido</SelectItem>
                     <SelectItem value="CANCELLED">Cancelado</SelectItem>
+                    <SelectItem value="ANNULLATED">Anulada</SelectItem>
                   </SelectContent>
                 </Select>
 
@@ -758,94 +763,102 @@ export default function OrdenesSuministroPage() {
                   Agregar producto
                 </Button>
               </div>
-              <div className="space-y-4">
-                {createForm.products.map((item, index) => (
-                  <div key={`${item.productId}-${index}`} className="space-y-3 rounded-md border bg-background p-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-muted-foreground">Producto {index + 1}</span>
-                      {createForm.products.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            setCreateForm((prev) => ({
-                              ...prev,
-                              products: prev.products.filter((_, idx) => idx !== index),
-                            }))
-                          }
-                          className="h-7 px-2 text-muted-foreground"
-                        >
-                          Quitar
-                        </Button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Producto</label>
-                        <Select
-                          value={item.productId}
-                          onValueChange={(value) =>
-                            setCreateForm((prev) => ({
-                              ...prev,
-                              products: prev.products.map((prod, idx) =>
-                                idx === index ? { ...prod, productId: value } : prod
-                              ),
-                            }))
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder={lookupLoading ? "Cargando..." : "Selecciona producto"} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {productsLookup.map((product) => (
-                              <SelectItem key={product.id} value={product.id}>
-                                {product.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+              <div className="space-y-4 max-h-[320px] overflow-y-auto pr-1">
+                {createForm.products.map((item, index) => {
+                  const selectedProductName = productsLookup.find((product) => product.id === item.productId)?.name;
+                  return (
+                    <div key={`${item.productId}-${index}`} className="space-y-3 rounded-md border bg-background p-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-muted-foreground">Producto {index + 1}</span>
+                        {createForm.products.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              setCreateForm((prev) => ({
+                                ...prev,
+                                products: prev.products.filter((_, idx) => idx !== index),
+                              }))
+                            }
+                            className="h-7 px-2 text-muted-foreground"
+                          >
+                            Quitar
+                          </Button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-2 min-w-0">
+                          <label className="text-sm font-medium">Producto</label>
+                          <Select
+                            value={item.productId}
+                            onValueChange={(value) =>
+                              setCreateForm((prev) => ({
+                                ...prev,
+                                products: prev.products.map((prod, idx) =>
+                                  idx === index ? { ...prod, productId: value } : prod
+                                ),
+                              }))
+                            }
+                          >
+                            <SelectTrigger className="w-full truncate" title={selectedProductName || undefined}>
+                              <SelectValue
+                                className="truncate"
+                                placeholder={lookupLoading ? "Cargando..." : "Selecciona producto"}
+                              />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {productsLookup.map((product) => (
+                                <SelectItem key={product.id} value={product.id}>
+                                  <span className="block max-w-[220px] truncate" title={product.name}>
+                                    {product.name}
+                                  </span>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Cantidad</label>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={item.quantity ?? 1}
+                            onChange={(e) =>
+                              setCreateForm((prev) => ({
+                                ...prev,
+                                products: prev.products.map((prod, idx) =>
+                                  idx === index
+                                    ? { ...prod, quantity: Math.max(1, Number(e.target.value) || 1) }
+                                    : prod
+                                ),
+                              }))
+                            }
+                          />
+                        </div>
                       </div>
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Cantidad</label>
+                        <label className="text-sm font-medium">Nota</label>
                         <Input
-                          type="number"
-                          min={1}
-                          value={item.quantity ?? 1}
+                          value={item.note ?? ""}
                           onChange={(e) =>
                             setCreateForm((prev) => ({
                               ...prev,
                               products: prev.products.map((prod, idx) =>
-                                idx === index
-                                  ? { ...prod, quantity: Math.max(1, Number(e.target.value) || 1) }
-                                  : prod
+                                idx === index ? { ...prod, note: e.target.value } : prod
                               ),
                             }))
                           }
+                          placeholder="Nota opcional"
                         />
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Nota</label>
-                      <Input
-                        value={item.note ?? ""}
-                        onChange={(e) =>
-                          setCreateForm((prev) => ({
-                            ...prev,
-                            products: prev.products.map((prod, idx) =>
-                              idx === index ? { ...prod, note: e.target.value } : prod
-                            ),
-                          }))
-                        }
-                        placeholder="Nota opcional"
-                      />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
-          <DialogFooter className="gap-2">
+          <DialogFooter className="px-6 py-4 border-t flex flex-col sm:flex-row gap-2 sm:gap-2">
             <Button
               variant="muted"
               onClick={() => {

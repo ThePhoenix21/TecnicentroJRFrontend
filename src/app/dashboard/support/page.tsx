@@ -407,20 +407,20 @@ export default function SupportPage() {
               ) : !detail ? (
                 <div className="text-center py-6 text-muted-foreground">Sin información</div>
               ) : (
-                <div className="space-y-4">
-                  <div className="space-y-1">
+                <div className="space-y-6">
+                  <div className="space-y-2 rounded-lg border bg-muted/30 p-4">
                     <h3 className="text-sm font-semibold">Asunto</h3>
                     <p className="text-sm">{detail.subject}</p>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2 rounded-lg border bg-background p-4">
                       <h3 className="text-sm font-semibold">Estado</h3>
                       <span className={`inline-flex text-xs px-2 py-1 rounded-full ${getStatusClasses(detail.status)}`}>
                         {statusLabel[detail.status]}
                       </span>
                     </div>
-                    <div className="space-y-1">
+                    <div className="space-y-2 rounded-lg border bg-background p-4">
                       <h3 className="text-sm font-semibold">Prioridad</h3>
                       <span className={`inline-flex text-xs px-2 py-1 rounded-full ${getPriorityClasses(detail.priority)}`}>
                         {priorityLabel[detail.priority]}
@@ -428,14 +428,14 @@ export default function SupportPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-1">
+                  <div className="space-y-2 rounded-lg border bg-background p-4">
                     <h3 className="text-sm font-semibold">Fecha de creación</h3>
                     <p className="text-sm text-muted-foreground">
                       {detail.createdAt ? new Date(detail.createdAt).toLocaleString() : '-'}
                     </p>
                   </div>
 
-                  <div className="space-y-1">
+                  <div className="space-y-2 rounded-lg border bg-background p-4">
                     <h3 className="text-sm font-semibold">Mensaje</h3>
                     <p className="text-sm whitespace-pre-wrap">{detail.message}</p>
                   </div>

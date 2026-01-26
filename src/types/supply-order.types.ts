@@ -4,7 +4,8 @@ export type SupplyOrderStatus =
   | "PARTIAL"
   | "PARTIALLY_RECEIVED"
   | "RECEIVED"
-  | "CANCELLED";
+  | "CANCELLED"
+  | "ANNULLATED";
 
 export interface SupplyOrderItem {
   id: string;
