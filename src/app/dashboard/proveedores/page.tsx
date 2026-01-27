@@ -433,103 +433,124 @@ export default function ProveedoresPage() {
             <div className="space-y-3">
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    type="search"
-                    placeholder="Buscar proveedor..."
-                    className="pl-9"
-                    value={providerQuery}
-                    onFocus={() => setShowProviderSuggestions(true)}
-                    onBlur={() => setTimeout(() => setShowProviderSuggestions(false), 150)}
-                    onChange={(e) => {
-                      setProviderQuery(e.target.value);
-                      setProviderFilter("");
-                      setShowProviderSuggestions(true);
-                    }}
-                  />
-                  {providerQuery && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setProviderQuery("");
-                        setProviderFilter("");
-                        setShowProviderSuggestions(false);
-                      }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                      title="Limpiar búsqueda"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
-                  {showProviderSuggestions && filteredProviderSuggestions.length > 0 && (
-                    <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
-                      {filteredProviderSuggestions.map((item) => (
+                  <div className="space-y-1">
+                    <div className="relative invisible">
+                      <span className="text-xs font-medium text-muted-foreground">Proveedor</span>
+                    </div>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="search"
+                        placeholder="Buscar proveedor..."
+                        className="pl-9"
+                        value={providerQuery}
+                        onFocus={() => setShowProviderSuggestions(true)}
+                        onBlur={() => setTimeout(() => setShowProviderSuggestions(false), 150)}
+                        onChange={(e) => {
+                          setProviderQuery(e.target.value);
+                          setProviderFilter("");
+                          setShowProviderSuggestions(true);
+                        }}
+                      />
+                      {providerQuery && (
                         <button
-                          key={item.id}
                           type="button"
                           onClick={() => {
-                            setProviderFilter(item.name);
-                            setProviderQuery(item.name);
+                            setProviderQuery("");
+                            setProviderFilter("");
                             setShowProviderSuggestions(false);
                           }}
-                          className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                          title="Limpiar búsqueda"
                         >
-                          {item.name}
+                          <X className="h-4 w-4" />
                         </button>
-                      ))}
+                      )}
+                      {showProviderSuggestions && filteredProviderSuggestions.length > 0 && (
+                        <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
+                          {filteredProviderSuggestions.map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => {
+                                setProviderFilter(item.name);
+                                setProviderQuery(item.name);
+                                setShowProviderSuggestions(false);
+                              }}
+                              className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                            >
+                              {item.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
 
                 <div className="relative">
-                  <Input
-                    type="search"
-                    placeholder="Filtrar por RUC..."
-                    value={rucQuery}
-                    onFocus={() => setShowRucSuggestions(true)}
-                    onBlur={() => setTimeout(() => setShowRucSuggestions(false), 150)}
-                    onChange={(e) => {
-                      setRucQuery(e.target.value);
-                      setRucFilter("");
-                      setShowRucSuggestions(true);
-                    }}
-                  />
-                  {rucQuery && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRucQuery("");
-                        setRucFilter("");
-                        setShowRucSuggestions(false);
-                      }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                      title="Limpiar búsqueda"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
-                  {showRucSuggestions && filteredRucSuggestions.length > 0 && (
-                    <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
-                      {filteredRucSuggestions.map((item) => (
+                  <div className="space-y-1">
+                    <div className="relative invisible">
+                      <span className="text-xs font-medium text-muted-foreground">RUC</span>
+                    </div>
+                    <div className="relative">
+                      <Input
+                        type="search"
+                        placeholder="Filtrar por RUC..."
+                        value={rucQuery}
+                        onFocus={() => setShowRucSuggestions(true)}
+                        onBlur={() => setTimeout(() => setShowRucSuggestions(false), 150)}
+                        onChange={(e) => {
+                          setRucQuery(e.target.value);
+                          setRucFilter("");
+                          setShowRucSuggestions(true);
+                        }}
+                      />
+                      {rucQuery && (
                         <button
-                          key={item.id}
                           type="button"
                           onClick={() => {
-                            setRucFilter(item.ruc);
-                            setRucQuery(item.ruc);
+                            setRucQuery("");
+                            setRucFilter("");
                             setShowRucSuggestions(false);
                           }}
-                          className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                          title="Limpiar búsqueda"
                         >
-                          {item.ruc}
+                          <X className="h-4 w-4" />
                         </button>
-                      ))}
+                      )}
+                      {showRucSuggestions && filteredRucSuggestions.length > 0 && (
+                        <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
+                          {filteredRucSuggestions.map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => {
+                                setRucFilter(item.ruc);
+                                setRucQuery(item.ruc);
+                                setShowRucSuggestions(false);
+                              }}
+                              className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                            >
+                              {item.ruc}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
 
-                <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
-                <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-muted-foreground">Desde</span>
+                  <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+                </div>
+
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-muted-foreground">Hasta</span>
+                  <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+                </div>
               </div>
 
               {(providerFilter || rucFilter || fromDate || toDate) && (
@@ -539,19 +560,18 @@ export default function ProveedoresPage() {
                     Limpiar filtros
                   </Button>
                 </div>
-              )}
-
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>
-                  Mostrando <strong>{providers.length}</strong> de <strong>{total}</strong> proveedores
-                  {totalPages > 1 && ` · página ${page} de ${totalPages}`}
-                </span>
-              </div>
+              )}              
             </div>
           </div>
         </CardHeader>
 
         <CardContent className="p-4 sm:p-6">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground pb-4">
+              <span>
+                Mostrando <strong>{providers.length}</strong> de <strong>{total}</strong> proveedores
+                {totalPages > 1 && ` · página ${page} de ${totalPages}`}
+              </span>
+          </div>
           {loading ? (
             <div className="flex justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>

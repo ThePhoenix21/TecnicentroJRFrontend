@@ -548,127 +548,151 @@ export default function OrdenesSuministroPage() {
 
                 <div className="space-y-3">
                   <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        type="search"
-                        placeholder="Buscar por usuario creador..."
-                        className="pl-9"
-                        value={userQuery}
-                        onFocus={() => setShowUserSuggestions(true)}
-                        onBlur={() => setTimeout(() => setShowUserSuggestions(false), 150)}
-                        onChange={(e) => {
-                          setUserQuery(e.target.value);
-                          setUserIdFilter("");
-                          setShowUserSuggestions(true);
-                        }}
-                      />
-                      {userQuery && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setUserQuery("");
-                            setUserIdFilter("");
-                            setShowUserSuggestions(false);
-                          }}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                          title="Limpiar búsqueda"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      )}
-                      {showUserSuggestions && filteredUsers.length > 0 && (
-                        <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
-                          {filteredUsers.map((user) => (
+                    <div className="relative lg:col-span-1">
+                      <div className="space-y-1">
+                        <div className="relative invisible">
+                          <span className="text-xs font-medium text-muted-foreground">Usuario creador</span>
+                        </div>
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            type="search"
+                            placeholder="Buscar usuario creador..."
+                            className="pl-9"
+                            value={userQuery}
+                            onFocus={() => setShowUserSuggestions(true)}
+                            onBlur={() => setTimeout(() => setShowUserSuggestions(false), 150)}
+                            onChange={(e) => {
+                              setUserQuery(e.target.value);
+                              setUserIdFilter("");
+                              setShowUserSuggestions(true);
+                            }}
+                          />
+                          {userQuery && (
                             <button
-                              key={user.id}
                               type="button"
                               onClick={() => {
-                                setUserIdFilter(user.id);
-                                setUserQuery(user.name);
+                                setUserQuery("");
+                                setUserIdFilter("");
                                 setShowUserSuggestions(false);
                               }}
-                              className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                              title="Limpiar búsqueda"
                             >
-                              {user.name}
+                              <X className="h-4 w-4" />
                             </button>
-                          ))}
+                          )}
+                          {showUserSuggestions && filteredUsers.length > 0 && (
+                            <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
+                              {filteredUsers.map((user) => (
+                                <button
+                                  key={user.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setUserIdFilter(user.id);
+                                    setUserQuery(user.name);
+                                    setShowUserSuggestions(false);
+                                  }}
+                                  className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                                >
+                                  {user.name}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
                     </div>
 
                     <div className="relative">
-                      <Input
-                        type="search"
-                        placeholder="Buscar por código de orden..."
-                        value={codeQuery}
-                        onFocus={() => setShowCodeSuggestions(true)}
-                        onBlur={() => setTimeout(() => setShowCodeSuggestions(false), 150)}
-                        onChange={(e) => {
-                          setCodeQuery(e.target.value);
-                          setCodeFilter("");
-                          setShowCodeSuggestions(true);
-                        }}
-                      />
-                      {codeQuery && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCodeQuery("");
-                            setCodeFilter("");
-                            setShowCodeSuggestions(false);
-                          }}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                          title="Limpiar búsqueda"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      )}
-                      {showCodeSuggestions && filteredOrders.length > 0 && (
-                        <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
-                          {filteredOrders.map((order) => (
+                      <div className="space-y-1">
+                        <div className="relative invisible">
+                          <span className="text-xs font-medium text-muted-foreground">Código de orden</span>
+                        </div>
+                        <div className="relative">
+                          <Input
+                            type="search"
+                            placeholder="Buscar código de orden..."
+                            value={codeQuery}
+                            onFocus={() => setShowCodeSuggestions(true)}
+                            onBlur={() => setTimeout(() => setShowCodeSuggestions(false), 150)}
+                            onChange={(e) => {
+                              setCodeQuery(e.target.value);
+                              setCodeFilter("");
+                              setShowCodeSuggestions(true);
+                            }}
+                          />
+                          {codeQuery && (
                             <button
-                              key={order.id}
                               type="button"
                               onClick={() => {
-                                setCodeFilter(order.code);
-                                setCodeQuery(order.code);
+                                setCodeQuery("");
+                                setCodeFilter("");
                                 setShowCodeSuggestions(false);
                               }}
-                              className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                              title="Limpiar búsqueda"
                             >
-                              {order.code}
+                              <X className="h-4 w-4" />
                             </button>
-                          ))}
+                          )}
+                          {showCodeSuggestions && filteredOrders.length > 0 && (
+                            <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
+                              {filteredOrders.map((order) => (
+                                <button
+                                  key={order.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setCodeFilter(order.code);
+                                    setCodeQuery(order.code);
+                                    setShowCodeSuggestions(false);
+                                  }}
+                                  className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                                >
+                                  {order.code}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
                     </div>
 
-                    <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as SupplyOrderStatus | "all")}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Estado" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todos</SelectItem>
-                        <SelectItem value="ISSUED">Emitida</SelectItem>
-                        <SelectItem value="PENDING">Pendiente</SelectItem>
-                        <SelectItem value="PARTIAL">Parcial</SelectItem>
-                        <SelectItem value="PARTIALLY_RECEIVED">Parcialmente recibida</SelectItem>
-                        <SelectItem value="RECEIVED">Recibida</SelectItem>
-                        <SelectItem value="ANNULLATED">Anulada</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div className="space-y-1">
+                      <span className="text-xs font-medium text-muted-foreground">Estado</span>
+                      <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as SupplyOrderStatus | "all")}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Estado" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todos</SelectItem>
+                          <SelectItem value="ISSUED">Emitida</SelectItem>
+                          <SelectItem value="PENDING">Pendiente</SelectItem>
+                          <SelectItem value="PARTIAL">Parcial</SelectItem>
+                          <SelectItem value="PARTIALLY_RECEIVED">Parcialmente recibida</SelectItem>
+                          <SelectItem value="RECEIVED">Recibida</SelectItem>
+                          <SelectItem value="ANNULLATED">Anulada</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                    <Input
-                      type="date"
-                      value={fromDate}
-                      onChange={(e) => setFromDate(e.target.value)}
-                    />
-                    <Input
-                      type="date"
-                      value={toDate}
-                      onChange={(e) => setToDate(e.target.value)}
-                    />
+                    <div className="space-y-1">
+                      <span className="text-xs font-medium text-muted-foreground">Desde</span>
+                      <Input
+                        type="date"
+                        value={fromDate}
+                        onChange={(e) => setFromDate(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-xs font-medium text-muted-foreground">Hasta</span>
+                      <Input
+                        type="date"
+                        value={toDate}
+                        onChange={(e) => setToDate(e.target.value)}
+                      />
+                    </div>
                   </div>
 
                   {(userIdFilter || statusFilter !== "all" || fromDate || toDate) && (
@@ -679,18 +703,17 @@ export default function OrdenesSuministroPage() {
                       </Button>
                     </div>
                   )}
-
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span>
-                      Mostrando <strong>{orders.length}</strong> de <strong>{total}</strong> órdenes
-                      {totalPages > 1 && ` · página ${page} de ${totalPages}`}
-                    </span>
-                  </div>
                 </div>
               </div>
             </CardHeader>
 
             <CardContent className="p-0 sm:p-6 pt-0">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground pb-4">
+                <span>
+                  Mostrando <strong>{orders.length}</strong> de <strong>{total}</strong> órdenes
+                  {totalPages > 1 && ` · página ${page} de ${totalPages}`}
+                </span>
+              </div>
               {loading ? (
                 <div className="flex justify-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
