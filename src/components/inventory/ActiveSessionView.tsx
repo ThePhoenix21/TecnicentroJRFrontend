@@ -50,6 +50,8 @@ export function ActiveSessionView({ session, onSessionClosed, onBack }: ActiveSe
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isClosing, setIsClosing] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [isReconciling, setIsReconciling] = useState(false);
   const [savingItems, setSavingItems] = useState<Set<string>>(new Set());
   
   // Estado para el reporte PDF
@@ -177,8 +179,12 @@ export function ActiveSessionView({ session, onSessionClosed, onBack }: ActiveSe
       return;
     }
 
+    setShowCloseConfirm(true);
+  };
+
+  const closeSessionOnly = async () => {
     if (!confirm("¿Estás seguro de finalizar el inventario? Esto cerrará la sesión y generará el reporte final.")) return;
-    
+
     setIsClosing(true);
     try {
       const report = await inventoryService.closeSession(session.id);
@@ -206,6 +212,59 @@ export function ActiveSessionView({ session, onSessionClosed, onBack }: ActiveSe
       });
     } finally {
       setIsClosing(false);
+    }
+  };
+
+  const reconcileAndCloseSession = async () => {
+    if (!confirm("¿Confirmas que deseas cuadrar el inventario teórico con el físico? Se generarán movimientos automáticamente.")) return;
+
+    setIsReconciling(true);
+    try {
+      const differences = countedItems
+        .filter((item) => item.difference !== 0)
+        .map((item) => ({
+          storeProductId: item.storeProductId,
+          difference: item.difference,
+        }));
+
+      if (differences.length > 0) {
+        await Promise.all(
+          differences.map((d) =>
+            inventoryService.createMovimiento({
+              storeProductId: d.storeProductId,
+              type: "ADJUST",
+              quantity: d.difference,
+              description: `Cuadre automático por cierre de inventario: ${session.name}`,
+            })
+          )
+        );
+      }
+
+      const report = await inventoryService.closeSession(session.id);
+
+      toast({
+        title: "Inventario finalizado",
+        description:
+          differences.length > 0
+            ? `Se cuadró el inventario con ${differences.length} movimiento(s) y se cerró la sesión.`
+            : "No había descuadres. La sesión se cerró correctamente.",
+      });
+
+      if (canIssuePdf) {
+        setReportData(report);
+        setShowReport(true);
+      } else {
+        onSessionClosed();
+      }
+    } catch (error) {
+      console.error("Error reconciling/closing session:", error);
+      toast({
+        title: "Error",
+        description: "No se pudo cuadrar y finalizar la sesión.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsReconciling(false);
     }
   };
 
@@ -254,8 +313,8 @@ export function ActiveSessionView({ session, onSessionClosed, onBack }: ActiveSe
           </Button>
           <Button variant="outline" onClick={onBack}>Volver</Button>
           {isOpen && isAdmin && (
-            <Button onClick={handleCloseSession} disabled={isClosing}>
-              {isClosing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+            <Button onClick={handleCloseSession} disabled={isClosing || isReconciling}>
+              {isClosing || isReconciling ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
               Finalizar Inventario
             </Button>
           )}
@@ -430,6 +489,55 @@ export function ActiveSessionView({ session, onSessionClosed, onBack }: ActiveSe
               onSessionClosed();
             }}>
               Cerrar y Volver
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showCloseConfirm} onOpenChange={(open) => {
+        if (isClosing || isReconciling) return;
+        setShowCloseConfirm(open);
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Finalizar inventario</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>
+              ¿Deseas cuadrar el inventario teórico con el conteo físico en caso de que haya descuadres?
+            </p>
+            <p>
+              Si aceptas, se generarán movimientos de inventario automáticamente antes de cerrar la sesión.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowCloseConfirm(false);
+              }}
+              disabled={isClosing || isReconciling}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                setShowCloseConfirm(false);
+                await closeSessionOnly();
+              }}
+              disabled={isClosing || isReconciling}
+            >
+              Cerrar sin cuadrar
+            </Button>
+            <Button
+              onClick={async () => {
+                setShowCloseConfirm(false);
+                await reconcileAndCloseSession();
+              }}
+              disabled={isClosing || isReconciling}
+            >
+              Cuadrar y cerrar
             </Button>
           </DialogFooter>
         </DialogContent>
