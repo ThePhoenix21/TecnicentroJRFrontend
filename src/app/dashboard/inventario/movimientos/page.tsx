@@ -17,7 +17,7 @@ export default function InventoryMovementsPage() {
   };
 
   return (
-    <div className="space-y-6 p-6 h-[calc(100vh-4rem)] overflow-hidden flex flex-col">
+    <div className="space-y-6 p-6">
       <div className="flex items-center justify-between flex-shrink-0">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Movimientos de Inventario</h1>
@@ -29,7 +29,7 @@ export default function InventoryMovementsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 min-h-0">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Columna Izquierda: Formulario (solo para quienes pueden gestionar inventario) */}
         {canManageInventory && (
           <div className="md:col-span-1">
@@ -38,10 +38,8 @@ export default function InventoryMovementsPage() {
         )}
 
         {/* Columna Derecha: Historial (Scrollable) */}
-        <div className={canManageInventory ? "md:col-span-2 h-full overflow-hidden flex flex-col" : "md:col-span-3 h-full overflow-hidden flex flex-col"}>
-          <div className="flex-1 overflow-y-auto pr-1">
-            <InventoryMovementHistory refreshTrigger={refreshTrigger} />
-          </div>
+        <div className={canManageInventory ? "md:col-span-2" : "md:col-span-3"}>
+          <InventoryMovementHistory refreshTrigger={refreshTrigger} />
         </div>
       </div>
     </div>
