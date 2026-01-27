@@ -884,94 +884,95 @@ export default function EmpleadosPage() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-start gap-2">
-                <div className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">Cargo</span>
-                  <Select value={positionFilter} onValueChange={setPositionFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Cargo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      {positionOptions.map((item) => (
-                        <SelectItem key={item} value={item}>
-                          {item}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="flex flex-wrap items-start gap-2">
+                  <div className="space-y-1">
+                    <span className="text-xs font-medium text-muted-foreground">Cargo</span>
+                    <Select value={positionFilter} onValueChange={setPositionFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Cargo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        {positionOptions.map((item) => (
+                          <SelectItem key={item} value={item}>
+                            {item}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs font-medium text-muted-foreground">Estado</span>
+                    <Select
+                      value={statusFilter}
+                      onValueChange={(v) => setStatusFilter(v as EmployedStatus | "all")}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Estado" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        {statusOptions.map((item) => (
+                          <SelectItem key={item} value={item}>
+                            {statusLabel[item] ?? item}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs font-medium text-muted-foreground">Tienda</span>
+                    <Select value={storeIdFilter} onValueChange={setStoreIdFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Tienda" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas</SelectItem>
+                        {storeOptions.map((store) => (
+                          <SelectItem key={store.id} value={store.id}>
+                            {store.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs font-medium text-muted-foreground">Almacén</span>
+                    <Select value={warehouseIdFilter} onValueChange={setWarehouseIdFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Almacén" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        {warehouseOptions.map((warehouse) => (
+                          <SelectItem key={warehouse.id} value={warehouse.id}>
+                            {warehouse.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">Estado</span>
-                  <Select
-                    value={statusFilter}
-                    onValueChange={(v) => setStatusFilter(v as EmployedStatus | "all")}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Estado" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      {statusOptions.map((item) => (
-                        <SelectItem key={item} value={item}>
-                          {statusLabel[item] ?? item}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">Tienda</span>
-                  <Select value={storeIdFilter} onValueChange={setStoreIdFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Tienda" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todas</SelectItem>
-                      {storeOptions.map((store) => (
-                        <SelectItem key={store.id} value={store.id}>
-                          {store.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">Almacén</span>
-                  <Select value={warehouseIdFilter} onValueChange={setWarehouseIdFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Almacén" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      {warehouseOptions.map((warehouse) => (
-                        <SelectItem key={warehouse.id} value={warehouse.id}>
-                          {warehouse.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-start gap-2 pt-2 border-t border-muted/60">
-                <div className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">Desde</span>
-                  <Input
-                    type="date"
-                    value={fromDate}
-                    onChange={(e) => setFromDate(e.target.value)}
-                    className="w-full"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">Hasta</span>
-                  <Input
-                    type="date"
-                    value={toDate}
-                    onChange={(e) => setToDate(e.target.value)}
-                    className="w-full"
-                  />
+                <div className="flex flex-wrap items-start gap-2">
+                  <div className="space-y-1">
+                    <span className="text-xs font-medium text-muted-foreground">Desde</span>
+                    <Input
+                      type="date"
+                      value={fromDate}
+                      onChange={(e) => setFromDate(e.target.value)}
+                      className="w-full"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs font-medium text-muted-foreground">Hasta</span>
+                    <Input
+                      type="date"
+                      value={toDate}
+                      onChange={(e) => setToDate(e.target.value)}
+                      className="w-full"
+                    />
+                  </div>
                 </div>
               </div>
             </div>

@@ -237,7 +237,6 @@ function ClientesContent() {
           <div className="rounded-md border bg-muted/30 p-4 space-y-4 mt-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="relative">
-                <span className="text-xs font-medium text-muted-foreground">Nombre</span>
                 <Input
                   placeholder="Nombre..."
                   value={nameQuery}
@@ -270,7 +269,6 @@ function ClientesContent() {
               </div>
 
               <div className="relative">
-                <span className="text-xs font-medium text-muted-foreground">Teléfono</span>
                 <Input
                   placeholder="Teléfono..."
                   value={phoneQuery}
@@ -303,7 +301,6 @@ function ClientesContent() {
               </div>
 
               <div className="relative">
-                <span className="text-xs font-medium text-muted-foreground">DNI</span>
                 <Input
                   placeholder="DNI..."
                   value={dniQuery}
@@ -338,11 +335,11 @@ function ClientesContent() {
 
             <div className="flex flex-wrap items-start gap-2 pt-2 border-t border-muted/60">
               <div className="space-y-1">
-                <span className="text-xs font-medium text-muted-foreground">Desde</span>
+                <span className="text-xs font-medium text-muted-foreground">Desde</span><br />
                 <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-full sm:w-[180px]" />
               </div>
               <div className="space-y-1">
-                <span className="text-xs font-medium text-muted-foreground">Hasta</span>
+                <span className="text-xs font-medium text-muted-foreground">Hasta</span><br />
                 <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-full sm:w-[180px]" />
               </div>
               {(nameFilter || phoneFilter || dniFilter || fromDate || toDate) && (
