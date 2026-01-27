@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { storeProductService } from '@/services/store-product.service';
 import { inventoryService } from '@/services/inventory.service';
-import { StoreProduct, Product, CreateStoreProductRequest } from '@/types/store-product.types';
+import { storeService } from '@/services/store.service';
+import { StoreProduct, CreateStoreProductRequest, StoreProductListItem } from '@/types/store-product.types';
+import { StoreLookupItem } from '@/types/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,10 +29,24 @@ interface StoreProductFormData {
 }
 
 export default function ProductsPage() {
-  const [storeProducts, setStoreProducts] = useState<StoreProduct[]>([]);
-  const [filteredStoreProducts, setFilteredStoreProducts] = useState<StoreProduct[]>([]);
+  const [storeProducts, setStoreProducts] = useState<StoreProductListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedStoreId, setSelectedStoreId] = useState('');
+  const [storeQuery, setStoreQuery] = useState('');
+  const [showStoreSuggestions, setShowStoreSuggestions] = useState(false);
+  const [storesLookup, setStoresLookup] = useState<StoreLookupItem[]>([]);
+
+  const [nameFilter, setNameFilter] = useState('');
+  const [nameQuery, setNameQuery] = useState('');
+  const [showNameSuggestions, setShowNameSuggestions] = useState(false);
+  const [nameSuggestions, setNameSuggestions] = useState<Array<{ id: string; name: string }>>([]);
+  const [nameLookupLoading, setNameLookupLoading] = useState(false);
+
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const PAGE_SIZE = 12;
+
   const [hideOutOfStock, setHideOutOfStock] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -56,37 +72,60 @@ export default function ProductsPage() {
   const canManageProducts = isAdmin || hasPermission?.("MANAGE_PRODUCTS");
   const canManagePrices = isAdmin || hasPermission?.("MANAGE_PRICES");
 
-  const fetchStoreProducts = useCallback(async () => {
-    if (!currentStore) {
-      console.log('❌ No hay currentStore, abortando fetchStoreProducts');
+  useEffect(() => {
+    if (currentStore?.id && !selectedStoreId) {
+      setSelectedStoreId(currentStore.id);
+      setStoreQuery(currentStore.name);
+    }
+  }, [currentStore?.id, currentStore?.name, selectedStoreId]);
+
+  useEffect(() => {
+    const loadStores = async () => {
+      try {
+        const stores = await storeService.getStoresLookup();
+        setStoresLookup(Array.isArray(stores) ? stores : []);
+      } catch (error) {
+        console.error('Error loading stores lookup:', error);
+      }
+    };
+
+    loadStores();
+  }, []);
+
+  const fetchStoreProducts = useCallback(async (targetPage = 1) => {
+    const storeId = selectedStoreId || currentStore?.id;
+    if (!storeId) {
+      console.log('❌ No hay storeId seleccionado, abortando fetchStoreProducts');
       return;
     }
 
     if (!canViewProducts || !canViewInventory) {
       console.log('⛔ Sin permisos suficientes para ver productos de tienda (requiere VIEW_INVENTORY), abortando fetchStoreProducts');
       setStoreProducts([]);
-      setFilteredStoreProducts([]);
       return;
     }
     
-    console.log('🚀 Iniciando fetchStoreProducts para tienda:', currentStore.id);
+    console.log('🚀 Iniciando fetchStoreProducts para tienda:', storeId);
     
     try {
       setLoading(true);
-      const response = await storeProductService.getStoreProducts(currentStore.id, 1, 1000, searchTerm);
-      console.log('📦 Datos recibidos de storeProductService:', response);
-      
-      // El backend devuelve {data: Array(1), total: 1, page: 1, limit: 100, totalPages: 1}
-      // Necesitamos acceder a response.data, no response directamente
-      const productsArray = Array.isArray(response?.data) ? response.data : [];
-      console.log('📊 Array procesado:', productsArray.length, 'productos');
-      
-      setStoreProducts(productsArray);
-      setFilteredStoreProducts(productsArray);
+      const response = await storeProductService.getStoreProductsList({
+        storeId,
+        page: targetPage,
+        pageSize: PAGE_SIZE,
+        name: nameFilter.trim() || undefined,
+        inStock: hideOutOfStock ? true : undefined,
+      });
+
+      setStoreProducts(Array.isArray(response.data) ? response.data : []);
+      setTotal(response.total || 0);
+      setTotalPages(response.totalPages || 1);
+      setPage(response.page || targetPage);
     } catch (error) {
       console.error('❌ Error fetching store products:', error);
       setStoreProducts([]);
-      setFilteredStoreProducts([]);
+      setTotal(0);
+      setTotalPages(1);
       toast({
         title: 'Error',
         description: 'No se pudieron cargar los productos',
@@ -96,58 +135,71 @@ export default function ProductsPage() {
       setLoading(false);
       console.log('🏁 fetchStoreProducts finalizado');
     }
-  }, [currentStore?.id, searchTerm, toast, canViewProducts, canViewInventory]);
+  }, [selectedStoreId, currentStore?.id, nameFilter, hideOutOfStock, toast, canViewProducts, canViewInventory]);
 
   useEffect(() => {
     if (!isAuthenticated) {
       router.push('/login');
       return;
     }
-    if (currentStore) {
-      fetchStoreProducts();
+    if (selectedStoreId || currentStore?.id) {
+      fetchStoreProducts(1);
     }
-  }, [isAuthenticated, router, currentStore?.id]);
+  }, [isAuthenticated, router, currentStore?.id, selectedStoreId, fetchStoreProducts]);
 
-  useEffect(() => {
-    let filtered = storeProducts;
-    
-    // Aplicar filtro de búsqueda
-    if (searchTerm.trim()) {
-      filtered = filtered.filter((storeProduct) =>
-        storeProduct.product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (storeProduct.product.description && storeProduct.product.description.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
-    }
-    
-    // Aplicar filtro de stock
-    if (hideOutOfStock) {
-      filtered = filtered.filter((storeProduct) => storeProduct.stock > 0);
-    }
-    
-    setFilteredStoreProducts(filtered);
-  }, [searchTerm, storeProducts, hideOutOfStock]);
+  const filtersKey = useMemo(() => {
+    return [selectedStoreId || currentStore?.id || '', nameFilter, hideOutOfStock].join('|');
+  }, [selectedStoreId, currentStore?.id, nameFilter, hideOutOfStock]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (isAuthenticated && currentStore) {
-        fetchStoreProducts();
-      }
-    }, 500);
+      setPage(1);
+      fetchStoreProducts(1);
+    }, 400);
 
     return () => clearTimeout(timer);
-  }, [searchTerm, isAuthenticated, currentStore?.id]);
+  }, [filtersKey, fetchStoreProducts]);
+
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      const query = nameQuery.trim();
+      if (!query) {
+        setNameSuggestions([]);
+        return;
+      }
+      try {
+        setNameLookupLoading(true);
+        const lookup = await storeProductService.getCatalogProductsLookup(query);
+        setNameSuggestions(Array.isArray(lookup) ? lookup : []);
+      } catch (error) {
+        console.error('Error loading product name lookup:', error);
+        setNameSuggestions([]);
+      } finally {
+        setNameLookupLoading(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [nameQuery]);
 
   // Debug: verificar estado actual
   useEffect(() => {
     console.log('🔍 Estado de productos:', {
       loading,
       storeProductsCount: storeProducts.length,
-      filteredStoreProductsCount: filteredStoreProducts.length,
+      total,
+      page,
+      totalPages,
       isAuthenticated,
       currentStoreId: currentStore?.id,
-      searchTerm
+      selectedStoreId,
+      nameFilter
     });
-  }, [loading, storeProducts.length, filteredStoreProducts.length, isAuthenticated, currentStore?.id, searchTerm]);
+  }, [loading, storeProducts.length, total, page, totalPages, isAuthenticated, currentStore?.id, selectedStoreId, nameFilter]);
+
+  const visibleProducts = useMemo(() => {
+    return storeProducts;
+  }, [storeProducts]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -367,33 +419,124 @@ export default function ProductsPage() {
         )}
       </div>
 
-      <div className="mb-6">
-        <div className="relative mb-4">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-          <Input
-            type="text"
-            placeholder="Buscar por nombre o descripción..."
-            className="pl-10 pr-10"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          {searchTerm && (
-            <button
-              type="button"
-              onClick={() => setSearchTerm('')}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
+      <div className="mb-6 space-y-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="space-y-2">
+            <Label>Tienda</Label>
+            <div className="relative">
+              <Input
+                value={storeQuery}
+                onChange={(e) => {
+                  setStoreQuery(e.target.value);
+                  setShowStoreSuggestions(true);
+                }}
+                onFocus={() => setShowStoreSuggestions(true)}
+                placeholder="Buscar tienda..."
+              />
+              {storeQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStoreQuery('');
+                    setSelectedStoreId('');
+                    setShowStoreSuggestions(false);
+                  }}
+                  className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground"
+                >
+                  ×
+                </button>
+              )}
+
+              {showStoreSuggestions && storesLookup.length > 0 && (
+                <div className="absolute z-20 mt-1 w-full rounded-md border bg-background shadow">
+                  <div className="max-h-64 overflow-auto">
+                    {storesLookup
+                      .filter((s) => s.name.toLowerCase().includes(storeQuery.trim().toLowerCase()))
+                      .map((store) => (
+                        <button
+                          key={store.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedStoreId(store.id);
+                            setStoreQuery(store.name);
+                            setShowStoreSuggestions(false);
+                          }}
+                          className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted"
+                        >
+                          <span>{store.name}</span>
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Producto</Label>
+            <div className="relative">
+              <Search className="absolute left-2 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={nameQuery}
+                onChange={(e) => {
+                  setNameQuery(e.target.value);
+                  setShowNameSuggestions(true);
+                  setNameFilter(e.target.value);
+                }}
+                onFocus={() => setShowNameSuggestions(true)}
+                placeholder={nameLookupLoading ? 'Buscando...' : 'Buscar producto...'}
+                className="pl-8"
+              />
+              {nameQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNameQuery('');
+                    setNameFilter('');
+                    setShowNameSuggestions(false);
+                  }}
+                  className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground"
+                >
+                  ×
+                </button>
+              )}
+
+              {showNameSuggestions && (
+                <div className="absolute z-20 mt-1 w-full rounded-md border bg-background shadow">
+                  <div className="max-h-64 overflow-auto">
+                    {nameSuggestions.length === 0 ? (
+                      <div className="px-3 py-4 text-sm text-muted-foreground">
+                        {nameQuery ? 'No se encontraron productos' : 'Escribe para buscar'}
+                      </div>
+                    ) : (
+                      nameSuggestions.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setNameQuery(item.name);
+                            setNameFilter(item.name);
+                            setShowNameSuggestions(false);
+                          }}
+                          className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted"
+                        >
+                          <span>{item.name}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
         
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Info className="h-3.5 w-3.5" />
             <span>
-              Mostrando {filteredStoreProducts.length} de {storeProducts.length} productos
-              {searchTerm.trim() && ` (filtrados por "${searchTerm}")`}
+              Mostrando {visibleProducts.length} de {total} productos
+              {nameFilter.trim() && ` (filtrados por "${nameFilter}")`}
               {hideOutOfStock && ' (sin stock oculto)'}
             </span>
           </div>
@@ -418,12 +561,12 @@ export default function ProductsPage() {
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
         </div>
-      ) : filteredStoreProducts.length === 0 ? (
+      ) : visibleProducts.length === 0 ? (
         <div className="text-center py-12">
           <Package className="mx-auto h-12 w-12 text-gray-400 mb-4" />
           <p className="text-gray-500">
-            {searchTerm.trim()
-              ? `No se encontraron productos que coincidan con "${searchTerm}"`
+            {nameFilter.trim()
+              ? `No se encontraron productos que coincidan con "${nameFilter}"`
               : hideOutOfStock
                 ? "No hay productos con stock en esta tienda"
                 : "No hay productos en esta tienda"
@@ -431,18 +574,25 @@ export default function ProductsPage() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredStoreProducts.map((storeProduct) => (
-            <Card key={storeProduct.id} className="h-full flex flex-col">
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {visibleProducts.map((storeProduct) => (
+              <Card key={storeProduct.id} className="h-full flex flex-col py-5">
               <CardHeader>
                 <div className="flex justify-between items-start">
-                  <CardTitle className="text-lg">{storeProduct.product.name}</CardTitle>
+                  <CardTitle className="text-base">{storeProduct.name}</CardTitle>
                   {canManageProducts && (
                     <div className="flex space-x-2">
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleEdit(storeProduct)}
+                        onClick={() => {
+                          toast({
+                            title: 'Acción no disponible',
+                            description: 'La edición sigue usando el endpoint anterior. Mantendremos esta acción temporalmente.',
+                            variant: 'destructive',
+                          });
+                        }}
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -459,18 +609,18 @@ export default function ProductsPage() {
                   )}
                 </div>
                 <div className="space-y-1">
-                  <p className="text-2xl font-bold text-primary">
-                    S/ {typeof storeProduct.price === 'string' ? parseFloat(storeProduct.price).toFixed(2) : (storeProduct.price || 0).toFixed(2)}
+                  <p className="text-xl font-bold text-primary">
+                    S/ {(storeProduct.price || 0).toFixed(2)}
                   </p>
                   <div className="flex items-center gap-4 text-sm">
                     <span className={`font-medium ${
-                      storeProduct.stock <= storeProduct.stockThreshold 
-                        ? 'text-red-600' 
+                      storeProduct.stock <= 0
+                        ? 'text-red-600'
                         : 'text-green-600'
                     }`}>
                       {storeProduct.stock} unidades
                     </span>
-                    {storeProduct.stock <= storeProduct.stockThreshold && (
+                    {storeProduct.stock <= 0 && (
                       <span className="text-red-600 text-xs">
                         ⚠️ Stock bajo
                       </span>
@@ -479,15 +629,48 @@ export default function ProductsPage() {
                 </div>
               </CardHeader>
               <CardContent className="flex-grow">                
-                {isAdmin && storeProduct.product.buyCost && (
+                {isAdmin && storeProduct.buyCost && (
                   <div className="text-xs text-muted-foreground space-y-1">
-                    <p>Costo: S/ {typeof storeProduct.product.buyCost === 'string' ? parseFloat(storeProduct.product.buyCost).toFixed(2) : (storeProduct.product.buyCost || 0).toFixed(2)}</p>
-                    <p>Ganancia: S/ {(typeof storeProduct.price === 'string' ? parseFloat(storeProduct.price) : (storeProduct.price || 0) - (typeof storeProduct.product.buyCost === 'string' ? parseFloat(storeProduct.product.buyCost) : (storeProduct.product.buyCost || 0))).toFixed(2)}</p>
+                    <p>Costo: S/ {(storeProduct.buyCost || 0).toFixed(2)}</p>
+                    <p>Ganancia: S/ {((storeProduct.price || 0) - (storeProduct.buyCost || 0)).toFixed(2)}</p>
                   </div>
                 )}
               </CardContent>
             </Card>
-          ))}
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              Página {page} de {totalPages}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                disabled={page <= 1 || loading}
+                onClick={() => {
+                  const next = page - 1;
+                  if (next < 1) return;
+                  setPage(next);
+                  fetchStoreProducts(next);
+                }}
+              >
+                Anterior
+              </Button>
+              <Button
+                variant="outline"
+                disabled={page >= totalPages || loading}
+                onClick={() => {
+                  const next = page + 1;
+                  if (next > totalPages) return;
+                  setPage(next);
+                  fetchStoreProducts(next);
+                }}
+              >
+                Siguiente
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 

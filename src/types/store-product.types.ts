@@ -64,6 +64,28 @@ export interface ProductsResponse {
   limit: number;
 }
 
+export interface StoreProductListItem {
+  id: string;
+  name: string;
+  price: number;
+  stock: number;
+  buyCost?: number;
+  basePrice?: number;
+}
+
+export interface StoreProductsListResponse {
+  data: StoreProductListItem[];
+  total: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface CatalogProductLookupItem {
+  id: string;
+  name: string;
+}
+
 export interface StoreProductStockItem {
   id?: string;
   storeProductId?: string;

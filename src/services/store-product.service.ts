@@ -5,7 +5,9 @@ import {
   CreateStoreProductRequest,
   StoreProductsResponse,
   ProductsResponse,
-  StoreProductStockItem
+  StoreProductStockItem,
+  StoreProductsListResponse,
+  CatalogProductLookupItem
 } from '@/types/store-product.types';
 
 class StoreProductService {
@@ -33,6 +35,43 @@ class StoreProductService {
       return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
       console.error('[StoreProductService.getStoreProductsStock] Error:', error);
+      throw error;
+    }
+  }
+
+  async getStoreProductsList(params: {
+    storeId: string;
+    page?: number;
+    pageSize?: number;
+    name?: string;
+    inStock?: boolean;
+  }): Promise<StoreProductsListResponse> {
+    try {
+      const searchParams = new URLSearchParams();
+      searchParams.set('storeId', params.storeId);
+      searchParams.set('page', String(params.page ?? 1));
+      searchParams.set('pageSize', String(params.pageSize ?? 12));
+      if (params.name) searchParams.set('name', params.name);
+      if (typeof params.inStock === 'boolean') searchParams.set('inStock', String(params.inStock));
+
+      const response = await api.get<StoreProductsListResponse>(`/store/products/list?${searchParams.toString()}`);
+      return response.data;
+    } catch (error) {
+      console.error('[StoreProductService.getStoreProductsList] Error:', error);
+      throw error;
+    }
+  }
+
+  async getCatalogProductsLookup(search: string): Promise<CatalogProductLookupItem[]> {
+    try {
+      const params = new URLSearchParams();
+      if (search) params.set('search', search);
+      const qs = params.toString();
+      const url = qs ? `/catalog/products/lookup?${qs}` : '/catalog/products/lookup';
+      const response = await api.get<CatalogProductLookupItem[]>(url);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error('[StoreProductService.getCatalogProductsLookup] Error:', error);
       throw error;
     }
   }
