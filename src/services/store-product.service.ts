@@ -4,7 +4,8 @@ import {
   Product,
   CreateStoreProductRequest,
   StoreProductsResponse,
-  ProductsResponse
+  ProductsResponse,
+  StoreProductStockItem
 } from '@/types/store-product.types';
 
 class StoreProductService {
@@ -21,6 +22,17 @@ class StoreProductService {
     } catch (error) {
       const anyError = error as any;
       console.error('[StoreProductService.getStoreProductsSimple] Error:', anyError);
+      throw error;
+    }
+  }
+
+  async getStoreProductsStock(storeId: string): Promise<StoreProductStockItem[]> {
+    try {
+      const params = new URLSearchParams({ storeId });
+      const response = await api.get(`/catalog/products/store-stock?${params.toString()}`);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error('[StoreProductService.getStoreProductsStock] Error:', error);
       throw error;
     }
   }

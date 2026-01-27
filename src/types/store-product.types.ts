@@ -63,3 +63,11 @@ export interface ProductsResponse {
   page: number;
   limit: number;
 }
+
+export interface StoreProductStockItem {
+  id?: string;
+  storeProductId?: string;
+  productId?: string;
+  name: string;
+  stock: number;
+}

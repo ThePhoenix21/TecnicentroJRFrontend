@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { storeProductService } from "@/services/store-product.service";
 import { inventoryService } from "@/services/inventory.service";
-import { StoreProduct } from "@/types/store-product.types";
+import { StoreProductStockItem } from "@/types/store-product.types";
 import { InventoryMovementType } from "@/types/inventory.types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 
 interface InventoryMovementFormProps {
   onSuccess?: () => void;
@@ -22,12 +22,14 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
   const { currentStore, user, isAdmin } = useAuth();
   const { toast } = useToast();
   
-  const [products, setProducts] = useState<StoreProduct[]>([]);
+  const [products, setProducts] = useState<StoreProductStockItem[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form State
   const [selectedProductId, setSelectedProductId] = useState<string>("");
+  const [productQuery, setProductQuery] = useState("");
+  const [showProductSuggestions, setShowProductSuggestions] = useState(false);
   const [type, setType] = useState<InventoryMovementType>("INCOMING");
   const [quantity, setQuantity] = useState<string>("");
   const [description, setDescription] = useState<string>("");
@@ -41,10 +43,12 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
   const loadProducts = async (storeId: string) => {
     setIsLoadingProducts(true);
     try {
-      // Cargamos una cantidad razonable de productos. 
-      // TODO: Implementar búsqueda asíncrona si hay muchos productos
-      const response = await storeProductService.getStoreProducts(storeId, 1, 1000);
-      setProducts(response.data);
+      const response = await storeProductService.getStoreProductsStock(storeId);
+      const normalized = (response || []).map((item) => ({
+        ...item,
+        storeProductId: item.id,
+      }));
+      setProducts(normalized);
     } catch (error) {
       console.error("Error loading products:", error);
       toast({
@@ -135,7 +139,11 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
     }
   };
 
-  const selectedProduct = products.find(p => p.id === selectedProductId);
+  const selectedProduct = products.find((p) => p.storeProductId === selectedProductId);
+
+  const filteredProducts = products.filter((product) =>
+    product.name.toLowerCase().includes(productQuery.trim().toLowerCase())
+  );
 
   return (
     <Card>
@@ -165,26 +173,70 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
 
           <div className="space-y-2">
             <Label>Producto</Label>
-            <Select 
-                value={selectedProductId} 
-                onValueChange={setSelectedProductId}
+            <div className="relative">
+              <Search className="absolute left-2 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={productQuery}
+                onChange={(e) => {
+                  setProductQuery(e.target.value);
+                  setShowProductSuggestions(true);
+                  if (!e.target.value) {
+                    setSelectedProductId("");
+                  }
+                }}
+                onFocus={() => setShowProductSuggestions(true)}
+                placeholder={isLoadingProducts ? "Cargando..." : "Buscar producto"}
                 disabled={isLoadingProducts}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={isLoadingProducts ? "Cargando..." : "Seleccionar producto"} />
-              </SelectTrigger>
-              <SelectContent>
-                {products.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.product?.name} (Stock: {p.stock})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                className="pl-8"
+              />
+              {productQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProductQuery("");
+                    setSelectedProductId("");
+                    setShowProductSuggestions(false);
+                  }}
+                  className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground"
+                >
+                  ×
+                </button>
+              )}
+
+              {showProductSuggestions && (
+                <div className="absolute z-20 mt-1 w-full rounded-md border bg-background shadow">
+                  <div className="max-h-64 overflow-auto">
+                    {filteredProducts.length === 0 ? (
+                      <div className="px-3 py-4 text-sm text-muted-foreground">
+                        {productQuery ? "No se encontraron productos" : "Sin productos disponibles"}
+                      </div>
+                    ) : (
+                      filteredProducts.map((product) => (
+                        <button
+                          key={product.storeProductId || product.id}
+                          type="button"
+                          onClick={() => {
+                            const productId = product.storeProductId || product.id;
+                            if (!productId) return;
+                            setSelectedProductId(productId);
+                            setProductQuery(product.name);
+                            setShowProductSuggestions(false);
+                          }}
+                          className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted"
+                        >
+                          <span>{product.name}</span>
+                          <span className="text-xs text-muted-foreground">Stock: {product.stock}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             {selectedProduct && (
-                <p className="text-xs text-muted-foreground">
-                    Stock actual: <span className="font-medium">{selectedProduct.stock}</span>
-                </p>
+              <p className="text-xs text-muted-foreground">
+                Stock actual: <span className="font-medium">{selectedProduct.stock}</span>
+              </p>
             )}
           </div>
 

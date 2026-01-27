@@ -5,11 +5,12 @@ import { useAuth } from "@/contexts/auth-context";
 import { inventoryService } from "@/services/inventory.service";
 import { storeProductService } from "@/services/store-product.service";
 import { InventoryCountSession, InventoryCountItem, InventorySessionReport } from "@/types/inventory.types";
-import { StoreProduct } from "@/types/store-product.types";
+import { StoreProductStockItem } from "@/types/store-product.types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -43,7 +44,8 @@ export function ActiveSessionView({ session, onSessionClosed, onBack }: ActiveSe
   // Calcular si la sesión está abierta basado en finalizedAt (si es null, está abierta)
   const isOpen = !session.finalizedAt;
 
-  const [products, setProducts] = useState<StoreProduct[]>([]);
+  type StockProduct = StoreProductStockItem & { id: string };
+  const [products, setProducts] = useState<StockProduct[]>([]);
   const [countedItems, setCountedItems] = useState<InventoryCountItem[]>(session.items || []);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -56,17 +58,29 @@ export function ActiveSessionView({ session, onSessionClosed, onBack }: ActiveSe
   
   // Estado para manejar los valores temporales de los inputs
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
+  const [hideZeroStock, setHideZeroStock] = useState(true);
 
   // Cargar productos y reporte actualizado
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
       const [productsData, reportData] = await Promise.all([
-        storeProductService.getStoreProducts(session.storeId, 1, 1000), // Asumimos paginación alta
+        storeProductService.getStoreProductsStock(session.storeId),
         inventoryService.getSessionReport(session.id)
       ]);
       
-      setProducts(productsData.data || []);
+      const normalizedProducts: StockProduct[] = (productsData || [])
+        .map((item) => {
+          const id = item.id || item.storeProductId;
+          if (!id) return null;
+          return {
+            ...item,
+            id,
+          } as StockProduct;
+        })
+        .filter((item): item is StockProduct => Boolean(item));
+
+      setProducts(normalizedProducts);
       setCountedItems(reportData.items || []);
       
       // Inicializar valores de inputs con los conteos existentes
@@ -196,9 +210,28 @@ export function ActiveSessionView({ session, onSessionClosed, onBack }: ActiveSe
   };
 
   // Filtrar productos
-  const filteredProducts = products.filter(p => 
-    p.product?.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  useEffect(() => {
+    if (!hideZeroStock) return;
+
+    setInputValues(prev => {
+      let changed = false;
+      const next = { ...prev };
+
+      products.forEach(product => {
+        if (product.stock === 0 && next[product.id] !== "0") {
+          next[product.id] = "0";
+          changed = true;
+        }
+      });
+
+      return changed ? next : prev;
+    });
+  }, [hideZeroStock, products]);
+
+  const filteredProducts = products.filter(p => {
+    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesSearch && (!hideZeroStock || p.stock !== 0);
+  });
 
   return (
     <div className="space-y-6">
@@ -231,9 +264,20 @@ export function ActiveSessionView({ session, onSessionClosed, onBack }: ActiveSe
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <CardTitle>Conteo de Productos</CardTitle>
-            <div className="relative w-72">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-6">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Checkbox
+                  id="hide-zero-stock"
+                  checked={hideZeroStock}
+                  onCheckedChange={(checked) => {
+                    setHideZeroStock(checked === true);
+                  }}
+                />
+                <label htmlFor="hide-zero-stock">Ocultar productos sin stock</label>
+              </div>
+              <div className="relative w-72">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input 
                     placeholder="Buscar producto..." 
@@ -241,6 +285,7 @@ export function ActiveSessionView({ session, onSessionClosed, onBack }: ActiveSe
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-8"
                 />
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -289,7 +334,7 @@ export function ActiveSessionView({ session, onSessionClosed, onBack }: ActiveSe
                                 return (
                                     <TableRow key={product.id} className={rowClass}>
                                         <TableCell className="font-medium">
-                                            {product.product?.name}
+                                            {product.name}
                                         </TableCell>
                                         <TableCell className="text-center text-muted-foreground">
                                             {product.stock}
