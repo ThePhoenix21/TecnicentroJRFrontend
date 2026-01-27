@@ -5,6 +5,7 @@ import type {
   SupplyOrderDetail,
   SupplyOrderFilters,
   SupplyOrderListResponse,
+  SupplyOrderLookupItem,
 } from "@/types/supply-order.types";
 
 class SupplyOrderService {
@@ -19,6 +20,7 @@ class SupplyOrderService {
     if (filters.userId) params.set("userId", filters.userId);
     if (filters.fromDate) params.set("fromDate", filters.fromDate);
     if (filters.toDate) params.set("toDate", filters.toDate);
+    if (filters.code) params.set("code", filters.code);
 
     const query = params.toString();
     const url = query ? `${this.baseUrl}?${query}` : this.baseUrl;
@@ -45,6 +47,11 @@ class SupplyOrderService {
 
   async createSupplyOrder(payload: CreateSupplyOrderDto): Promise<string> {
     const response = await api.post<string>(this.baseUrl, payload);
+    return response.data;
+  }
+
+  async getSupplyOrdersLookup(): Promise<SupplyOrderLookupItem[]> {
+    const response = await api.get<SupplyOrderLookupItem[]>(`${this.baseUrl}/lookup`);
     return response.data;
   }
 }

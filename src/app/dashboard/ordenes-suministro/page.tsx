@@ -7,12 +7,14 @@ import { toast } from "sonner";
 import { providerService } from "@/services/provider.service";
 import { storeService } from "@/services/store.service";
 import { supplyOrderService } from "@/services/supply-order.service";
+import { userService, type UserLookupItem } from "@/services/user.service";
 import { warehouseService } from "@/services/warehouse.service";
 import type {
   CreateSupplyOrderDto,
   ReceiveSupplyOrderDto,
   SupplyOrderDetail,
   SupplyOrderItem,
+  SupplyOrderLookupItem,
   SupplyOrderStatus,
 } from "@/types/supply-order.types";
 import type { ProductLookupItem, ProviderLookupItem } from "@/types/provider.types";
@@ -101,6 +103,11 @@ export default function OrdenesSuministroPage() {
 
   const [statusFilter, setStatusFilter] = useState<SupplyOrderStatus | "all">("all");
   const [userIdFilter, setUserIdFilter] = useState("");
+  const [userQuery, setUserQuery] = useState("");
+  const [showUserSuggestions, setShowUserSuggestions] = useState(false);
+  const [codeFilter, setCodeFilter] = useState("");
+  const [codeQuery, setCodeQuery] = useState("");
+  const [showCodeSuggestions, setShowCodeSuggestions] = useState(false);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
@@ -132,6 +139,8 @@ export default function OrdenesSuministroPage() {
   const [storesLookup, setStoresLookup] = useState<StoreLookupItem[]>([]);
   const [warehousesLookup, setWarehousesLookup] = useState<WarehouseSimpleItem[]>([]);
   const [productsLookup, setProductsLookup] = useState<ProductLookupItem[]>([]);
+  const [usersLookup, setUsersLookup] = useState<UserLookupItem[]>([]);
+  const [ordersLookup, setOrdersLookup] = useState<SupplyOrderLookupItem[]>([]);
   const [locationType, setLocationType] = useState<"store" | "warehouse">("store");
   const [createForm, setCreateForm] = useState<CreateSupplyOrderDto>({
     providerId: "",
@@ -149,9 +158,21 @@ export default function OrdenesSuministroPage() {
   });
 
   const filtersKey = useMemo(
-    () => [statusFilter, userIdFilter, fromDate, toDate].join("|"),
-    [statusFilter, userIdFilter, fromDate, toDate]
+    () => [statusFilter, userIdFilter, codeFilter, fromDate, toDate].join("|"),
+    [statusFilter, userIdFilter, codeFilter, fromDate, toDate]
   );
+
+  const filteredUsers = useMemo(() => {
+    const query = userQuery.trim().toLowerCase();
+    if (!query) return usersLookup.slice(0, 8);
+    return usersLookup.filter((user) => user.name.toLowerCase().includes(query)).slice(0, 8);
+  }, [userQuery, usersLookup]);
+
+  const filteredOrders = useMemo(() => {
+    const query = codeQuery.trim().toLowerCase();
+    if (!query) return ordersLookup.slice(0, 8);
+    return ordersLookup.filter((order) => order.code.toLowerCase().includes(query)).slice(0, 8);
+  }, [codeQuery, ordersLookup]);
 
   const loadOrders = useCallback(
     async (targetPage = 1) => {
@@ -164,6 +185,7 @@ export default function OrdenesSuministroPage() {
           pageSize: PAGE_SIZE,
           status: statusFilter === "all" ? undefined : statusFilter,
           userId: userIdFilter.trim() || undefined,
+          code: codeFilter.trim() || undefined,
           fromDate: range?.fromDate,
           toDate: range?.toDate,
         });
@@ -182,12 +204,30 @@ export default function OrdenesSuministroPage() {
         setLoading(false);
       }
     },
-    [fromDate, toDate, statusFilter, userIdFilter]
+    [fromDate, toDate, statusFilter, userIdFilter, codeFilter]
   );
 
   useEffect(() => {
     loadOrders(1);
   }, [loadOrders]);
+
+  useEffect(() => {
+    const loadLookups = async () => {
+      try {
+        const [users, orders] = await Promise.all([
+          userService.getUsersLookup(),
+          supplyOrderService.getSupplyOrdersLookup(),
+        ]);
+        setUsersLookup(Array.isArray(users) ? users : []);
+        setOrdersLookup(Array.isArray(orders) ? orders : []);
+      } catch (error: any) {
+        console.error(error);
+        toast.error(error?.response?.data?.message || error?.message || "No se pudieron cargar los lookups");
+      }
+    };
+
+    loadLookups();
+  }, []);
 
   useEffect(() => {
     if (activeTab !== "receive") return;
@@ -235,6 +275,11 @@ export default function OrdenesSuministroPage() {
   const clearFilters = () => {
     setStatusFilter("all");
     setUserIdFilter("");
+    setUserQuery("");
+    setShowUserSuggestions(false);
+    setCodeFilter("");
+    setCodeQuery("");
+    setShowCodeSuggestions(false);
     setFromDate("");
     setToDate("");
   };
@@ -502,25 +547,100 @@ export default function OrdenesSuministroPage() {
                 </div>
 
                 <div className="space-y-3">
-                  <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         type="search"
-                        placeholder="Buscar por ID de usuario creador..."
+                        placeholder="Buscar por usuario creador..."
                         className="pl-9"
-                        value={userIdFilter}
-                        onChange={(e) => setUserIdFilter(e.target.value)}
+                        value={userQuery}
+                        onFocus={() => setShowUserSuggestions(true)}
+                        onBlur={() => setTimeout(() => setShowUserSuggestions(false), 150)}
+                        onChange={(e) => {
+                          setUserQuery(e.target.value);
+                          setUserIdFilter("");
+                          setShowUserSuggestions(true);
+                        }}
                       />
-                      {userIdFilter && (
+                      {userQuery && (
                         <button
                           type="button"
-                          onClick={() => setUserIdFilter("")}
+                          onClick={() => {
+                            setUserQuery("");
+                            setUserIdFilter("");
+                            setShowUserSuggestions(false);
+                          }}
                           className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                           title="Limpiar búsqueda"
                         >
                           <X className="h-4 w-4" />
                         </button>
+                      )}
+                      {showUserSuggestions && filteredUsers.length > 0 && (
+                        <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
+                          {filteredUsers.map((user) => (
+                            <button
+                              key={user.id}
+                              type="button"
+                              onClick={() => {
+                                setUserIdFilter(user.id);
+                                setUserQuery(user.name);
+                                setShowUserSuggestions(false);
+                              }}
+                              className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                            >
+                              {user.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="relative">
+                      <Input
+                        type="search"
+                        placeholder="Buscar por código de orden..."
+                        value={codeQuery}
+                        onFocus={() => setShowCodeSuggestions(true)}
+                        onBlur={() => setTimeout(() => setShowCodeSuggestions(false), 150)}
+                        onChange={(e) => {
+                          setCodeQuery(e.target.value);
+                          setCodeFilter("");
+                          setShowCodeSuggestions(true);
+                        }}
+                      />
+                      {codeQuery && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCodeQuery("");
+                            setCodeFilter("");
+                            setShowCodeSuggestions(false);
+                          }}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                          title="Limpiar búsqueda"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                      {showCodeSuggestions && filteredOrders.length > 0 && (
+                        <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
+                          {filteredOrders.map((order) => (
+                            <button
+                              key={order.id}
+                              type="button"
+                              onClick={() => {
+                                setCodeFilter(order.code);
+                                setCodeQuery(order.code);
+                                setShowCodeSuggestions(false);
+                              }}
+                              className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                            >
+                              {order.code}
+                            </button>
+                          ))}
+                        </div>
                       )}
                     </div>
 

@@ -114,6 +114,7 @@ export interface SupplyOrderFilters {
   userId?: string;
   fromDate?: string;
   toDate?: string;
+  code?: string;
 }
 
 export interface CreateSupplyOrderProductDto {
@@ -147,4 +148,9 @@ export interface ReceiveSupplyOrderDto {
   notes?: string | null;
   closePartial?: boolean;
   products: ReceiveSupplyOrderProductDto[];
+}
+
+export interface SupplyOrderLookupItem {
+  id: string;
+  code: string;
 }
