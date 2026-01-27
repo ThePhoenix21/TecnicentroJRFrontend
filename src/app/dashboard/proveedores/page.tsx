@@ -10,7 +10,9 @@ import type {
   ProductLookupItem,
   ProviderDetail,
   ProviderListItem,
+  ProviderLookupItem,
   ProviderProductItem,
+  ProviderRucLookupItem,
   UpdateProviderDto,
 } from "@/types/provider.types";
 
@@ -40,12 +42,26 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const normalize = (v: unknown) => String(v ?? "").trim().toLowerCase();
+const toUtcRange = (from: string, to: string) => {
+  const fromDate = `${from}T00:00:00.000Z`;
+  const toDate = `${to}T23:59:59.999Z`;
+  return { fromDate, toDate };
+};
 
 export default function ProveedoresPage() {
   const [loading, setLoading] = useState(true);
   const [providers, setProviders] = useState<ProviderListItem[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [providerFilter, setProviderFilter] = useState("");
+  const [providerQuery, setProviderQuery] = useState("");
+  const [showProviderSuggestions, setShowProviderSuggestions] = useState(false);
+  const [rucFilter, setRucFilter] = useState("");
+  const [rucQuery, setRucQuery] = useState("");
+  const [showRucSuggestions, setShowRucSuggestions] = useState(false);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createSubmitting, setCreateSubmitting] = useState(false);
@@ -72,42 +88,100 @@ export default function ProveedoresPage() {
   });
 
   const [productsLookup, setProductsLookup] = useState<ProductLookupItem[]>([]);
+  const [providersLookup, setProvidersLookup] = useState<ProviderLookupItem[]>([]);
+  const [providersRucLookup, setProvidersRucLookup] = useState<ProviderRucLookupItem[]>([]);
   const [lookupLoading, setLookupLoading] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [localProviderProducts, setLocalProviderProducts] = useState<ProviderProductItem[]>([]);
   const [isEditingProducts, setIsEditingProducts] = useState(false);
   const [productsSubmitting, setProductsSubmitting] = useState(false);
 
-  const loadProviders = useCallback(async () => {
+  const loadProviders = useCallback(async (targetPage = 1) => {
     try {
       setLoading(true);
-      const data = await providerService.getProviders();
-      setProviders(Array.isArray(data) ? data : []);
+      const range = fromDate && toDate ? toUtcRange(fromDate, toDate) : null;
+      const response = await providerService.getProviders({
+        page: targetPage,
+        pageSize: 12,
+        provider: providerFilter.trim() || undefined,
+        ruc: rucFilter.trim() || undefined,
+        fromDate: range?.fromDate,
+        toDate: range?.toDate,
+      });
+      setProviders(response.data || []);
+      setTotal(response.total || 0);
+      setTotalPages(response.totalPages || 1);
+      setPage(response.page || targetPage);
     } catch (error: any) {
       console.error(error);
       toast.error(error?.response?.data?.message || error?.message || "Error al cargar proveedores");
       setProviders([]);
+      setTotal(0);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
+  }, [fromDate, toDate, providerFilter, rucFilter]);
+
+  const filteredProviderSuggestions = useMemo(() => {
+    const query = providerQuery.trim().toLowerCase();
+    if (!query) return providersLookup.slice(0, 8);
+    return providersLookup.filter((item) => item.name.toLowerCase().includes(query)).slice(0, 8);
+  }, [providerQuery, providersLookup]);
+
+  const filteredRucSuggestions = useMemo(() => {
+    const query = rucQuery.trim().toLowerCase();
+    if (!query) return providersRucLookup.slice(0, 8);
+    return providersRucLookup.filter((item) => item.ruc.toLowerCase().includes(query)).slice(0, 8);
+  }, [rucQuery, providersRucLookup]);
+
+  useEffect(() => {
+    loadProviders(1);
+  }, [loadProviders]);
+
+  useEffect(() => {
+    const loadLookups = async () => {
+      try {
+        const [providers, rucs] = await Promise.all([
+          providerService.getProvidersLookup(),
+          providerService.getProvidersRucLookup(),
+        ]);
+        setProvidersLookup(Array.isArray(providers) ? providers : []);
+        setProvidersRucLookup(Array.isArray(rucs) ? rucs : []);
+      } catch (error: any) {
+        console.error(error);
+        toast.error(error?.response?.data?.message || error?.message || "No se pudieron cargar los lookups");
+      }
+    };
+
+    loadLookups();
   }, []);
 
   useEffect(() => {
-    loadProviders();
-  }, [loadProviders]);
+    const timeout = setTimeout(() => {
+      setPage(1);
+      loadProviders(1);
+    }, 400);
 
-  const filteredProviders = useMemo(() => {
-    const q = normalize(searchTerm);
-    if (!q) return providers;
+    return () => clearTimeout(timeout);
+  }, [providerFilter, rucFilter, fromDate, toDate, loadProviders]);
 
-    return providers.filter((p) => {
-      return (
-        normalize(p.name).includes(q) ||
-        normalize(p.ruc).includes(q) ||
-        normalize(p.address).includes(q)
-      );
-    });
-  }, [providers, searchTerm]);
+  const handlePageChange = (nextPage: number) => {
+    if (nextPage < 1 || nextPage > totalPages) return;
+    setPage(nextPage);
+    loadProviders(nextPage);
+  };
+
+  const clearFilters = () => {
+    setProviderFilter("");
+    setProviderQuery("");
+    setShowProviderSuggestions(false);
+    setRucFilter("");
+    setRucQuery("");
+    setShowRucSuggestions(false);
+    setFromDate("");
+    setToDate("");
+  };
 
   const closeDetail = () => {
     setIsDetailOpen(false);
@@ -349,27 +423,121 @@ export default function ProveedoresPage() {
             </div>
 
             <div className="space-y-3">
-              <div className="w-full flex flex-col sm:flex-row gap-3">
-                <div className="relative w-full sm:max-w-2xl">
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+                <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     type="search"
-                    placeholder="Buscar por nombre, RUC o dirección..."
-                    className="pl-9 pr-10 w-full"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Buscar proveedor..."
+                    className="pl-9"
+                    value={providerQuery}
+                    onFocus={() => setShowProviderSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowProviderSuggestions(false), 150)}
+                    onChange={(e) => {
+                      setProviderQuery(e.target.value);
+                      setProviderFilter("");
+                      setShowProviderSuggestions(true);
+                    }}
                   />
-                  {searchTerm && (
+                  {providerQuery && (
                     <button
                       type="button"
-                      onClick={() => setSearchTerm("")}
+                      onClick={() => {
+                        setProviderQuery("");
+                        setProviderFilter("");
+                        setShowProviderSuggestions(false);
+                      }}
                       className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                       title="Limpiar búsqueda"
                     >
                       <X className="h-4 w-4" />
                     </button>
                   )}
+                  {showProviderSuggestions && filteredProviderSuggestions.length > 0 && (
+                    <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
+                      {filteredProviderSuggestions.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setProviderFilter(item.name);
+                            setProviderQuery(item.name);
+                            setShowProviderSuggestions(false);
+                          }}
+                          className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                        >
+                          {item.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
+
+                <div className="relative">
+                  <Input
+                    type="search"
+                    placeholder="Filtrar por RUC..."
+                    value={rucQuery}
+                    onFocus={() => setShowRucSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowRucSuggestions(false), 150)}
+                    onChange={(e) => {
+                      setRucQuery(e.target.value);
+                      setRucFilter("");
+                      setShowRucSuggestions(true);
+                    }}
+                  />
+                  {rucQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRucQuery("");
+                        setRucFilter("");
+                        setShowRucSuggestions(false);
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      title="Limpiar búsqueda"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                  {showRucSuggestions && filteredRucSuggestions.length > 0 && (
+                    <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
+                      {filteredRucSuggestions.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setRucFilter(item.ruc);
+                            setRucQuery(item.ruc);
+                            setShowRucSuggestions(false);
+                          }}
+                          className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                        >
+                          {item.ruc}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+                <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+              </div>
+
+              {(providerFilter || rucFilter || fromDate || toDate) && (
+                <div className="flex justify-between items-center text-xs text-muted-foreground">
+                  <span>Filtros activos</span>
+                  <Button variant="ghost" size="sm" onClick={clearFilters} className="h-7 px-2">
+                    Limpiar filtros
+                  </Button>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>
+                  Mostrando <strong>{providers.length}</strong> de <strong>{total}</strong> proveedores
+                  {totalPages > 1 && ` · página ${page} de ${totalPages}`}
+                </span>
               </div>
             </div>
           </div>
@@ -380,11 +548,13 @@ export default function ProveedoresPage() {
             <div className="flex justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
             </div>
-          ) : filteredProviders.length === 0 ? (
+          ) : providers.length === 0 ? (
             <div className="text-center py-8">
               <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-500">
-                {searchTerm ? "No se encontraron proveedores" : "No hay proveedores registrados"}
+                {providerFilter || rucFilter || fromDate || toDate
+                  ? "No se encontraron proveedores"
+                  : "No hay proveedores registrados"}
               </p>
             </div>
           ) : (
@@ -395,11 +565,13 @@ export default function ProveedoresPage() {
                     <TableHead>Nombre</TableHead>
                     <TableHead>RUC</TableHead>
                     <TableHead>Dirección</TableHead>
+                    <TableHead className="text-center">Órdenes activas</TableHead>
+                    <TableHead className="text-center">Órdenes anuladas</TableHead>
                     <TableHead>Creado</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredProviders.map((p) => (
+                  {providers.map((p) => (
                     <TableRow
                       key={p.id}
                       className="cursor-pointer"
@@ -408,11 +580,41 @@ export default function ProveedoresPage() {
                       <TableCell className="font-medium">{p.name}</TableCell>
                       <TableCell>{p.ruc}</TableCell>
                       <TableCell>{p.address}</TableCell>
+                      <TableCell className="text-center">{p.activeOrdersCount ?? 0}</TableCell>
+                      <TableCell className="text-center">{p.annulledOrdersCount ?? 0}</TableCell>
                       <TableCell>{p.createdAt ? new Date(p.createdAt).toLocaleString() : "-"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
+            </div>
+          )}
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t">
+              <div className="text-sm text-muted-foreground">
+                Página {page} de {totalPages}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(page - 1)}
+                  disabled={page <= 1}
+                  className="h-8"
+                >
+                  Anterior
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(page + 1)}
+                  disabled={page >= totalPages}
+                  className="h-8"
+                >
+                  Siguiente
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>

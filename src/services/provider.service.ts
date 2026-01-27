@@ -4,15 +4,29 @@ import type {
   CreateProviderResponse,
   ProductLookupItem,
   ProviderLookupItem,
+  ProviderRucLookupItem,
   ProviderDetail,
+  ProviderFilters,
   ProviderListItem,
+  ProviderListResponse,
   SaveProviderProductsResponse,
   UpdateProviderDto,
 } from "@/types/provider.types";
 
 class ProviderService {
-  async getProviders(): Promise<ProviderListItem[]> {
-    const response = await api.get<ProviderListItem[]>("/providers");
+  async getProviders(filters: ProviderFilters = {}): Promise<ProviderListResponse> {
+    const params = new URLSearchParams();
+
+    if (filters.page) params.set("page", String(filters.page));
+    if (filters.pageSize) params.set("pageSize", String(filters.pageSize));
+    if (filters.provider) params.set("provider", filters.provider);
+    if (filters.ruc) params.set("ruc", filters.ruc);
+    if (filters.fromDate) params.set("fromDate", filters.fromDate);
+    if (filters.toDate) params.set("toDate", filters.toDate);
+
+    const query = params.toString();
+    const url = query ? `/providers?${query}` : "/providers";
+    const response = await api.get<ProviderListResponse>(url);
     return response.data;
   }
 
@@ -49,6 +63,11 @@ class ProviderService {
 
   async getProvidersLookup(): Promise<ProviderLookupItem[]> {
     const response = await api.get<ProviderLookupItem[]>("/providers/lookup");
+    return response.data;
+  }
+
+  async getProvidersRucLookup(): Promise<ProviderRucLookupItem[]> {
+    const response = await api.get<ProviderRucLookupItem[]>("/providers/lookup-ruc");
     return response.data;
   }
 }

@@ -4,6 +4,25 @@ export interface ProviderListItem {
   address: string;
   ruc: string;
   createdAt: string;
+  activeOrdersCount: number;
+  annulledOrdersCount: number;
+}
+
+export interface ProviderListResponse {
+  data: ProviderListItem[];
+  total: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface ProviderFilters {
+  page?: number;
+  pageSize?: number;
+  provider?: string;
+  ruc?: string;
+  fromDate?: string;
+  toDate?: string;
 }
 
 export interface ProviderCreatedBy {
@@ -70,4 +89,9 @@ export interface ProductLookupItem {
 export interface ProviderLookupItem {
   id: string;
   name: string;
+}
+
+export interface ProviderRucLookupItem {
+  id: string;
+  ruc: string;
 }
