@@ -9,6 +9,7 @@ import { storeService } from "@/services/store.service";
 import { warehouseService } from "@/services/warehouse.service";
 import { authService } from "@/services/auth";
 import { userService } from "@/services/user.service";
+import { uniqueBy } from "@/utils/array";
 import type {
   EmployedDetail,
   EmployedListItem,
@@ -207,11 +208,30 @@ export default function EmpleadosPage() {
           warehouseService.getWarehousesLookup(),
           employedService.getEmployedLookup(),
         ]);
-        setPositionOptions(Array.isArray(positions) ? positions : []);
-        setStatusOptions(Array.isArray(statuses) ? statuses : []);
-        setStoreOptions(Array.isArray(stores) ? stores : []);
-        setWarehouseOptions(Array.isArray(warehouses) ? warehouses : []);
-        setNameLookup(Array.isArray(names) ? names : []);
+        const safePositions = Array.isArray(positions)
+          ? uniqueBy(positions, (item) => item?.toLowerCase())
+          : [];
+        const safeStatuses = Array.isArray(statuses)
+          ? uniqueBy(statuses, (item) => item)
+          : [];
+        const safeStores = Array.isArray(stores)
+          ? uniqueBy(stores, (item) => item.name?.trim().toLowerCase() ?? item.id)
+          : [];
+        const safeWarehouses = Array.isArray(warehouses)
+          ? uniqueBy(warehouses, (item) => item.name?.trim().toLowerCase() ?? item.id)
+          : [];
+        const safeNames = Array.isArray(names)
+          ? uniqueBy(
+              names,
+              (item) =>
+                `${item.firstName?.trim().toLowerCase() ?? ""}|${item.lastName?.trim().toLowerCase() ?? ""}`
+            )
+          : [];
+        setPositionOptions(safePositions);
+        setStatusOptions(safeStatuses);
+        setStoreOptions(safeStores);
+        setWarehouseOptions(safeWarehouses);
+        setNameLookup(safeNames);
       } catch (error: any) {
         console.error(error);
         toast.error(error?.message || "No se pudieron cargar los lookups");
@@ -240,19 +260,25 @@ export default function EmpleadosPage() {
   ]);
 
   const filteredFirstNameSuggestions = useMemo(() => {
+    const base = uniqueBy(nameLookup, (item) => item.firstName?.trim().toLowerCase()).filter(
+      (item) => Boolean(item.firstName)
+    );
     const query = firstNameQuery.trim().toLowerCase();
-    if (!query) return nameLookup.slice(0, 8);
-    return nameLookup
-      .filter((item) => item.firstName.toLowerCase().includes(query))
-      .slice(0, 8);
+    const source = query
+      ? base.filter((item) => item.firstName!.toLowerCase().includes(query))
+      : base;
+    return source.slice(0, 8);
   }, [firstNameQuery, nameLookup]);
 
   const filteredLastNameSuggestions = useMemo(() => {
+    const base = uniqueBy(nameLookup, (item) => item.lastName?.trim().toLowerCase()).filter(
+      (item) => Boolean(item.lastName)
+    );
     const query = lastNameQuery.trim().toLowerCase();
-    if (!query) return nameLookup.slice(0, 8);
-    return nameLookup
-      .filter((item) => item.lastName.toLowerCase().includes(query))
-      .slice(0, 8);
+    const source = query
+      ? base.filter((item) => item.lastName!.toLowerCase().includes(query))
+      : base;
+    return source.slice(0, 8);
   }, [lastNameQuery, nameLookup]);
 
   const openDetail = async (employeeId: string) => {

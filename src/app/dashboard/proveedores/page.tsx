@@ -42,6 +42,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+import { uniqueBy } from "@/utils/array";
+
 const toUtcRange = (from: string, to: string) => {
   const fromDate = `${from}T00:00:00.000Z`;
   const toDate = `${to}T23:59:59.999Z`;
@@ -146,8 +148,14 @@ export default function ProveedoresPage() {
           providerService.getProvidersLookup(),
           providerService.getProvidersRucLookup(),
         ]);
-        setProvidersLookup(Array.isArray(providers) ? providers : []);
-        setProvidersRucLookup(Array.isArray(rucs) ? rucs : []);
+        const safeProviders = Array.isArray(providers)
+          ? uniqueBy(providers, (item) => item.name?.trim().toLowerCase())
+          : [];
+        const safeRucs = Array.isArray(rucs)
+          ? uniqueBy(rucs, (item) => item.ruc?.trim())
+          : [];
+        setProvidersLookup(safeProviders);
+        setProvidersRucLookup(safeRucs);
       } catch (error: any) {
         console.error(error);
         toast.error(error?.response?.data?.message || error?.message || "No se pudieron cargar los lookups");
