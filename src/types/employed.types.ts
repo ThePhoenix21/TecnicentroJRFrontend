@@ -1,5 +1,26 @@
 export type EmployedStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
 
+export type EmployedPositionLookupItem = string;
+
+export type EmployedStatusLookupItem = EmployedStatus;
+
+export type EmployedNameLookupItem = {
+  id: string;
+  firstName: string;
+  lastName: string;
+};
+
+export type EmployedFilters = {
+  status?: EmployedStatus;
+  firstName?: string;
+  lastName?: string;
+  position?: string;
+  storeId?: string;
+  warehouseId?: string;
+  fromDate?: string;
+  toDate?: string;
+};
+
 export interface EmployedListItem {
   id: string;
   firstName: string;

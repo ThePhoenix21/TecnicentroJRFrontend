@@ -5,6 +5,7 @@ import type {
   DeleteWarehouseResponse,
   UpdateWarehouseDto,
   WarehouseDetail,
+  WarehouseLookupItem,
   WarehouseListItem,
 } from "@/types/warehouse.types";
 
@@ -21,6 +22,11 @@ class WarehouseService {
 
   async getWarehousesSimple(): Promise<WarehouseSimpleItem[]> {
     const response = await api.get<WarehouseSimpleItem[]>("/warehouses/simple");
+    return response.data;
+  }
+
+  async getWarehousesLookup(): Promise<WarehouseLookupItem[]> {
+    const response = await api.get<WarehouseLookupItem[]>("/warehouses/lookup");
     return response.data;
   }
 

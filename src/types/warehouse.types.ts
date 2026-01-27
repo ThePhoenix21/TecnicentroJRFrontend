@@ -5,6 +5,11 @@ export type WarehouseListItem = {
   phone: string;
 };
 
+export type WarehouseLookupItem = {
+  id: string;
+  name: string;
+};
+
 export type WarehouseStore = {
   id: string;
   priority: number | null;

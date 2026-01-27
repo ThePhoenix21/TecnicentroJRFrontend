@@ -5,11 +5,30 @@ import type {
   CreateEmployedDto,
   UpdateEmployedDto,
   RecreateEmployedDto,
+  EmployedFilters,
+  EmployedPositionLookupItem,
+  EmployedStatusLookupItem,
+  EmployedNameLookupItem,
 } from '@/types/employed.types';
 
 class EmployedService {
-  async getEmployedList(): Promise<EmployedListItem[]> {
-    const response = await api.get<EmployedListItem[]>('/employed');
+  async getEmployedList(filters: EmployedFilters = {}): Promise<EmployedListItem[]> {
+    const response = await api.get<EmployedListItem[]>('/employed', { params: filters });
+    return response.data;
+  }
+
+  async getPositionsLookup(): Promise<EmployedPositionLookupItem[]> {
+    const response = await api.get<EmployedPositionLookupItem[]>('/employed/lookup-position');
+    return response.data;
+  }
+
+  async getStatusLookup(): Promise<EmployedStatusLookupItem[]> {
+    const response = await api.get<EmployedStatusLookupItem[]>('/employed/lookup-status');
+    return response.data;
+  }
+
+  async getEmployedLookup(): Promise<EmployedNameLookupItem[]> {
+    const response = await api.get<EmployedNameLookupItem[]>('/employed/lookup');
     return response.data;
   }
 

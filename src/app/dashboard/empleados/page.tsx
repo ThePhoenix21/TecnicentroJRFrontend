@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Search, X, Users, Trash2, Edit2, Save, RotateCcw, Plus } from "lucide-react";
+import { Search, Users, Trash2, Edit2, Save, RotateCcw, Plus } from "lucide-react";
 
 import { employedService } from "@/services/employed.service";
 import { storeService } from "@/services/store.service";
@@ -13,6 +13,9 @@ import type {
   EmployedDetail,
   EmployedListItem,
   EmployedStatus,
+  EmployedNameLookupItem,
+  EmployedPositionLookupItem,
+  EmployedStatusLookupItem,
   CreateEmployedDto,
   RecreateEmployedDto,
   UpdateEmployedDto,
@@ -50,6 +53,11 @@ type StoreOption = { id: string; name: string };
 
 type WarehouseOption = { id: string; name: string };
 
+const toUtcRange = (from: string, to: string) => {
+  const fromDate = `${from}T00:00:00.000Z`;
+  const toDate = `${to}T23:59:59.999Z`;
+  return { fromDate, toDate };
+};
 
 const statusLabel: Record<EmployedStatus, string> = {
   ACTIVE: "ACTIVO",
@@ -57,14 +65,26 @@ const statusLabel: Record<EmployedStatus, string> = {
   SUSPENDED: "SUSPENDIDO",
 };
 
-const normalize = (v: unknown) => String(v ?? "").trim().toLowerCase();
-
 export default function EmpleadosPage() {
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<EmployedListItem[]>([]);
 
-  const [searchTerm, setSearchTerm] = useState("");
+  const [firstNameFilter, setFirstNameFilter] = useState("");
+  const [firstNameQuery, setFirstNameQuery] = useState("");
+  const [showFirstNameSuggestions, setShowFirstNameSuggestions] = useState(false);
+  const [lastNameFilter, setLastNameFilter] = useState("");
+  const [lastNameQuery, setLastNameQuery] = useState("");
+  const [showLastNameSuggestions, setShowLastNameSuggestions] = useState(false);
+  const [positionFilter, setPositionFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<EmployedStatus | "all">("all");
+  const [storeIdFilter, setStoreIdFilter] = useState("all");
+  const [warehouseIdFilter, setWarehouseIdFilter] = useState("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+
+  const [positionOptions, setPositionOptions] = useState<EmployedPositionLookupItem[]>([]);
+  const [statusOptions, setStatusOptions] = useState<EmployedStatusLookupItem[]>([]);
+  const [nameLookup, setNameLookup] = useState<EmployedNameLookupItem[]>([]);
 
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -143,7 +163,17 @@ export default function EmpleadosPage() {
   const loadEmployees = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await employedService.getEmployedList();
+      const dateRange = fromDate && toDate ? toUtcRange(fromDate, toDate) : null;
+      const data = await employedService.getEmployedList({
+        status: statusFilter === "all" ? undefined : statusFilter,
+        firstName: firstNameFilter.trim() || undefined,
+        lastName: lastNameFilter.trim() || undefined,
+        position: positionFilter === "all" ? undefined : positionFilter,
+        storeId: storeIdFilter === "all" ? undefined : storeIdFilter,
+        warehouseId: warehouseIdFilter === "all" ? undefined : warehouseIdFilter,
+        fromDate: dateRange?.fromDate,
+        toDate: dateRange?.toDate,
+      });
       setEmployees(Array.isArray(data) ? data : []);
     } catch (error: any) {
       console.error(error);
@@ -152,33 +182,78 @@ export default function EmpleadosPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [
+    firstNameFilter,
+    lastNameFilter,
+    positionFilter,
+    statusFilter,
+    storeIdFilter,
+    warehouseIdFilter,
+    fromDate,
+    toDate,
+  ]);
 
   useEffect(() => {
     loadEmployees();
   }, [loadEmployees]);
 
-  const filteredEmployees = useMemo(() => {
-    const q = normalize(searchTerm);
+  useEffect(() => {
+    const loadLookups = async () => {
+      try {
+        const [positions, statuses, stores, warehouses, names] = await Promise.all([
+          employedService.getPositionsLookup(),
+          employedService.getStatusLookup(),
+          storeService.getStoresLookup(),
+          warehouseService.getWarehousesLookup(),
+          employedService.getEmployedLookup(),
+        ]);
+        setPositionOptions(Array.isArray(positions) ? positions : []);
+        setStatusOptions(Array.isArray(statuses) ? statuses : []);
+        setStoreOptions(Array.isArray(stores) ? stores : []);
+        setWarehouseOptions(Array.isArray(warehouses) ? warehouses : []);
+        setNameLookup(Array.isArray(names) ? names : []);
+      } catch (error: any) {
+        console.error(error);
+        toast.error(error?.message || "No se pudieron cargar los lookups");
+      }
+    };
 
-    return employees
-      .filter((e) => {
-        if (statusFilter === "all") return true;
-        return e.status === statusFilter;
-      })
-      .filter((e) => {
-        if (!q) return true;
-        return (
-          normalize(e.firstName).includes(q) ||
-          normalize(e.lastName).includes(q) ||
-          normalize(e.position).includes(q) ||
-          normalize(e.status).includes(q) ||
-          normalize(e.assignmentName).includes(q) ||
-          normalize(e.storeName).includes(q) ||
-          normalize(e.warehouseName).includes(q)
-        );
-      });
-  }, [employees, searchTerm, statusFilter]);
+    loadLookups();
+  }, []);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      loadEmployees();
+    }, 400);
+
+    return () => clearTimeout(timeout);
+  }, [
+    firstNameFilter,
+    lastNameFilter,
+    positionFilter,
+    statusFilter,
+    storeIdFilter,
+    warehouseIdFilter,
+    fromDate,
+    toDate,
+    loadEmployees,
+  ]);
+
+  const filteredFirstNameSuggestions = useMemo(() => {
+    const query = firstNameQuery.trim().toLowerCase();
+    if (!query) return nameLookup.slice(0, 8);
+    return nameLookup
+      .filter((item) => item.firstName.toLowerCase().includes(query))
+      .slice(0, 8);
+  }, [firstNameQuery, nameLookup]);
+
+  const filteredLastNameSuggestions = useMemo(() => {
+    const query = lastNameQuery.trim().toLowerCase();
+    if (!query) return nameLookup.slice(0, 8);
+    return nameLookup
+      .filter((item) => item.lastName.toLowerCase().includes(query))
+      .slice(0, 8);
+  }, [lastNameQuery, nameLookup]);
 
   const openDetail = async (employeeId: string) => {
     setSelectedEmployeeId(employeeId);
@@ -689,44 +764,188 @@ export default function EmpleadosPage() {
               </div>
             </div>
 
-            <div className="space-y-3">
-              <div className="w-full flex flex-col sm:flex-row gap-3">
-                <div className="relative w-full sm:max-w-2xl">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <div className="rounded-md border bg-muted/30 p-4 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="relative">
                   <Input
-                    type="search"
-                    placeholder="Buscar por nombre, apellido, cargo, estado o asignación..."
-                    className="pl-9 pr-10 w-full"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Nombre..."
+                    value={firstNameQuery}
+                    onFocus={() => setShowFirstNameSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowFirstNameSuggestions(false), 150)}
+                    onChange={(e) => {
+                      setFirstNameQuery(e.target.value);
+                      setFirstNameFilter("");
+                      setShowFirstNameSuggestions(true);
+                    }}
                   />
-                  {searchTerm && (
+                  {firstNameQuery && (
                     <button
                       type="button"
-                      onClick={() => setSearchTerm("")}
+                      onClick={() => {
+                        setFirstNameQuery("");
+                        setFirstNameFilter("");
+                        setShowFirstNameSuggestions(false);
+                      }}
                       className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                      title="Limpiar búsqueda"
+                      title="Limpiar"
                     >
-                      <X className="h-4 w-4" />
+                      <Search className="h-4 w-4" />
                     </button>
                   )}
+                  {showFirstNameSuggestions && filteredFirstNameSuggestions.length > 0 && (
+                    <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
+                      {filteredFirstNameSuggestions.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setFirstNameFilter(item.firstName);
+                            setFirstNameQuery(item.firstName);
+                            setShowFirstNameSuggestions(false);
+                          }}
+                          className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                        >
+                          {item.firstName}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
+                <div className="relative">
+                  <Input
+                    placeholder="Apellido..."
+                    value={lastNameQuery}
+                    onFocus={() => setShowLastNameSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowLastNameSuggestions(false), 150)}
+                    onChange={(e) => {
+                      setLastNameQuery(e.target.value);
+                      setLastNameFilter("");
+                      setShowLastNameSuggestions(true);
+                    }}
+                  />
+                  {lastNameQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLastNameQuery("");
+                        setLastNameFilter("");
+                        setShowLastNameSuggestions(false);
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      title="Limpiar"
+                    >
+                      <Search className="h-4 w-4" />
+                    </button>
+                  )}
+                  {showLastNameSuggestions && filteredLastNameSuggestions.length > 0 && (
+                    <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
+                      {filteredLastNameSuggestions.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setLastNameFilter(item.lastName);
+                            setLastNameQuery(item.lastName);
+                            setShowLastNameSuggestions(false);
+                          }}
+                          className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                        >
+                          {item.lastName}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
 
-                <div className="w-full sm:w-[220px]">
-                  <Select
-                    value={statusFilter}
-                    onValueChange={(v) => setStatusFilter(v as any)}
-                  >
+              <div className="flex flex-wrap items-start gap-2">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-muted-foreground">Cargo</span>
+                  <Select value={positionFilter} onValueChange={setPositionFilter}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Filtrar por estado" />
+                      <SelectValue placeholder="Cargo" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="ACTIVE">ACTIVE</SelectItem>
-                      <SelectItem value="INACTIVE">INACTIVE</SelectItem>
-                      <SelectItem value="SUSPENDED">SUSPENDED</SelectItem>
+                      {positionOptions.map((item) => (
+                        <SelectItem key={item} value={item}>
+                          {item}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-muted-foreground">Estado</span>
+                  <Select
+                    value={statusFilter}
+                    onValueChange={(v) => setStatusFilter(v as EmployedStatus | "all")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Estado" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      {statusOptions.map((item) => (
+                        <SelectItem key={item} value={item}>
+                          {statusLabel[item] ?? item}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-muted-foreground">Tienda</span>
+                  <Select value={storeIdFilter} onValueChange={setStoreIdFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Tienda" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas</SelectItem>
+                      {storeOptions.map((store) => (
+                        <SelectItem key={store.id} value={store.id}>
+                          {store.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-muted-foreground">Almacén</span>
+                  <Select value={warehouseIdFilter} onValueChange={setWarehouseIdFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Almacén" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      {warehouseOptions.map((warehouse) => (
+                        <SelectItem key={warehouse.id} value={warehouse.id}>
+                          {warehouse.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-start gap-2 pt-2 border-t border-muted/60">
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-muted-foreground">Desde</span>
+                  <Input
+                    type="date"
+                    value={fromDate}
+                    onChange={(e) => setFromDate(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <span className="text-xs font-medium text-muted-foreground">Hasta</span>
+                  <Input
+                    type="date"
+                    value={toDate}
+                    onChange={(e) => setToDate(e.target.value)}
+                    className="w-full"
+                  />
                 </div>
               </div>
             </div>
@@ -738,11 +957,18 @@ export default function EmpleadosPage() {
             <div className="flex justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
             </div>
-          ) : filteredEmployees.length === 0 ? (
+          ) : employees.length === 0 ? (
             <div className="text-center py-8">
               <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-500">
-                {searchTerm || statusFilter !== "all"
+                {firstNameFilter ||
+                lastNameFilter ||
+                positionFilter !== "all" ||
+                statusFilter !== "all" ||
+                storeIdFilter !== "all" ||
+                warehouseIdFilter !== "all" ||
+                fromDate ||
+                toDate
                   ? "No se encontraron empleados que coincidan con el filtro"
                   : "No hay empleados registrados"}
               </p>
@@ -755,10 +981,10 @@ export default function EmpleadosPage() {
                     <TableHead className="w-[50px]">
                       <input
                         type="checkbox"
-                        checked={filteredEmployees.length > 0 && selectedEmployees.size === filteredEmployees.length}
+                        checked={employees.length > 0 && selectedEmployees.size === employees.length}
                         onChange={(e) => {
                           if (e.target.checked) {
-                            setSelectedEmployees(new Set(filteredEmployees.map((emp) => emp.id)));
+                            setSelectedEmployees(new Set(employees.map((emp) => emp.id)));
                           } else {
                             setSelectedEmployees(new Set());
                           }
@@ -775,7 +1001,7 @@ export default function EmpleadosPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredEmployees.map((e) => {
+                  {employees.map((e) => {
                     const assigned = resolveAssigned(e);
 
                     return (
