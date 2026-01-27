@@ -399,6 +399,7 @@ function ClientesContent() {
                         <TableHead>Nombre</TableHead>
                         <TableHead>Contacto</TableHead>
                         <TableHead>Documento</TableHead>
+                        <TableHead>Historial</TableHead>
                         <TableHead>Registro</TableHead>
                         <TableHead className="w-[120px] text-right">Acciones</TableHead>
                       </TableRow>
@@ -419,6 +420,14 @@ function ClientesContent() {
                           </TableCell>
                           <TableCell>
                             {client.dni && <div className="text-sm">DNI: {client.dni}</div>}
+                          </TableCell>
+                          <TableCell>
+                            <div className="space-y-0.5 text-sm">
+                              <div>Ventas: <span className="font-semibold">{client.salesCount ?? 0}</span></div>
+                              <div className="text-destructive">
+                                Canceladas: <span className="font-semibold">{client.cancelledCount ?? 0}</span>
+                              </div>
+                            </div>
                           </TableCell>
                           <TableCell className="whitespace-nowrap">
                             {client.createdAt ? format(new Date(client.createdAt), 'dd/MM/yy') : 'N/A'}
@@ -456,12 +465,20 @@ function ClientesContent() {
                     <div className="p-4">
                       <div className="flex justify-between items-start">
                         <div>
-                          <h3 className="font-medium">{client.name}</h3>
-                          <div className="mt-1 text-sm text-muted-foreground">
-                            {client.dni && <span>DNI: {client.dni}</span>}
+                          <div className="text-sm font-medium">{client.name}</div>
+                          <div className="mt-1 text-xs text-muted-foreground space-y-1">
+                            {client.email && <div>{client.email}</div>}
+                            {client.phone && <div>{client.phone}</div>}
+                            {client.dni && <div>DNI: {client.dni}</div>}
                           </div>
                         </div>
-                        <div className="flex space-x-1">
+                        <div className="text-right text-xs space-y-0.5">
+                          <div>
+                            Ventas: <span className="font-semibold">{client.salesCount ?? 0}</span>
+                          </div>
+                          <div className="text-destructive">
+                            Canceladas: <span className="font-semibold">{client.cancelledCount ?? 0}</span>
+                          </div>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -505,10 +522,16 @@ function ClientesContent() {
                         </div>
                       )}
                       
-                      <div className="mt-3 pt-3 border-t flex justify-between items-center text-sm">
+                      <div className="mt-3 pt-3 border-t flex flex-col gap-1 text-sm">
                         <span className="text-muted-foreground">
                           Registro: {client.createdAt ? format(new Date(client.createdAt), 'dd/MM/yy') : 'N/A'}
                         </span>
+                        <div className="flex justify-between text-xs">
+                          <span>Ventas: <span className="font-semibold">{client.salesCount ?? 0}</span></span>
+                          <span className="text-destructive">
+                            Canceladas: <span className="font-semibold">{client.cancelledCount ?? 0}</span>
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </Card>
