@@ -86,6 +86,33 @@ export interface CatalogProductLookupItem {
   name: string;
 }
 
+export interface StoreProductDetail {
+  id: string;
+  productId?: string;
+  price: number;
+  stock: number;
+  product: {
+    id?: string;
+    name: string;
+    description?: string;
+    basePrice?: number;
+    buyCost?: number;
+  };
+  store?: {
+    name: string;
+    address?: string;
+    phone?: string;
+  };
+  user?: {
+    name: string;
+  };
+}
+
+export interface CatalogProductDeletePayload {
+  email: string;
+  password: string;
+}
+
 export interface StoreProductStockItem {
   id?: string;
   storeProductId?: string;

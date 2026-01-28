@@ -1,22 +1,30 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { storeProductService } from '@/services/store-product.service';
 import { inventoryService } from '@/services/inventory.service';
 import { storeService } from '@/services/store.service';
-import { StoreProduct, CreateStoreProductRequest, StoreProductListItem } from '@/types/store-product.types';
+import { StoreProduct, CreateStoreProductRequest, StoreProductListItem, StoreProductDetail } from '@/types/store-product.types';
 import { StoreLookupItem } from '@/types/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Plus, Search, Edit, Trash2, X, Info, Package, History } from 'lucide-react';
+import { Plus, Search, X, Info, Package, Loader2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/contexts/auth-context';
 import { ProductHistory } from '@/components/inventory/ProductHistory';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 interface StoreProductFormData {
   name: string;
@@ -52,6 +60,24 @@ export default function ProductsPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [currentStoreProduct, setCurrentStoreProduct] = useState<StoreProduct | null>(null);
   const [originalStock, setOriginalStock] = useState<number | null>(null); // Nuevo estado
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [productDetail, setProductDetail] = useState<StoreProductDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailForm, setDetailForm] = useState({
+    name: '',
+    description: '',
+    price: '',
+    buyCost: '',
+    basePrice: '',
+  });
+  const [isUpdatingDetail, setIsUpdatingDetail] = useState(false);
+  const [isDeletingStoreProduct, setIsDeletingStoreProduct] = useState(false);
+  const [isDeletingCatalogProduct, setIsDeletingCatalogProduct] = useState(false);
+  const [catalogDeleteCredentials, setCatalogDeleteCredentials] = useState({ email: '', password: '' });
+  const [showCatalogDeleteForm, setShowCatalogDeleteForm] = useState(false);
+
   const [formData, setFormData] = useState<StoreProductFormData>({
     name: '',
     description: '',
@@ -61,6 +87,8 @@ export default function ProductsPage() {
     stock: 0,
     stockThreshold: 1,
   });
+
+  const filtersInitializedRef = useRef(false);
 
   // Inicializar hooks
   const router = useRouter();
@@ -137,28 +165,53 @@ export default function ProductsPage() {
     }
   }, [selectedStoreId, currentStore?.id, nameFilter, hideOutOfStock, toast, canViewProducts, canViewInventory]);
 
+  const fetchStoreProductsRef = useRef(fetchStoreProducts);
+
+  useEffect(() => {
+    fetchStoreProductsRef.current = fetchStoreProducts;
+  }, [fetchStoreProducts]);
+
   useEffect(() => {
     if (!isAuthenticated) {
       router.push('/login');
-      return;
     }
-    if (selectedStoreId || currentStore?.id) {
-      fetchStoreProducts(1);
-    }
-  }, [isAuthenticated, router, currentStore?.id, selectedStoreId, fetchStoreProducts]);
+  }, [isAuthenticated, router]);
 
   const filtersKey = useMemo(() => {
-    return [selectedStoreId || currentStore?.id || '', nameFilter, hideOutOfStock].join('|');
-  }, [selectedStoreId, currentStore?.id, nameFilter, hideOutOfStock]);
+    return [nameFilter, hideOutOfStock].join('|');
+  }, [nameFilter, hideOutOfStock]);
+
+  const activeStoreId = selectedStoreId || currentStore?.id || '';
+  const hasFetchedInitialRef = useRef(false);
+  const lastStoreIdRef = useRef<string>('');
 
   useEffect(() => {
+    if (!isAuthenticated || !activeStoreId) {
+      return;
+    }
+
+    if (lastStoreIdRef.current === activeStoreId && hasFetchedInitialRef.current) {
+      return;
+    }
+
+    lastStoreIdRef.current = activeStoreId;
+    hasFetchedInitialRef.current = true;
+    filtersInitializedRef.current = true;
+    fetchStoreProductsRef.current?.(1);
+  }, [isAuthenticated, activeStoreId]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !activeStoreId || !hasFetchedInitialRef.current) {
+      return;
+    }
+
     const timer = setTimeout(() => {
       setPage(1);
-      fetchStoreProducts(1);
+      fetchStoreProductsRef.current?.(1);
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [filtersKey, fetchStoreProducts]);
+  }, [filtersKey, isAuthenticated, activeStoreId]);
 
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -322,6 +375,158 @@ export default function ProductsPage() {
     }
   }, [currentStore, isEditing, currentStoreProduct, formData, isAdmin, fetchStoreProducts, toast]);
 
+  const loadProductDetail = useCallback(async (productId: string) => {
+    setDetailLoading(true);
+    setDetailError(null);
+    try {
+      const detail = await storeProductService.getStoreProductDetail(productId);
+      const normalizedDetail: StoreProductDetail = {
+        ...detail,
+        productId: detail.productId ?? detail.product?.id,
+      };
+      setProductDetail(normalizedDetail);
+      setDetailForm({
+        name: detail.product?.name || '',
+        description: detail.product?.description || '',
+        price: typeof detail.price === 'number' ? detail.price.toString() : '',
+        buyCost: typeof detail.product?.buyCost === 'number' ? detail.product.buyCost.toString() : '',
+        basePrice: typeof detail.product?.basePrice === 'number' ? detail.product.basePrice.toString() : '',
+      });
+    } catch (error) {
+      console.error('Error loading product detail:', error);
+      setDetailError('No se pudo cargar el detalle del producto.');
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
+  const openProductDetail = (productId: string) => {
+    setSelectedProductId(productId);
+    setDetailModalOpen(true);
+    loadProductDetail(productId);
+  };
+
+  const closeProductDetail = () => {
+    if (isUpdatingDetail || isDeletingStoreProduct || isDeletingCatalogProduct) return;
+    setDetailModalOpen(false);
+    setSelectedProductId(null);
+    setProductDetail(null);
+    setDetailForm({ name: '', description: '', price: '', buyCost: '', basePrice: '' });
+    setDetailError(null);
+    setCatalogDeleteCredentials({ email: '', password: '' });
+    setShowCatalogDeleteForm(false);
+  };
+
+  const handleDetailFormChange = (field: keyof typeof detailForm, value: string) => {
+    setDetailForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleUpdateDetail = async () => {
+    if (!selectedProductId) return;
+    setIsUpdatingDetail(true);
+    try {
+      const payload: any = {
+        name: detailForm.name,
+        description: detailForm.description,
+        price: detailForm.price ? Number(detailForm.price) : 0,
+      };
+      if (detailForm.buyCost !== '') payload.buyCost = Number(detailForm.buyCost);
+      if (detailForm.basePrice !== '') payload.basePrice = Number(detailForm.basePrice);
+
+      await storeProductService.updateStoreProduct(selectedProductId, payload);
+
+      toast({
+        title: 'Producto actualizado',
+        description: 'Los cambios se guardaron correctamente.',
+      });
+
+      await loadProductDetail(selectedProductId);
+      fetchStoreProducts(page);
+    } catch (error) {
+      console.error('Error updating product detail:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo actualizar el producto.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUpdatingDetail(false);
+    }
+  };
+
+  const handleDeleteStoreProductDetail = async () => {
+    if (!selectedProductId) return;
+    const shouldDelete = window.confirm(
+      'Se recomienda dejar el stock en 0 antes de eliminar un producto de la tienda.\n¿Deseas continuar igualmente?'
+    );
+    if (!shouldDelete) return;
+
+    setIsDeletingStoreProduct(true);
+    try {
+      await storeProductService.deleteStoreProduct(selectedProductId);
+      toast({
+        title: 'Producto eliminado',
+        description: 'Se eliminó el producto de esta tienda.',
+      });
+      closeProductDetail();
+      fetchStoreProducts(page);
+    } catch (error) {
+      console.error('Error deleting store product:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo eliminar el producto de la tienda.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeletingStoreProduct(false);
+    }
+  };
+
+  const handleDeleteCatalogProductDetail = async () => {
+    const catalogProductId = productDetail?.productId ?? productDetail?.product?.id;
+    if (!catalogProductId) {
+      toast({
+        title: 'Acción no disponible',
+        description: 'El identificador del producto en catálogo no está disponible.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!catalogDeleteCredentials.email || !catalogDeleteCredentials.password) {
+      toast({
+        title: 'Datos incompletos',
+        description: 'Ingresa el correo y contraseña para confirmar la eliminación del catálogo.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const shouldDelete = window.confirm(
+      'Eliminar del catálogo borrará el producto en todas las tiendas. Se recomienda dejar stock en 0 antes de continuar.\n¿Deseas eliminarlo definitivamente?'
+    );
+    if (!shouldDelete) return;
+
+    setIsDeletingCatalogProduct(true);
+    try {
+      await storeProductService.deleteCatalogProduct(catalogProductId, catalogDeleteCredentials);
+      toast({
+        title: 'Producto eliminado del catálogo',
+        description: 'El producto se eliminó de todas las tiendas.',
+      });
+      closeProductDetail();
+      fetchStoreProducts(1);
+    } catch (error) {
+      console.error('Error deleting catalog product:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo eliminar el producto del catálogo.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeletingCatalogProduct(false);
+    }
+  };
+
   const handleEdit = useCallback((storeProduct: StoreProduct) => {
     setCurrentStoreProduct(storeProduct);
     setOriginalStock(storeProduct.stock); // Guardar stock original
@@ -337,26 +542,6 @@ export default function ProductsPage() {
     setIsEditing(true);
     setIsModalOpen(true);
   }, []);
-
-  const handleDelete = useCallback(async (id: string) => {
-    if (window.confirm('¿Estás seguro de que deseas eliminar este producto de la tienda?')) {
-      try {
-        await storeProductService.deleteStoreProduct(id);
-        toast({
-          title: 'Éxito',
-          description: 'Producto eliminado correctamente',
-        });
-        fetchStoreProducts();
-      } catch (error) {
-        console.error('Error deleting product:', error);
-        toast({
-          title: 'Error',
-          description: 'No se pudo eliminar el producto',
-          variant: 'destructive',
-        });
-      }
-    }
-  }, [toast, fetchStoreProducts]);
 
   const openNewProductModal = () => {
     setCurrentStoreProduct(null);
@@ -577,36 +762,14 @@ export default function ProductsPage() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {visibleProducts.map((storeProduct) => (
-              <Card key={storeProduct.id} className="h-full flex flex-col py-5">
+              <Card
+                key={storeProduct.id}
+                className="h-full flex flex-col py-5 cursor-pointer transition hover:border-primary"
+                onClick={() => openProductDetail(storeProduct.id)}
+              >
               <CardHeader>
                 <div className="flex justify-between items-start">
                   <CardTitle className="text-base">{storeProduct.name}</CardTitle>
-                  {canManageProducts && (
-                    <div className="flex space-x-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          toast({
-                            title: 'Acción no disponible',
-                            description: 'La edición sigue usando el endpoint anterior. Mantendremos esta acción temporalmente.',
-                            variant: 'destructive',
-                          });
-                        }}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                    {/*desctivado temporalmente
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDelete(storeProduct.id)}
-                    >
-                      <Trash2 className="h-4 w-4 text-red-500" />
-                    </Button>
-                    */}
-                    </div>
-                  )}
                 </div>
                 <div className="space-y-1">
                   <p className="text-xl font-bold text-primary">
@@ -835,6 +998,189 @@ export default function ProductsPage() {
           </div>
         </div>
       )}
+
+      <Dialog open={detailModalOpen} onOpenChange={(open) => {
+        if (!open) closeProductDetail();
+      }}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Detalle del producto</DialogTitle>
+            <DialogDescription>
+              Revisa la información del producto en la tienda y realiza ajustes si es necesario.
+            </DialogDescription>
+          </DialogHeader>
+
+          {detailLoading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : detailError ? (
+            <p className="text-sm text-destructive">{detailError}</p>
+          ) : productDetail ? (
+            <div className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label>Nombre</Label>
+                  <Input
+                    value={detailForm.name}
+                    onChange={(e) => handleDetailFormChange('name', e.target.value)}
+                    disabled={isUpdatingDetail}
+                  />
+                </div>
+                <div>
+                  <Label>Precio (venta)</Label>
+                  <Input
+                    type="number"
+                    value={detailForm.price}
+                    onChange={(e) => handleDetailFormChange('price', e.target.value)}
+                    disabled={isUpdatingDetail}
+                  />
+                </div>
+                <div>
+                  <Label>Costo</Label>
+                  <Input
+                    type="number"
+                    value={detailForm.buyCost}
+                    onChange={(e) => handleDetailFormChange('buyCost', e.target.value)}
+                    disabled={isUpdatingDetail}
+                  />
+                </div>
+                <div>
+                  <Label>Precio base</Label>
+                  <Input
+                    type="number"
+                    value={detailForm.basePrice}
+                    onChange={(e) => handleDetailFormChange('basePrice', e.target.value)}
+                    disabled={isUpdatingDetail}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <Label>Descripción</Label>
+                  <textarea
+                    value={detailForm.description}
+                    onChange={(e) => handleDetailFormChange('description', e.target.value)}
+                    className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    disabled={isUpdatingDetail}
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-md border p-4 text-sm">
+                  <p className="font-semibold mb-1">Información en tienda</p>
+                  <p>Tienda: {productDetail.store?.name ?? '—'}</p>
+                  <p>Dirección: {productDetail.store?.address ?? '—'}</p>
+                  <p>Teléfono: {productDetail.store?.phone ?? '—'}</p>
+                  <p>Stock actual: {productDetail.stock}</p>
+                  <p>Responsable: {productDetail.user?.name ?? '—'}</p>
+                </div>
+                <div className="rounded-md border p-4 text-sm space-y-2">
+                  <p className="font-semibold">Acciones</p>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={handleUpdateDetail}
+                    disabled={isUpdatingDetail}
+                  >
+                    {isUpdatingDetail ? 'Guardando...' : 'Guardar cambios'}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="w-full"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteStoreProductDetail();
+                    }}
+                    disabled={isDeletingStoreProduct}
+                  >
+                    {isDeletingStoreProduct ? 'Eliminando...' : 'Eliminar de esta tienda'}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-md border p-4 space-y-3">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="font-semibold">Eliminar del catálogo</p>
+                    <p className="text-xs text-muted-foreground">
+                      Esta acción eliminará el producto de todas las tiendas. Se recomienda dejar el stock en 0 antes de continuar.
+                    </p>
+                  </div>
+                  {!showCatalogDeleteForm && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCatalogDeleteCredentials({ email: '', password: '' });
+                        setShowCatalogDeleteForm(true);
+                      }}
+                      disabled={isDeletingCatalogProduct}
+                    >
+                      Eliminar del catálogo
+                    </Button>
+                  )}
+                </div>
+
+                {showCatalogDeleteForm && (
+                  <div className="space-y-3">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <Label>Correo de confirmación</Label>
+                        <Input
+                          type="email"
+                          value={catalogDeleteCredentials.email}
+                          onChange={(e) => setCatalogDeleteCredentials((prev) => ({ ...prev, email: e.target.value }))}
+                          disabled={isDeletingCatalogProduct}
+                        />
+                      </div>
+                      <div>
+                        <Label>Contraseña</Label>
+                        <Input
+                          type="password"
+                          value={catalogDeleteCredentials.password}
+                          onChange={(e) => setCatalogDeleteCredentials((prev) => ({ ...prev, password: e.target.value }))}
+                          disabled={isDeletingCatalogProduct}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-3">
+                      <Button
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowCatalogDeleteForm(false);
+                          setCatalogDeleteCredentials({ email: '', password: '' });
+                        }}
+                        disabled={isDeletingCatalogProduct}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteCatalogProductDetail();
+                        }}
+                        disabled={isDeletingCatalogProduct}
+                      >
+                        {isDeletingCatalogProduct ? 'Eliminando del catálogo...' : 'Confirmar eliminación'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeProductDetail} disabled={isUpdatingDetail || isDeletingStoreProduct || isDeletingCatalogProduct}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

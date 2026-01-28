@@ -7,7 +7,9 @@ import {
   ProductsResponse,
   StoreProductStockItem,
   StoreProductsListResponse,
-  CatalogProductLookupItem
+  CatalogProductLookupItem,
+  StoreProductDetail,
+  CatalogProductDeletePayload
 } from '@/types/store-product.types';
 
 class StoreProductService {
@@ -72,6 +74,25 @@ class StoreProductService {
       return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
       console.error('[StoreProductService.getCatalogProductsLookup] Error:', error);
+      throw error;
+    }
+  }
+
+  async getStoreProductDetail(id: string): Promise<StoreProductDetail> {
+    try {
+      const response = await api.get<StoreProductDetail>(`/store/products/findOne/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error('[StoreProductService.getStoreProductDetail] Error:', error);
+      throw error;
+    }
+  }
+
+  async deleteCatalogProduct(productId: string, payload: CatalogProductDeletePayload): Promise<void> {
+    try {
+      await api.delete(`/catalog/products/remove/${productId}`, { data: payload });
+    } catch (error) {
+      console.error('[StoreProductService.deleteCatalogProduct] Error:', error);
       throw error;
     }
   }
