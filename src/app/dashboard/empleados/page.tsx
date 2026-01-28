@@ -195,10 +195,6 @@ export default function EmpleadosPage() {
   ]);
 
   useEffect(() => {
-    loadEmployees();
-  }, [loadEmployees]);
-
-  useEffect(() => {
     const loadLookups = async () => {
       try {
         const [positions, statuses, stores, warehouses, names] = await Promise.all([

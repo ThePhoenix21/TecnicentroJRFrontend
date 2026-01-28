@@ -167,10 +167,6 @@ function ClientesContent() {
   }, []);
 
   useEffect(() => {
-    loadClientsRef.current?.();
-  }, []);
-
-  useEffect(() => {
     const timeout = setTimeout(() => {
       setPage((prev) => {
         if (prev !== 1) {

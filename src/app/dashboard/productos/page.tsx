@@ -9,6 +9,7 @@ import { StoreProduct, CreateStoreProductRequest, StoreProductListItem, StorePro
 import { StoreLookupItem } from '@/types/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -55,7 +56,7 @@ export default function ProductsPage() {
   const [total, setTotal] = useState(0);
   const PAGE_SIZE = 12;
 
-  const [hideOutOfStock, setHideOutOfStock] = useState(false);
+  const [hideOutOfStock, setHideOutOfStock] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentStoreProduct, setCurrentStoreProduct] = useState<StoreProduct | null>(null);
@@ -608,53 +609,25 @@ export default function ProductsPage() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="space-y-2">
             <Label>Tienda</Label>
-            <div className="relative">
-              <Input
-                value={storeQuery}
-                onChange={(e) => {
-                  setStoreQuery(e.target.value);
-                  setShowStoreSuggestions(true);
-                }}
-                onFocus={() => setShowStoreSuggestions(true)}
-                placeholder="Buscar tienda..."
-              />
-              {storeQuery && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStoreQuery('');
-                    setSelectedStoreId('');
-                    setShowStoreSuggestions(false);
-                  }}
-                  className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground"
-                >
-                  ×
-                </button>
-              )}
-
-              {showStoreSuggestions && storesLookup.length > 0 && (
-                <div className="absolute z-20 mt-1 w-full rounded-md border bg-background shadow">
-                  <div className="max-h-64 overflow-auto">
-                    {storesLookup
-                      .filter((s) => s.name.toLowerCase().includes(storeQuery.trim().toLowerCase()))
-                      .map((store) => (
-                        <button
-                          key={store.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedStoreId(store.id);
-                            setStoreQuery(store.name);
-                            setShowStoreSuggestions(false);
-                          }}
-                          className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted"
-                        >
-                          <span>{store.name}</span>
-                        </button>
-                      ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            <Select
+              value={selectedStoreId}
+              onValueChange={(value) => {
+                setSelectedStoreId(value);
+                const selectedStore = storesLookup.find(store => store.id === value);
+                setStoreQuery(selectedStore?.name || '');
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccionar tienda..." />
+              </SelectTrigger>
+              <SelectContent>
+                {storesLookup.map((store) => (
+                  <SelectItem key={store.id} value={store.id}>
+                    {store.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">
@@ -792,7 +765,7 @@ export default function ProductsPage() {
                 </div>
               </CardHeader>
               <CardContent className="flex-grow">                
-                {isAdmin && storeProduct.buyCost && (
+                {isAdmin && (storeProduct.buyCost !== undefined) && (
                   <div className="text-xs text-muted-foreground space-y-1">
                     <p>Costo: S/ {(storeProduct.buyCost || 0).toFixed(2)}</p>
                     <p>Ganancia: S/ {((storeProduct.price || 0) - (storeProduct.buyCost || 0)).toFixed(2)}</p>

@@ -208,10 +208,6 @@ export default function OrdenesSuministroPage() {
   );
 
   useEffect(() => {
-    loadOrders(1);
-  }, [loadOrders]);
-
-  useEffect(() => {
     const loadLookups = async () => {
       try {
         const [users, orders] = await Promise.all([

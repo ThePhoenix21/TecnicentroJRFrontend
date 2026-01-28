@@ -138,10 +138,6 @@ export default function ProveedoresPage() {
   }, [rucQuery, providersRucLookup]);
 
   useEffect(() => {
-    loadProviders(1);
-  }, [loadProviders]);
-
-  useEffect(() => {
     const loadLookups = async () => {
       try {
         const [providers, rucs] = await Promise.all([
