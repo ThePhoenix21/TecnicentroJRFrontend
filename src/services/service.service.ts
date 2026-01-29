@@ -82,6 +82,99 @@ export interface ServiceWithClient extends Service {
     totalAmount: number;
     status: string;
     createdAt: string;
+    cashSessionsId?: string;
+    cashSession?: {
+      id: string;
+      status: "OPEN" | "CLOSED";
+    };
+  };
+}
+
+export interface ServiceLookupItem {
+  id: string;
+  value: string;
+}
+
+export interface ServiceListItem {
+  id: string;
+  clientName: string;
+  serviceName: string;
+  status: ServiceStatus;
+  price: number;
+  createdAt: string;
+}
+
+export interface ServiceListResponse {
+  data: ServiceListItem[];
+  total: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface GetServicesFilters {
+  page?: number;
+  pageSize?: number;
+  status?: ServiceStatus;
+  openCashOnly?: boolean;
+  fromDate?: string;
+  toDate?: string;
+  clientId?: string;
+  serviceId?: string;
+  storeId?: string;
+}
+
+export interface ServiceDetail {
+  // Relaciones principales
+  service: {
+    id: string;
+    name: string;
+    description: string;
+    photoUrls: string[];
+    type: ServiceType;
+    status: ServiceStatus;
+    price: number;
+    createdAt: string;
+    updatedAt: string;
+  };
+
+  order: {
+    id: string;
+    orderNumber: string;
+    status: string;
+    totalAmount: number;
+    isPriceModified: boolean;
+    createdAt: string;
+    updatedAt: string;
+    canceledAt: string | null;
+    storeName: string;
+    paymentMethods: Array<{
+      type: string;
+      amount: number;
+      createdAt: string;
+    }>;
+  };
+
+  client: {
+    id: string;
+    name: string;
+    dni: string;
+    phone: string | null;
+    email: string | null;
+    address: string | null;
+  };
+
+  storeService: {
+    id: string;
+    name: string;
+    description: string;
+    price: number;
+    type: ServiceType;
+  };
+
+  serviceCategory: {
+    id: string;
+    name: string;
   };
 }
 
@@ -91,6 +184,9 @@ interface IServiceService {
     type?: ServiceType,
     storeId?: string
   ): Promise<ServiceWithClient[]>;
+  getServicesPaged(filters?: GetServicesFilters): Promise<ServiceListResponse>;
+  getServicesLookup(): Promise<ServiceLookupItem[]>;
+  getServiceDetail(id: string): Promise<ServiceDetail>;
   getServices(
     status?: ServiceStatus,
     type?: ServiceType
@@ -120,6 +216,117 @@ interface IServiceService {
 
 class ServiceService implements IServiceService {
   private baseUrl = '/services';
+
+  private toFriendlyError(error: unknown, fallbackMessage: string): Error {
+    const axiosError = error as AxiosError<{ message?: string }>;
+    const status = axiosError.response?.status;
+
+    if (status === 429) {
+      return new Error('Demasiadas solicitudes. Espera un momento e inténtalo nuevamente.');
+    }
+    if (status === 409) {
+      return new Error('La operación no se pudo completar porque el estado cambió. Actualiza e inténtalo nuevamente.');
+    }
+
+    return new Error(axiosError.response?.data?.message || fallbackMessage);
+  }
+
+  async getServicesPaged(filters: GetServicesFilters = {}): Promise<ServiceListResponse> {
+    try {
+      const params = new URLSearchParams();
+
+      if (filters.status) params.append('status', filters.status);
+      if (filters.storeId) params.append('storeId', filters.storeId);
+      // Note: /findAllWithClients does NOT support openCashOnly, fromDate, toDate, clientId, serviceId, type yet
+
+      const url = params.toString()
+        ? `${this.baseUrl}/findAllWithClients?${params.toString()}`
+        : `${this.baseUrl}/findAllWithClients`;
+
+      const response = await api.get<ServiceWithClient[]>(url);
+      let all = response.data || [];
+
+      // Sort by createdAt descending (most recent first)
+      all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      // Client-side filters for unsupported params (temporary)
+      if (filters.clientId) {
+        all = all.filter(s => s.client?.id === filters.clientId);
+      }
+      if (filters.serviceId) {
+        all = all.filter(s => s.id === filters.serviceId);
+      }
+      if (filters.openCashOnly === true && filters.storeId) {
+        // Get current cash session to filter services from this specific session
+        try {
+          const { cashService } = await import('./cash.service');
+          const currentSession = await cashService.getCurrentCashSession(filters.storeId);
+          if (currentSession && currentSession.status === 'OPEN') {
+            all = all.filter(s => s.order?.cashSessionsId === currentSession.id);
+          } else {
+            // If no open session, return empty array
+            all = [];
+          }
+        } catch (error) {
+          console.warn('Could not get current cash session for filtering:', error);
+          // If we can't get the session, show all services (fallback behavior)
+        }
+      }
+      // TODO: fromDate, toDate not supported yet
+
+      // Client-side pagination (temporary until backend supports /services?page=...)
+      const page = filters.page ?? 1;
+      const pageSize = filters.pageSize ?? 12;
+      const start = (page - 1) * pageSize;
+      const paginated = all.slice(start, start + pageSize);
+
+      // Map to ServiceListItem
+      const data: ServiceListItem[] = paginated.map(s => ({
+        id: s.id,
+        clientName: s.client?.name ?? 'Sin cliente',
+        serviceName: s.name,
+        status: s.status,
+        price: s.price,
+        createdAt: s.createdAt,
+        updatedAt: s.updatedAt,
+        storeId: s.store?.id,
+        hasPendingPayment: s.hasPendingPayment
+      }));
+
+      return {
+        data,
+        total: all.length,
+        totalPages: Math.ceil(all.length / pageSize),
+        page,
+        pageSize
+      };
+    } catch (error) {
+      throw this.toFriendlyError(error, 'No se pudieron cargar los servicios.');
+    }
+  }
+
+  async getServicesLookup(): Promise<ServiceLookupItem[]> {
+    try {
+      const response = await api.get<ServiceLookupItem[]>(`${this.baseUrl}/lookup`);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      throw this.toFriendlyError(error, 'No se pudo cargar la lista de servicios.');
+    }
+  }
+
+  async getServiceDetail(id: string): Promise<ServiceDetail> {
+    try {
+      const response = await api.get<ServiceDetail>(`${this.baseUrl}/${id}`);
+      return response.data;
+    } catch (error) {
+      const axiosError = error as AxiosError<{ message?: string }>;
+      if (axiosError.response?.status === 404) {
+        const fallback = await api.get<ServiceDetail>(`${this.baseUrl}/findOne/${id}`);
+        return fallback.data;
+      }
+      throw this.toFriendlyError(error, 'No se pudo cargar el detalle del servicio.');
+    }
+  }
 
   // Obtener servicios con clientes y tiendas (usando nuevo endpoint del backend)
   async getServicesWithClients(
@@ -274,6 +481,14 @@ class ServiceService implements IServiceService {
         response: axiosError.response?.data,
       });
 
+      if (axiosError.response?.status === 409) {
+        throw new Error('Estado inválido o desactualizado. Actualiza e inténtalo nuevamente.');
+      }
+
+      if (axiosError.response?.status === 429) {
+        throw new Error('Demasiadas solicitudes. Espera un momento e inténtalo nuevamente.');
+      }
+
       if (axiosError.response?.status === 404) {
         throw new Error('Servicio no encontrado');
       } else if (axiosError.response?.status === 403) {
@@ -315,6 +530,10 @@ class ServiceService implements IServiceService {
         response: axiosError.response?.data,
         status: axiosError.response?.status,
       });
+
+      if (axiosError.response?.status === 429) {
+        throw new Error('Demasiadas solicitudes. Espera un momento e inténtalo nuevamente.');
+      }
 
       if (axiosError.response?.status === 404) {
         throw new Error('Servicio no encontrado');

@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { serviceService, Service, ServiceStatus, ServiceType, ServiceWithClient } from "@/services/service.service";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { serviceService, ServiceStatus, type ServiceListItem, type ServiceLookupItem } from "@/services/service.service";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -14,140 +13,185 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Search, X, Info } from "lucide-react";
+import { Info } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ServiceDetailsModal from "@/components/service/ServiceDetailsModal";
 import { useAuth } from "@/contexts/auth-context";
-import { orderService, type Order } from "@/services/order.service";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { clientService } from "@/services/client.service";
+import type { ClientLookupNameItem } from "@/types/client.types";
 
 export default function ServiciosPage() {
   const { currentStore, hasPermission, isAdmin } = useAuth();
   const canViewServices = isAdmin || hasPermission?.("VIEW_SERVICES") || hasPermission?.("MANAGE_SERVICES");
-  const [services, setServices] = useState<ServiceWithClient[]>([]);
-  const [filteredServices, setFilteredServices] = useState<ServiceWithClient[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedService, setSelectedService] = useState<ServiceWithClient | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<ServiceStatus | "all">("all");
-  const [typeFilter, setTypeFilter] = useState<ServiceType | "all">("all");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [hideOutsideCashSession, setHideOutsideCashSession] = useState(false);
+  const PAGE_SIZE = 12;
 
-  const loadServices = useCallback(async (search: string = "", status?: ServiceStatus, type?: ServiceType) => {
-    if (!currentStore || !canViewServices) {
+  const [services, setServices] = useState<ServiceListItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [clientLookup, setClientLookup] = useState<ClientLookupNameItem[]>([]);
+  const [serviceLookup, setServiceLookup] = useState<ServiceLookupItem[]>([]);
+
+  const [clientIdFilter, setClientIdFilter] = useState<string>("all");
+  const [serviceIdFilter, setServiceIdFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<ServiceStatus | "all">("all");
+  const [openCashOnly, setOpenCashOnly] = useState(true);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+
+  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const filtersKey = useMemo(
+    () => [clientIdFilter, serviceIdFilter, statusFilter, openCashOnly, fromDate, toDate].join("|"),
+    [clientIdFilter, serviceIdFilter, statusFilter, openCashOnly, fromDate, toDate]
+  );
+
+  const requestSeq = useRef(0);
+  const lastStoreIdRef = useRef<string | null>(null);
+  const firstLoadRef = useRef(true);
+
+  const loadServices = useCallback(
+    async (targetPage = 1, opts?: { clear?: boolean }) => {
+      if (!currentStore || !canViewServices) {
+        setServices([]);
+        setTotal(0);
+        setTotalPages(1);
+        setPage(1);
+        setLoading(false);
+        setError(null);
+        return;
+      }
+
+      const currentRequest = ++requestSeq.current;
+
+      if (opts?.clear) {
+        setServices([]);
+        setTotal(0);
+        setTotalPages(1);
+      }
+
+      try {
+        setLoading(true);
+        setError(null);
+
+        const response = await serviceService.getServicesPaged({
+          page: targetPage,
+          pageSize: PAGE_SIZE,
+          status: statusFilter === "all" ? undefined : statusFilter,
+          openCashOnly,
+          fromDate: fromDate || undefined,
+          toDate: toDate || undefined,
+          clientId: clientIdFilter === "all" ? undefined : clientIdFilter,
+          serviceId: serviceIdFilter === "all" ? undefined : serviceIdFilter,
+          storeId: currentStore?.id,
+        });
+
+        if (currentRequest !== requestSeq.current) return;
+
+        setServices(response.data || []);
+        setTotal(response.total || 0);
+        setTotalPages(response.totalPages || 1);
+        setPage(response.page || targetPage);
+      } catch (e: unknown) {
+        if (currentRequest !== requestSeq.current) return;
+        const message = e instanceof Error ? e.message : "No se pudieron cargar los servicios.";
+        setError(message);
+        setServices([]);
+        setTotal(0);
+        setTotalPages(1);
+      } finally {
+        if (currentRequest !== requestSeq.current) return;
+        setLoading(false);
+      }
+    },
+    [
+      PAGE_SIZE,
+      canViewServices,
+      clientIdFilter,
+      currentStore,
+      fromDate,
+      openCashOnly,
+      serviceIdFilter,
+      statusFilter,
+      toDate,
+    ]
+  );
+
+  useEffect(() => {
+    const storeId = currentStore?.id ?? null;
+
+    if (lastStoreIdRef.current && lastStoreIdRef.current !== storeId) {
+      setClientIdFilter("all");
+      setServiceIdFilter("all");
+      setStatusFilter("all");
+      setOpenCashOnly(false);
+      setFromDate("");
+      setToDate("");
+      setPage(1);
       setServices([]);
-      setFilteredServices([]);
-      setOrders([]);
-      setLoading(false);
+      setTotal(0);
+      setTotalPages(1);
+      setSelectedServiceId(null);
+      setIsModalOpen(false);
+      setError(null);
+    }
+
+    lastStoreIdRef.current = storeId;
+  }, [currentStore?.id]);
+
+  useEffect(() => {
+    const loadLookups = async () => {
+      if (!canViewServices) return;
+      try {
+        const [clients, servicesLookup] = await Promise.all([
+          clientService.getLookupName(),
+          serviceService.getServicesLookup(),
+        ]);
+
+        setClientLookup(Array.isArray(clients) ? clients : []);
+        setServiceLookup(Array.isArray(servicesLookup) ? servicesLookup : []);
+      } catch {
+        setClientLookup([]);
+        setServiceLookup([]);
+      }
+    };
+
+    loadLookups();
+  }, [canViewServices]);
+
+  useEffect(() => {
+    if (!currentStore || !canViewServices) return;
+
+    if (firstLoadRef.current) {
+      firstLoadRef.current = false;
+      loadServices(1, { clear: true });
       return;
     }
 
-    try {
-      setLoading(true);
-      const data = await serviceService.getServicesWithClients(
-        status,
-        type,
-        currentStore.id
-      );
-      // Filtrar por búsqueda localmente si se proporciona
-      const filteredData = search 
-        ? data.filter(service => 
-            service.name.toLowerCase().includes(search.toLowerCase()) ||
-            service.description?.toLowerCase().includes(search.toLowerCase()) ||
-            service.client?.name?.toLowerCase().includes(search.toLowerCase())
-          )
-        : data;
-      setServices(data);
-      setFilteredServices(filteredData);
+    const timeout = setTimeout(() => {
+      setPage(1);
+      loadServices(1, { clear: true });
+    }, 500);
 
-      // Cargar ordenes de la tienda actual para saber la sesion de caja asociada
-      try {
-        const ordersData = await orderService.getOrdersByStore(currentStore.id);
-        setOrders(ordersData);
-      } catch (ordersError) {
-        console.error("Error loading orders for services page:", ordersError);
-        setOrders([]);
-      }
-      setCurrentPage(1); // Resetear a la primera página al cargar nuevos datos
-    } catch (error) {
-      console.error("Error loading services:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentStore, canViewServices]);
+    return () => clearTimeout(timeout);
+  }, [filtersKey, currentStore?.id, canViewServices, loadServices]);
 
-  useEffect(() => {
-    if (currentStore && canViewServices) {
-      loadServices("", statusFilter === "all" ? undefined : statusFilter, typeFilter === "all" ? undefined : typeFilter);
-    }
-  }, [loadServices, statusFilter, typeFilter, currentStore, canViewServices]);
-
-  const isServiceFromOpenCashSession = (service: ServiceWithClient) => {
-    if (!service.orderId) return false;
-    const relatedOrder = orders.find((order) => order.id === service.orderId);
-    if (!relatedOrder || !relatedOrder.cashSession) return false;
-    return relatedOrder.cashSession.status === "OPEN";
+  const handlePageChange = (nextPage: number) => {
+    if (nextPage < 1 || nextPage > totalPages) return;
+    setPage(nextPage);
+    loadServices(nextPage);
   };
 
-  // Filtro local para búsqueda en tiempo real y ordenamiento
-  useEffect(() => {
-    let filtered = [...services];
-
-    if (searchTerm.trim()) {
-      filtered = filtered.filter((service) =>
-        service.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        service.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (service.description && service.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (service.client?.name && service.client.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        service.status.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-    
-    // Ordenar por fecha descendente (más reciente primero)
-    filtered.sort((a, b) => {
-        const dateA = new Date(a.createdAt || 0).getTime();
-        const dateB = new Date(b.createdAt || 0).getTime();
-        return dateB - dateA;
-    });
-
-    setFilteredServices(filtered);
-    setCurrentPage(1); // Resetear a la primera página al filtrar
-  }, [searchTerm, services]);
-
-  // Lógica de paginación (considerando filtro de sesión de caja)
-  const effectiveServices = hideOutsideCashSession
-    ? filteredServices.filter((service) => isServiceFromOpenCashSession(service))
-    : filteredServices;
-
-  const totalPages = Math.ceil(effectiveServices.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedServices = effectiveServices.slice(startIndex, endIndex);
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (currentStore && canViewServices) {
-      loadServices(searchTerm, statusFilter === "all" ? undefined : statusFilter, typeFilter === "all" ? undefined : typeFilter);
-    }
-  };
-
-  const handleStatusUpdate = () => {
-    if (currentStore && canViewServices) {
-      loadServices(searchTerm, statusFilter === "all" ? undefined : statusFilter, typeFilter === "all" ? undefined : typeFilter);
-    }
-  };
-
-  const handleServiceClick = (service: ServiceWithClient) => {
-    setSelectedService(service);
+  const openDetail = (serviceId: string) => {
+    setSelectedServiceId(serviceId);
     setIsModalOpen(true);
-  };
-
-  const hasPendingPayment = (service: ServiceWithClient) => {
-    return service.status === ServiceStatus.COMPLETED && service.hasPendingPayment === true;
   };
 
   const getStatusBadge = (status?: ServiceStatus, pendingPayment?: boolean) => {
@@ -196,11 +240,6 @@ export default function ServiciosPage() {
     return `S/${numPrice.toFixed(2)}`;  
   };
 
-  const formatShortId = (id?: string) => {
-    if (!id) return "N/A";
-    return id.substring(0, 6) + "...";
-  };
-
   if (!canViewServices) {
     return (
       <div className="space-y-6 p-4 sm:p-6">
@@ -227,79 +266,89 @@ export default function ServiciosPage() {
         <CardHeader className="pb-2 sm:pb-3">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <CardTitle className="text-lg sm:text-xl">Servicios</CardTitle>
-            <form onSubmit={handleSearch} className="w-full sm:w-auto">
-              <div className="flex flex-col sm:flex-row gap-2 w-full">
-                <div className="relative flex-1">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    type="search"
-                    placeholder="Buscar por ID, nombre, cliente o estado..."
-                    className="pl-8 w-full"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                  {searchTerm && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSearchTerm('');
-                        loadServices('', statusFilter === "all" ? undefined : statusFilter, typeFilter === "all" ? undefined : typeFilter);
-                      }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-                <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as ServiceStatus | "all")}>
-                  <SelectTrigger className="w-full sm:w-[140px]">
-                    <SelectValue placeholder="Estado" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value={ServiceStatus.PENDING}>Pendiente</SelectItem>
-                    <SelectItem value={ServiceStatus.IN_PROGRESS}>En Progreso</SelectItem>
-                    <SelectItem value={ServiceStatus.COMPLETED}>Completado</SelectItem>
-                    <SelectItem value={ServiceStatus.CANCELLED}>Cancelado</SelectItem>
-                    <SelectItem value={ServiceStatus.DELIVERED}>Entregado</SelectItem>
-                    <SelectItem value={ServiceStatus.PAID}>Pagado</SelectItem>
-                    <SelectItem value={ServiceStatus.ANNULLATED}>Anulado</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={typeFilter} onValueChange={(value) => setTypeFilter(value as ServiceType | "all")}>
-                  <SelectTrigger className="w-full sm:w-[140px]">
-                    <SelectValue placeholder="Tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value={ServiceType.REPAIR}>Reparación</SelectItem>
-                    <SelectItem value={ServiceType.MAINTENANCE}>Mantenimiento</SelectItem>
-                    <SelectItem value={ServiceType.INSPECTION}>Inspección</SelectItem>
-                    <SelectItem value={ServiceType.WARRANTY}>Garantía</SelectItem>
-                    <SelectItem value={ServiceType.CUSTOM}>Personalizado</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button type="submit" variant="outline" className="w-full sm:w-auto">
-                  Buscar
-                </Button>
-              </div>
-            </form>
           </div>
-          <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-            <Checkbox
-              id="hide-outside-cash-session"
-              checked={hideOutsideCashSession}
-              onCheckedChange={(checked) => {
-                setHideOutsideCashSession(Boolean(checked));
-                setCurrentPage(1);
-              }}
-            />
-            <label
-              htmlFor="hide-outside-cash-session"
-              className="cursor-pointer select-none"
-            >
-              Mostrar solo servicios de la sesión de caja abierta
-            </label>
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-6 gap-2">
+            <div className="md:col-span-2">
+              <Select value={clientIdFilter} onValueChange={setClientIdFilter} disabled={loading}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Cliente" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los clientes</SelectItem>
+                  {clientLookup.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="md:col-span-2">
+              <Select value={serviceIdFilter} onValueChange={setServiceIdFilter} disabled={loading}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Servicio" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los servicios</SelectItem>
+                  {serviceLookup.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.value}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="md:col-span-2">
+              <Select
+                value={statusFilter}
+                onValueChange={(value) => setStatusFilter(value as ServiceStatus | "all")}
+                disabled={loading}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Estado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value={ServiceStatus.IN_PROGRESS}>En Progreso</SelectItem>
+                  <SelectItem value={ServiceStatus.COMPLETED}>Completado</SelectItem>
+                  <SelectItem value={ServiceStatus.DELIVERED}>Entregado</SelectItem>
+                  <SelectItem value={ServiceStatus.PAID}>Pagado</SelectItem>
+                  <SelectItem value={ServiceStatus.ANNULLATED}>Anulado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="md:col-span-2 flex items-center gap-2 text-xs text-muted-foreground">
+              <Checkbox
+                id="open-cash-only"
+                checked={openCashOnly}
+                onCheckedChange={(checked) => setOpenCashOnly(Boolean(checked))}
+                disabled={loading}
+              />
+              <label htmlFor="open-cash-only" className="cursor-pointer select-none">
+                Solo caja abierta
+              </label>
+            </div>
+
+            <div className="md:col-span-2">
+              <Input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                disabled={loading}
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <Input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                disabled={loading}
+              />
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0 sm:p-4">
@@ -313,147 +362,64 @@ export default function ServiciosPage() {
                 Por favor, selecciona una tienda para ver los servicios.
               </p>
             </div>
-          ) : loading ? (
-            <div className="flex justify-center items-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-            </div>
-          ) : filteredServices.length === 0 ? (
+          ) : error ? (
             <div className="text-center py-12 text-muted-foreground">
-              {searchTerm.trim()
-                ? `No se encontraron servicios que coincidan con "${searchTerm}"`
-                : "No se encontraron servicios registrados en esta tienda"
-              }
+              {error}
+            </div>
+          ) : loading ? (
+            <div className="space-y-3 p-4">
+              {Array.from({ length: 8 }).map((_, idx) => (
+                <Skeleton key={idx} className="h-10 w-full" />
+              ))}
+            </div>
+          ) : services.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              No se encontraron servicios
             </div>
           ) : (
             <>
               <div className="flex items-center gap-2 text-xs text-muted-foreground mb-4 px-4 pt-4">
                 <Info className="h-3.5 w-3.5" />
                 <span>
-                  Mostrando {paginatedServices.length} de {filteredServices.length} servicios
-                  {searchTerm.trim() && ` (filtrados de ${services.length})`}
+                  Mostrando {services.length} de {total} servicios
                   {currentStore && ` en "${currentStore.name}"`}
                 </span>
               </div>
-              {/* Vista de tabla para pantallas medianas y grandes */}
-              <div className="hidden md:block">
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[100px]">ID</TableHead>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead>Servicio</TableHead>
-                        <TableHead>Estado</TableHead>
-                        <TableHead className="text-right">Precio</TableHead>
-                        <TableHead>Fecha</TableHead>
-                        <TableHead className="text-right">Acciones</TableHead>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Servicio</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead className="text-right">Precio</TableHead>
+                      <TableHead>Fecha</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {services.map((service) => (
+                      <TableRow
+                        key={service.id}
+                        className="cursor-pointer hover:bg-accent/50"
+                        onClick={() => openDetail(service.id)}
+                      >
+                        <TableCell className="max-w-[180px] truncate">{service.clientName}</TableCell>
+                        <TableCell className="max-w-[220px] truncate">
+                          <div className="font-medium">{service.serviceName}</div>
+                        </TableCell>
+                        <TableCell>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getStatusBadge(service.status)}`}>
+                            {translateStatus(service.status)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right font-medium">{formatPrice(service.price)}</TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          {service.createdAt ? format(new Date(service.createdAt), "dd/MM/yy") : "N/A"}
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {paginatedServices.map((service) => {
-                        const fromOpenSession = isServiceFromOpenCashSession(service);
-                        const pending = hasPendingPayment(service);
-                        return (
-                        <TableRow
-                          key={service.id}
-                          className={`cursor-pointer hover:bg-accent/50 ${pending ? "bg-orange-50/60" : ""} ${!fromOpenSession ? "opacity-60 bg-muted/40" : ""}`}
-                          onClick={() => handleServiceClick(service)}
-                        >
-                          <TableCell className="font-medium">
-                            {formatShortId(service.id)}
-                          </TableCell>
-                          <TableCell className="max-w-[150px] truncate">
-                            {service.client?.name || "Sin cliente"}
-                          </TableCell>
-                          <TableCell className="max-w-[200px]">
-                            <div className="font-medium">{service.name}</div>
-                          </TableCell>
-                          <TableCell>
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getStatusBadge(
-                                service.status,
-                                pending
-                              )}`}
-                            >
-                              {translateStatus(service.status)}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {formatPrice(service.price)}
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap">
-                            {service.createdAt
-                              ? format(new Date(service.createdAt), 'dd/MM/yy')
-                              : "N/A"}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleServiceClick(service);
-                              }}
-                              className="h-8 px-2 text-xs sm:text-sm"
-                            >
-                              Ver
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-
-              {/* Vista de tarjetas para móviles */}
-              <div className="md:hidden space-y-3">
-                {paginatedServices.map((service) => {
-                  const fromOpenSession = isServiceFromOpenCashSession(service);
-                  const pending = hasPendingPayment(service);
-                  return (
-                  <Card 
-                    key={service.id} 
-                    className={`overflow-hidden hover:shadow-md transition-shadow cursor-pointer ${pending ? "bg-orange-50/60" : ""} ${!fromOpenSession ? "opacity-60 bg-muted/40" : ""}`}
-                    onClick={() => handleServiceClick(service)}
-                  >
-                    <div className="p-4">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="font-medium">{service.name}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            {service.client?.name || "Sin cliente"}
-                          </p>
-                        </div>
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadge(
-                            service.status,
-                            pending
-                          )}`}
-                        >
-                          {translateStatus(service.status)}
-                        </span>
-                      </div>
-                      
-                      {service.description && (
-                        <p className="mt-2 text-sm text-muted-foreground line-clamp-2">
-                          {service.description}
-                        </p>
-                      )}
-                      
-                      <div className="mt-3 flex justify-between items-center text-sm">
-                        <span className="font-medium">{formatPrice(service.price)}</span>
-                        <span className="text-muted-foreground">
-                          {service.createdAt
-                            ? format(new Date(service.createdAt), 'dd/MM/yy')
-                            : "N/A"}
-                        </span>
-                      </div>
-                    </div>
-                  </Card>
-                );
-                })}
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
 
               {/* Controles de Paginación */}
@@ -462,19 +428,19 @@ export default function ServiciosPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                    disabled={currentPage === 1}
+                    onClick={() => handlePageChange(page - 1)}
+                    disabled={page === 1 || loading}
                   >
                     Anterior
                   </Button>
                   <div className="text-sm font-medium">
-                    Página {currentPage} de {totalPages}
+                    Página {page} de {totalPages}
                   </div>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                    disabled={currentPage === totalPages}
+                    onClick={() => handlePageChange(page + 1)}
+                    disabled={page === totalPages || loading}
                   >
                     Siguiente
                   </Button>
@@ -486,10 +452,10 @@ export default function ServiciosPage() {
       </Card>
 
       <ServiceDetailsModal
-        service={selectedService}
+        serviceId={selectedServiceId}
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onStatusChange={handleStatusUpdate}
+        onStatusChange={() => loadServices(page)}
       />
     </div>
   );

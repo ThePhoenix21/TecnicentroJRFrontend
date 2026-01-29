@@ -2,11 +2,12 @@
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ServiceStatus, ServiceType, ServiceWithClient, serviceService } from '@/services/service.service';
-import { useState, useEffect } from 'react';
+import { ServiceStatus, ServiceType, ServiceDetail, serviceService } from '@/services/service.service';
+import { useEffect, useRef, useState } from 'react';
 import { orderService } from '@/services/order.service';
 import { cashService } from '@/services/cash.service';
 import { format } from 'date-fns';
@@ -19,7 +20,7 @@ import Image from 'next/image';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface ServiceDetailsModalProps {
-  service: ServiceWithClient | null;
+  serviceId: string | null;
   isOpen: boolean;
   onClose: () => void;
   onStatusChange: () => void;
@@ -54,6 +55,28 @@ const statusOptions = [
   { value: ServiceStatus.ANNULLATED, label: 'Anulado' },
 ];
 
+// Función para obtener variante de badge según estado
+const getStatusVariant = (status?: ServiceStatus) => {
+  switch (status) {
+    case ServiceStatus.PENDING:
+      return 'secondary';
+    case ServiceStatus.IN_PROGRESS:
+      return 'default';
+    case ServiceStatus.COMPLETED:
+      return 'default';
+    case ServiceStatus.CANCELLED:
+      return 'secondary';
+    case ServiceStatus.DELIVERED:
+      return 'default';
+    case ServiceStatus.PAID:
+      return 'default';
+    case ServiceStatus.ANNULLATED:
+      return 'destructive';
+    default:
+      return 'secondary';
+  }
+};
+
 // Función para traducir tipos de servicio al español
 const translateServiceType = (type: ServiceType | undefined): string => {
   if (!type) return 'Sin tipo';
@@ -87,10 +110,10 @@ const translateStatus = (status: ServiceStatus | undefined): string => {
   return translations[status] || status;
 };
 
-export default function ServiceDetailsModal({ service, isOpen, onClose, onStatusChange }: ServiceDetailsModalProps) {
+export default function ServiceDetailsModal({ serviceId, isOpen, onClose, onStatusChange }: ServiceDetailsModalProps) {
   const { user, currentStore, hasPermission, isAdmin, tenantFeatures, tenantFeaturesLoaded } = useAuth();
-  const [currentService, setCurrentService] = useState<ServiceWithClient | null>(service);
-  const [status, setStatus] = useState<ServiceStatus>(service?.status || ServiceStatus.IN_PROGRESS);
+  const [currentService, setCurrentService] = useState<ServiceDetail | null>(null);
+  const [status, setStatus] = useState<ServiceStatus>(ServiceStatus.IN_PROGRESS);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingPendingPayment, setIsLoadingPendingPayment] = useState(false);
   const [pendingPayment, setPendingPayment] = useState<number>(0);
@@ -118,22 +141,47 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
   const hasImageUpload = !tenantFeaturesLoaded || normalizedTenantFeatures.includes('IMAGEUPLOAD');
   const hasFastService = !tenantFeaturesLoaded || normalizedTenantFeatures.includes('FASTSERVICE');
 
+  const requestSeqRef = useRef(0);
+
   useEffect(() => {
-    console.log('🔍 Debug - useEffect triggered with service:', service?.id);
-    setCurrentService(service);
-    if (service) {
-      setStatus(service.status);
-      // Cargar el pago pendiente
-      console.log('🔍 Debug - About to call loadPendingPayment');
-      loadPendingPayment(service);
-      // Verificar si todos los servicios están completados
-      checkAllServicesCompleted(service);
-      // Verificar sesión de caja
-      checkCashSession();
-    } else {
-      console.log('🔍 Debug - No service provided');
+    if (!isOpen) return;
+    if (!serviceId) {
+      setCurrentService(null);
+      return;
     }
-  }, [service]);
+
+    const currentRequest = ++requestSeqRef.current;
+
+    const loadDetail = async () => {
+      try {
+        setIsLoading(true);
+        const detail = await serviceService.getServiceDetail(serviceId);
+        if (currentRequest !== requestSeqRef.current) return;
+        setCurrentService(detail);
+        setStatus(detail.service.status);
+      } catch (error) {
+        if (currentRequest !== requestSeqRef.current) return;
+        console.error('Error loading service detail:', error);
+        const msg = error instanceof Error ? error.message : 'No se pudo cargar el detalle del servicio.';
+        toast.error(msg);
+        setCurrentService(null);
+      } finally {
+        if (currentRequest !== requestSeqRef.current) return;
+        setIsLoading(false);
+      }
+    };
+
+    loadDetail();
+  }, [isOpen, serviceId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!currentService) return;
+
+    loadPendingPayment(currentService);
+    checkAllServicesCompleted(currentService);
+    checkCashSession();
+  }, [isOpen, currentService]);
 
   // Verificar si hay sesión de caja abierta
   const checkCashSession = async () => {
@@ -148,10 +196,10 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
   };
 
   // Función para verificar si todos los servicios de la orden están completados
-  const checkAllServicesCompleted = async (service: ServiceWithClient) => {
+  const checkAllServicesCompleted = async (service: ServiceDetail) => {
     try {
       // Obtener la orden para ver todos los servicios
-      const order = await orderService.getOrderById(service.orderId);
+      const order = await orderService.getOrderById(service.order.id);
       
       console.log('🔍 Debug - Checking services completion for order:', order.orderNumber);
       console.log('🔍 Debug - Services in order:', order.services);
@@ -176,14 +224,14 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
   };
 
   // Función para cargar el pago pendiente
-  const loadPendingPayment = async (service: ServiceWithClient) => {
+  const loadPendingPayment = async (service: ServiceDetail) => {
     console.log('🔍🔍🔍 loadPendingPayment START! 🫥');
-    console.log('🔍 Debug - loadPendingPayment called for service:', service.id);
+    console.log('🔍 Debug - loadPendingPayment called for service:', service.service.id);
     
     setIsLoadingPendingPayment(true);
     try {
       console.log('🔍 Debug - About to call serviceService.getServicePendingAmount');
-      const pending = await serviceService.getServicePendingAmount(service.id);
+      const pending = await serviceService.getServicePendingAmount(service.service.id);
       console.log('🔍 Debug - Pending payment result from backend:', pending);
       console.log('🔍 Debug - About to setPendingPayment to:', pending);
       setPendingPayment(pending);
@@ -233,9 +281,9 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
   };
 
   // Función para manejar el extorno de pagos en efectivo al anular un servicio
-  const handleServiceRefund = async (service: ServiceWithClient) => {
+  const handleServiceRefund = async (service: ServiceDetail) => {
     try {
-      console.log('🔄 Procesando extorno para servicio:', service.id);
+      console.log('🔄 Procesando extorno para servicio:', service.service.id);
       
       // Obtener la caja actual para usar su ID
       if (!currentStore) {
@@ -251,7 +299,7 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
       }
       
       // Obtener los pagos del servicio para identificar los de efectivo
-      const paymentInfo = await serviceService.getServicePendingPayment(service.id);
+      const paymentInfo = await serviceService.getServicePendingPayment(service.service.id);
       console.log('💰 Información de pagos del servicio:', paymentInfo);
       
       // Filtrar solo los pagos en efectivo
@@ -276,7 +324,7 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
           amount: totalRefundAmount,
           type: 'EXPENSE' as const,
           payment: 'EFECTIVO',
-          description: `Extorno por anulación de servicio - ${service.name} (DNI: ${service.client?.dni || 'N/A'})`
+          description: `Extorno por anulación de servicio - ${service.service.name} (Cliente: ${service.client?.name || 'N/A'})`
         };
         
         console.log('📤 Creando movimiento de extorno:', movementData);
@@ -311,13 +359,13 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
       }
       
       // Usar el endpoint para actualizar solo el estado
-      const updatedService = await serviceService.updateServiceStatus(currentService.id, targetStatus);
+      const updatedService = await serviceService.updateServiceStatus(currentService.service.id, targetStatus);
       
       // Mostrar notificación de éxito
       toast.success('Estado del servicio actualizado correctamente');
       
       // Actualizar el servicio local para reflejar los cambios inmediatamente
-      setCurrentService(updatedService);
+      setCurrentService((prev: any) => ({ ...(prev || {}), ...(updatedService as any) }));
       setStatus(targetStatus);
       
       // Actualizar la lista en el componente padre
@@ -344,7 +392,13 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
       toast.error('No tienes permisos para cambiar el estado de este servicio (MANAGE_SERVICES requerido)');
       return;
     }
+    if (!currentService) return;
     if (status) {
+      if (status === currentService.service.status) return;
+      const confirmed = window.confirm(
+        `¿Confirmas cambiar el estado del servicio de "${translateStatus(currentService.service.status)}" a "${translateStatus(status)}"?`
+      );
+      if (!confirmed) return;
       updateServiceStatus(status);
     }
   };
@@ -363,9 +417,9 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
       
       // Preparar los datos para el endpoint de pago
       const paymentData = {
-        orderId: currentService.orderId,
+        orderId: currentService.order.id,
         services: [{
-          serviceId: currentService.id,
+          serviceId: currentService.service.id,
           payments: paymentMethods.map(pm => ({
             type: pm.type,
             amount: pm.amount
@@ -374,7 +428,14 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
       };
       
       // Llamar al endpoint para procesar el pago
-      await orderService.completeOrder(paymentData);
+      try {
+        await orderService.completeOrder(paymentData);
+      } catch (error: any) {
+        if (error?.response?.status === 429) {
+          throw new Error('Demasiadas solicitudes. Espera un momento e inténtalo nuevamente.');
+        }
+        throw error;
+      }
       
       const totalPayment = paymentMethods.reduce((sum, pm) => sum + pm.amount, 0);
 
@@ -391,7 +452,7 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
           const currentSession = await cashService.getCurrentCashSession(currentStore.id);
           
           if (currentSession && currentSession.status === 'OPEN') {
-              const order = await orderService.getOrderById(currentService.orderId);
+              const order = await orderService.getOrderById(currentService.order.id);
               
               let shouldCreateManualMovement = false;
 
@@ -410,7 +471,7 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
                       amount: totalPayment,
                       type: 'INCOME',
                       payment: paymentMethods.map((pm) => pm.type).filter(Boolean).join('+') || 'EFECTIVO',
-                      description: `Pago servicio ${currentService.name} - Orden ${order.orderNumber || order.id.substring(0, 8)}`
+                      description: `Pago servicio ${currentService.service.name} - Orden ${order.orderNumber || order.id.substring(0, 8)}`
                    });
                    toast.success('Ingreso registrado correctamente en la caja del día');
               }
@@ -452,6 +513,12 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
   // Función manejadora del botón de pago
   const handlePaymentSubmit = async () => {
     if (!currentService) return;
+    if (isProcessingPayment) return;
+
+    if (paymentMethods.some((pm) => typeof pm.amount !== 'number' || Number.isNaN(pm.amount) || pm.amount < 0)) {
+      toast.error('No se permiten montos negativos. Verifica los métodos de pago.');
+      return;
+    }
     
     const totalPayment = paymentMethods.reduce((sum, pm) => sum + pm.amount, 0);
     
@@ -477,11 +544,11 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
     
     // Solo tiene sentido ofrecer "finalizar servicio/orden" si el servicio actual
     // todavía está EN PROGRESO. Si ya está COMPLETED/PAID/etc., no mostramos el modal.
-    if (isFullPayment && currentService.status === ServiceStatus.IN_PROGRESS) {
+    if (isFullPayment && currentService.service.status === ServiceStatus.IN_PROGRESS) {
       try {
-        const order = await orderService.getOrderById(currentService.orderId);
+        const order = await orderService.getOrderById(currentService.order.id);
         // Verificar si todos los demás servicios están listos
-        const otherServices = order.services?.filter((s: any) => s.id !== currentService.id) || [];
+        const otherServices = order.services?.filter((s: any) => s.id !== currentService.service.id) || [];
         const areOthersCompleted = otherServices.every((s: any) => 
           s.status === ServiceStatus.COMPLETED || 
           s.status === ServiceStatus.PAID || 
@@ -521,7 +588,7 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
   };
 
   // Filtrar solo URLs de imágenes válidas
-  const validPhotoUrls = (currentService.photoUrls || []).filter(url => 
+  const validPhotoUrls: string[] = (currentService.service.photoUrls || []).filter((url: string) =>
     url && isValidImageUrl(url)
   );
 
@@ -541,7 +608,7 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
     return (
       <div className="space-y-2">
         <div className="grid grid-cols-3 gap-2">
-          {validPhotoUrls.map((url, index) => (
+          {validPhotoUrls.map((url: string, index: number) => (
             <div 
               key={`${url}-${index}`} 
               className="relative aspect-square group"
@@ -593,135 +660,213 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
   return (
     <>
       <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-        <DialogContent className="sm:max-w-[800px] max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Detalles del Servicio</DialogTitle>
+        <DialogContent className="w-[95vw] sm:max-w-[650px] max-h-[75vh] sm:max-h-[80vh] flex flex-col min-h-0">
+          <DialogHeader className="flex flex-row items-center justify-between">
+            <DialogTitle className="text-xl font-semibold">Detalles del Servicio</DialogTitle>
+            <div className="flex items-center gap-2">
+              <Badge variant={getStatusVariant(currentService?.service?.status)}>
+                {translateStatus(currentService?.service?.status)}
+              </Badge>
+              <Badge variant={pendingPayment > 0 ? 'secondary' : 'default'}>
+                {pendingPayment > 0 ? 'Pago pendiente' : 'Pagado'}
+              </Badge>
+            </div>
           </DialogHeader>
-          
-          <ScrollArea className="flex-1 pr-4 -mr-4">
-            <div className="grid gap-6 py-2">
-              <div className="grid grid-cols-4 items-start gap-4">
-                <Label className="text-right font-medium pt-2">Cliente</Label>
-                <div className="col-span-3">
-                  <p className="font-medium">{currentService.client?.name || 'No especificado'}</p>
-                  {currentService.client?.phone && (
-                    <p className="text-sm text-muted-foreground">
-                      Tel: {currentService.client.phone}
-                    </p>
-                  )}
-                  {currentService.client?.email && (
-                    <p className="text-sm text-muted-foreground">
-                      {currentService.client.email}
-                    </p>
-                  )}
-                </div>
+
+          <ScrollArea className="flex-1 pr-4 -mr-4 overflow-y-auto min-h-0 max-h-[50vh] sm:max-h-[60vh]">
+            {isLoading ? (
+              <div className="space-y-3 py-2">
+                <Skeleton className="h-6 w-2/3" />
+                <Skeleton className="h-6 w-1/2" />
+                <Skeleton className="h-6 w-3/4" />
+                <Skeleton className="h-6 w-2/3" />
               </div>
-
-              <div className="grid grid-cols-4 items-start gap-4">
-                <Label className="text-right font-medium pt-2">Servicio</Label>
-                <div className="col-span-3 space-y-1">
-                  <p className="font-medium">{currentService.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {translateServiceType(currentService.type)}
-                  </p>
-                  {currentService.description && (
-                    <p className="text-sm text-muted-foreground mt-2">
-                      {currentService.description}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Galería de imágenes */}
-              {hasImageUpload && (
-                <div className="grid grid-cols-4 items-start gap-4">
-                  <Label className="text-right font-medium pt-2">Imágenes</Label>
-                  <div className="col-span-3">
-                    {renderImageGallery()}
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-4 items-start gap-4">
-                <Label className="text-right font-medium pt-2">Precio</Label>
-                <div className="col-span-3">
-                  <p className="font-medium">
-                    {new Intl.NumberFormat('es-PE', {
-                      style: 'currency',
-                      currency: 'PEN'
-                    }).format(currentService.price)}
-                  </p>
-                </div>
-              </div>
-
-              {!hasFastService && (
-                <div className="grid grid-cols-4 items-start gap-4">
-                  <Label className="text-right font-medium pt-2">Pago pendiente</Label>
-                  <div className="col-span-3">
-                    {isLoadingPendingPayment ? (
-                      <p className="text-sm text-muted-foreground">Calculando...</p>
-                    ) : (
-                      <div className="space-y-1">
-                        <p className={`font-medium ${pendingPayment > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                          {new Intl.NumberFormat('es-PE', {
-                            style: 'currency',
-                            currency: 'PEN'
-                          }).format(pendingPayment)}
-                        </p>
-                        {pendingPayment > 0 && (
-                          <p className="text-xs text-muted-foreground">
-                            Queda por pagar del servicio
-                          </p>
-                        )}
-                        {pendingPayment === 0 && (
-                          <p className="text-xs text-green-600">
-                            El servicio está completamente pagado
-                          </p>
-                        )}
+            ) : (
+              <div className="grid gap-3 py-2 overflow-hidden">
+                {/* Información del Servicio */}
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <span className="text-blue-600 font-semibold">{currentService?.service?.name?.charAt(0) || 'S'}</span>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-lg">{currentService?.service?.name || 'N/A'}</h3>
+                        <p className="text-sm text-muted-foreground">{translateServiceType(currentService?.service?.type)}</p>
+                      </div>
+                    </div>
+                    
+                    {currentService?.service?.description && (
+                      <div>
+                        <Label className="text-sm font-medium text-muted-foreground">Descripción</Label>
+                        <p className="mt-1 text-sm">{currentService.service.description}</p>
                       </div>
                     )}
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-sm font-medium text-muted-foreground">Precio</Label>
+                        <p className="mt-1 font-semibold text-lg">
+                          {new Intl.NumberFormat('es-PE', {
+                            style: 'currency',
+                            currency: 'PEN',
+                          }).format(currentService?.service?.price || 0)}
+                        </p>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium text-muted-foreground">Estado</Label>
+                        <div className="mt-1">
+                          <Badge variant={getStatusVariant(currentService?.service?.status)}>
+                            {translateStatus(currentService?.service?.status)}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Información del Cliente y Orden */}
+                  <div className="space-y-3">
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <h4 className="font-medium mb-2">Información del Cliente</h4>
+                      <div className="space-y-2">
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">Nombre</Label>
+                          <p className="font-medium">{currentService?.client?.name || 'No especificado'}</p>
+                        </div>
+                        {currentService?.client?.phone && (
+                          <div>
+                            <Label className="text-sm font-medium text-muted-foreground">Teléfono</Label>
+                            <p className="text-sm">{currentService.client.phone}</p>
+                          </div>
+                        )}
+                        {currentService?.client?.email && (
+                          <div>
+                            <Label className="text-sm font-medium text-muted-foreground">Email</Label>
+                            <p className="text-sm">{currentService.client.email}</p>
+                          </div>
+                        )}
+                        {currentService?.client?.address && (
+                          <div>
+                            <Label className="text-sm font-medium text-muted-foreground">Dirección</Label>
+                            <p className="text-sm">{currentService.client.address}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="p-3 bg-blue-50 rounded-lg">
+                      <h4 className="font-medium mb-2">Información de la Orden</h4>
+                      <div className="space-y-2">
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">N° de Orden</Label>
+                          <p className="font-medium">{currentService?.order?.orderNumber || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">Total de la Orden</Label>
+                          <p className="font-medium">
+                            {new Intl.NumberFormat('es-PE', {
+                              style: 'currency',
+                              currency: 'PEN',
+                            }).format(currentService?.order?.totalAmount || 0)}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">Fecha de Creación</Label>
+                          <p className="text-sm">{currentService?.order?.createdAt ? format(new Date(currentService.order.createdAt), 'PPP', { locale: es }) : 'N/A'}</p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              )}
-
-              <div className="grid grid-cols-4 items-start gap-4">
-                <Label className="text-right font-medium pt-2">Fecha de creación</Label>
-                <div className="col-span-3">
-                  <p className="text-sm">{formatDate(currentService.createdAt)}</p>
+                
+                {/* Estado del Pago */}
+                {!hasFastService && (
+                  <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-medium text-orange-900">Estado del Pago</h4>
+                        {isLoadingPendingPayment ? (
+                          <p className="text-sm text-orange-700">Calculando...</p>
+                        ) : (
+                          <div className="mt-1">
+                            <p className={`font-semibold text-lg ${pendingPayment > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                              {new Intl.NumberFormat('es-PE', {
+                                style: 'currency',
+                                currency: 'PEN',
+                              }).format(pendingPayment)}
+                            </p>
+                            <p className="text-sm text-orange-700">
+                              {pendingPayment > 0 ? 'Pendiente de pago' : 'Servicio completamente pagado'}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      <Badge variant={pendingPayment > 0 ? 'secondary' : 'default'} className="text-sm">
+                        {pendingPayment > 0 ? 'Pendiente' : 'Pagado'}
+                      </Badge>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Imágenes */}
+                {hasImageUpload && currentService?.service.photoUrls && currentService.service.photoUrls.length > 0 && (
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground mb-2 block">Imágenes del Servicio</Label>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      {currentService.service.photoUrls.map((url, index) => (
+                        <div key={index} className="relative aspect-square rounded-lg overflow-hidden border cursor-pointer hover:opacity-80" onClick={() => {
+                          setSelectedImageIndex(index);
+                          setIsImageViewerOpen(true);
+                        }}>
+                          <img src={url} alt={`Imagen ${index + 1}`} className="w-full h-full object-cover" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Información Adicional */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <Label className="text-sm font-medium text-muted-foreground">Categoría</Label>
+                    <p className="font-medium">{currentService?.serviceCategory?.name || 'Sin categoría'}</p>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <Label className="text-sm font-medium text-muted-foreground">Tienda</Label>
+                    <p className="font-medium">{currentService?.order.storeName || 'N/A'}</p>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <Label className="text-sm font-medium text-muted-foreground">Fecha del Servicio</Label>
+                    <p className="font-medium">{currentService?.service?.createdAt ? format(new Date(currentService.service.createdAt), 'PPP', { locale: es }) : 'N/A'}</p>
+                  </div>
                 </div>
+
+                {/* Cambio de Estado */}
+                {canManageServices && (
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <h4 className="font-medium mb-2">Cambiar Estado</h4>
+                    <div className="space-y-2">
+                      <Select
+                        value={status}
+                        onValueChange={(value) => setStatus(value as ServiceStatus)}
+                        disabled={isLoading || !canManageServices || currentService?.service?.status === ServiceStatus.ANNULLATED}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Seleccionar estado" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {statusOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
               </div>
-
-              {!hasFastService && (
-                <div className="grid grid-cols-4 items-start gap-4">
-                  <Label className="text-right font-medium pt-2">Estado</Label>
-                  <div className="col-span-3">
-                    <p className="text-sm text-muted-foreground mb-2">
-                      Estado actual: {translateStatus(currentService.status)}
-                    </p>
-                    <Select 
-                      value={status} 
-                      onValueChange={(value) => setStatus(value as ServiceStatus)}
-                      disabled={
-                        isLoading ||
-                        !canManageServices ||
-                        currentService.status === ServiceStatus.ANNULLATED
-                      }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Seleccionar estado" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {statusOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )}
-            </div>
+            )}
           </ScrollArea>
 
           <div className="flex justify-end gap-2 pt-4 border-t">
@@ -741,7 +886,7 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
                   {allServicesCompleted ? 'Finalizar orden' : 'Adelantar pago'}
                 </Button>
                 {!isCashSessionOpen && (
-                  <span className="text-[10px] text-red-500 mt-1">la caja está cerrada</span>
+                  <span className="text-[10px] text-red-500 mt-1">La caja está cerrada</span>
                 )}
               </div>
             )}
@@ -754,7 +899,7 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
                 disabled={
                   isLoading ||
                   !canManageServices ||
-                  status === currentService.status
+                  status === currentService.service.status
                 }
               >
                 {isLoading ? 'Guardando...' : 'Guardar cambios'}
@@ -832,7 +977,7 @@ export default function ServiceDetailsModal({ service, isOpen, onClose, onStatus
       <Dialog open={isPaymentModalOpen} onOpenChange={setIsPaymentModalOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Adelantar pago - {currentService?.name}</DialogTitle>
+            <DialogTitle>Adelantar pago - {currentService?.service.name}</DialogTitle>
           </DialogHeader>
           
           <div className="space-y-4 py-4">

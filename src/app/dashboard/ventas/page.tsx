@@ -252,38 +252,58 @@ export default function VentasPage() {
   }, [loadData]);
 
   // Función de filtrado local para búsqueda en tiempo real y ordenamiento
-  const filteredOrders = useMemo(() => {
-    let result = [...orders]; // Crear una copia para no mutar el estado original
+  const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
 
-    if (searchTerm.trim()) {
-      const term = searchTerm.toLowerCase();
-      result = result.filter(
-        (order) =>
-          order.id?.toLowerCase().includes(term) ||
-          (order.paymentMethods || []).some((pm) => {
-            const type = String(pm?.type || '').toLowerCase();
-            const amount = String(pm?.amount ?? '').toLowerCase();
-            return type.includes(term) || amount.includes(term);
-          }) ||
-          order.client?.name?.toLowerCase().includes(term) ||
-          order.client?.phone?.toLowerCase().includes(term) ||
-          order.client?.email?.toLowerCase().includes(term) ||
-          order.client?.dni?.toLowerCase().includes(term)
-      );
-    }
+  useEffect(() => {
+    const filterOrders = async () => {
+      let result = [...orders]; // Crear una copia para no mutar el estado original
 
-    // Filtrar por sesión de caja si está activo el checkbox
-    if (hideOutsideCashSession) {
-      result = result.filter((order) => order.cashSession?.status === "OPEN");
-    }
+      if (searchTerm.trim()) {
+        const term = searchTerm.toLowerCase();
+        result = result.filter(
+          (order) =>
+            order.id?.toLowerCase().includes(term) ||
+            (order.paymentMethods || []).some((pm) => {
+              const type = String(pm?.type || '').toLowerCase();
+              const amount = String(pm?.amount ?? '').toLowerCase();
+              return type.includes(term) || amount.includes(term);
+            }) ||
+            order.client?.name?.toLowerCase().includes(term) ||
+            order.client?.phone?.toLowerCase().includes(term) ||
+            order.client?.email?.toLowerCase().includes(term) ||
+            order.client?.dni?.toLowerCase().includes(term)
+        );
+      }
 
-    // Ordenar por fecha de creación (más reciente primero)
-    return result.sort((a, b) => {
-      const dateA = new Date(a.createdAt || 0).getTime();
-      const dateB = new Date(b.createdAt || 0).getTime();
-      return dateB - dateA;
-    });
-  }, [orders, searchTerm, hideOutsideCashSession]);
+      // Filtrar por sesión de caja si está activo el checkbox
+      if (hideOutsideCashSession && currentStore?.id) {
+        try {
+          const { cashService } = await import("@/services/cash.service");
+          const currentSession = await cashService.getCurrentCashSession(currentStore.id);
+          if (currentSession && currentSession.status === 'OPEN') {
+            result = result.filter((order) => order.cashSession?.id === currentSession.id);
+          } else {
+            // If no open session, return empty array
+            result = [];
+          }
+        } catch (error) {
+          console.warn('Could not get current cash session for filtering:', error);
+          // If we can't get the session, show all orders (fallback behavior)
+        }
+      }
+
+      // Ordenar por fecha de creación (más reciente primero)
+      result.sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateB - dateA;
+      });
+
+      setFilteredOrders(result);
+    };
+
+    filterOrders();
+  }, [orders, searchTerm, hideOutsideCashSession, currentStore]);
 
   // Lógica de paginación basada en los datos filtrados
   const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
