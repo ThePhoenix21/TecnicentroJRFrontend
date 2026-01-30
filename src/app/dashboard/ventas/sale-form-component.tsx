@@ -270,6 +270,9 @@ export function SaleForm({
     }]
   });
 
+  // Lock type selection when there are items in cart
+  const isTypeLocked = selectedItems.length > 0;
+
   useEffect(() => {
     if (!tenantFeaturesLoaded) return;
     if (!hasSalesFeatureGate) return;
@@ -1894,8 +1897,8 @@ export function SaleForm({
                     name="type"
                     value={newItem.type}
                     onChange={handleNewItemChange}
-                    className="w-full p-2 bg-muted border rounded"
-                    disabled={!(canSellProducts && canSellServices)}
+                    className={`w-full p-2 bg-muted border rounded ${isTypeLocked ? 'text-gray-500' : ''}`}
+                    disabled={!(canSellProducts && canSellServices) || isTypeLocked}
                     required
                   >
                     {canSellProducts && <option value="product">Producto</option>}

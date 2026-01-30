@@ -69,6 +69,9 @@ function ClientesContent() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const { toast } = useToast();
   const loadClientsRef = useRef<(() => Promise<void>) | null>(null);
+  const didMountRef = useRef(false);
+  const lastClientsRequestKeyRef = useRef<string | null>(null);
+  const clientsRequestInFlightRef = useRef<Promise<void> | null>(null);
 
   const openDetails = (clientId: string) => {
     setSelectedClientId(clientId);
@@ -109,18 +112,28 @@ function ClientesContent() {
   };
 
   const loadClients = useCallback(async () => {
+    const dateRange = fromDate && toDate ? toUtcRange(fromDate, toDate) : null;
+    const filters: ClientFilters = {
+      name: nameFilter.trim() || undefined,
+      phone: phoneFilter.trim() || undefined,
+      dni: dniFilter.trim() || undefined,
+      fromDate: dateRange?.fromDate,
+      toDate: dateRange?.toDate,
+    };
+
+    const requestKey = JSON.stringify({ page, pageSize, filters });
+    if (clientsRequestInFlightRef.current && lastClientsRequestKeyRef.current === requestKey) {
+      return;
+    }
+
     try {
       setLoading(true);
-      const dateRange = fromDate && toDate ? toUtcRange(fromDate, toDate) : null;
-      const filters: ClientFilters = {
-        name: nameFilter.trim() || undefined,
-        phone: phoneFilter.trim() || undefined,
-        dni: dniFilter.trim() || undefined,
-        fromDate: dateRange?.fromDate,
-        toDate: dateRange?.toDate,
-      };
 
-      const response = await clientService.getClients(page, pageSize, filters);
+      lastClientsRequestKeyRef.current = requestKey;
+      const requestPromise = clientService.getClients(page, pageSize, filters);
+      clientsRequestInFlightRef.current = requestPromise.then(() => undefined);
+
+      const response = await requestPromise;
       setClients(Array.isArray(response.data) ? response.data : []);
       setTotal(response.total ?? 0);
       setTotalPages(response.totalPages ?? 1);
@@ -133,6 +146,7 @@ function ClientesContent() {
       });
     } finally {
       setLoading(false);
+      clientsRequestInFlightRef.current = null;
     }
   }, [dniFilter, fromDate, nameFilter, page, pageSize, phoneFilter, toDate, toast]);
 
@@ -168,17 +182,12 @@ function ClientesContent() {
 
   useEffect(() => {
     const timeout = setTimeout(() => {
-      setPage((prev) => {
-        if (prev !== 1) {
-          return 1;
-        }
-        loadClientsRef.current?.();
-        return prev;
-      });
+      setPage(1);
+      loadClients();
     }, 400);
 
     return () => clearTimeout(timeout);
-  }, [nameFilter, phoneFilter, dniFilter, fromDate, toDate]);
+  }, [nameFilter, phoneFilter, dniFilter, fromDate, toDate, loadClients]);
 
   const filteredNameSuggestions = useMemo(() => {
     const q = nameQuery.trim().toLowerCase();
@@ -201,11 +210,8 @@ function ClientesContent() {
   const handlePageChange = (next: number) => {
     if (next < 1 || next > totalPages) return;
     setPage(next);
+    loadClients();
   };
-
-  useEffect(() => {
-    loadClientsRef.current?.();
-  }, [page]);
 
   const handleDeleted = () => {
     toast({

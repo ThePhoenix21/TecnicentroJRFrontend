@@ -22,6 +22,8 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { clientService } from "@/services/client.service";
 import type { ClientLookupNameItem } from "@/types/client.types";
+import { Search, X } from "lucide-react";
+import { Label } from "@/components/ui/label";
 
 export default function ServiciosPage() {
   const { currentStore, hasPermission, isAdmin } = useAuth();
@@ -37,6 +39,12 @@ export default function ServiciosPage() {
 
   const [clientLookup, setClientLookup] = useState<ClientLookupNameItem[]>([]);
   const [serviceLookup, setServiceLookup] = useState<ServiceLookupItem[]>([]);
+  const [clientSearchTerm, setClientSearchTerm] = useState("");
+  const [serviceSearchTerm, setServiceSearchTerm] = useState("");
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
+  const [showServiceDropdown, setShowServiceDropdown] = useState(false);
+  const [selectedClient, setSelectedClient] = useState<{ id: string; name: string } | null>(null);
+  const [selectedService, setSelectedService] = useState<{ id: string; value: string } | null>(null);
 
   const [clientIdFilter, setClientIdFilter] = useState<string>("all");
   const [serviceIdFilter, setServiceIdFilter] = useState<string>("all");
@@ -56,6 +64,21 @@ export default function ServiciosPage() {
   const requestSeq = useRef(0);
   const lastStoreIdRef = useRef<string | null>(null);
   const firstLoadRef = useRef(true);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (!target.closest('.client-search-container')) {
+        setShowClientDropdown(false);
+      }
+      if (!target.closest('.service-search-container')) {
+        setShowServiceDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const loadServices = useCallback(
     async (targetPage = 1, opts?: { clear?: boolean }) => {
@@ -268,45 +291,144 @@ export default function ServiciosPage() {
             <CardTitle className="text-lg sm:text-xl">Servicios</CardTitle>
           </div>
           <div className="mt-3 grid grid-cols-1 md:grid-cols-6 gap-2">
-            <div className="md:col-span-2">
-              <Select value={clientIdFilter} onValueChange={setClientIdFilter} disabled={loading}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Cliente" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos los clientes</SelectItem>
-                  {clientLookup.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="md:col-span-2 relative client-search-container">
+              <Label className="text-sm font-medium text-gray-700 mb-1 block opacity-0">
+                Cliente
+              </Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Cliente"
+                  value={selectedClient ? selectedClient.name : clientSearchTerm}
+                  onChange={(e) => {
+                    setClientSearchTerm(e.target.value);
+                    setSelectedClient(null);
+                    setClientIdFilter("all");
+                  }}
+                  onFocus={() => setShowClientDropdown(true)}
+                  disabled={loading}
+                  className="pl-10 pr-10"
+                />
+                {(clientSearchTerm || selectedClient) && (
+                  <button
+                    onClick={() => {
+                      setClientSearchTerm("");
+                      setSelectedClient(null);
+                      setClientIdFilter("all");
+                    }}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              {showClientDropdown && (clientSearchTerm || clientLookup.length > 0) && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
+                  <div
+                    className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 cursor-pointer border-b"
+                    onClick={() => {
+                      setClientSearchTerm("");
+                      setSelectedClient(null);
+                      setClientIdFilter("all");
+                      setShowClientDropdown(false);
+                    }}
+                  >
+                    Todos los clientes
+                  </div>
+                  {clientLookup
+                    .filter((c) => c.name.toLowerCase().includes(clientSearchTerm.toLowerCase()))
+                    .map((c) => (
+                      <div
+                        key={c.id}
+                        className="px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer"
+                        onClick={() => {
+                          setClientSearchTerm(c.name);
+                          setSelectedClient({ id: c.id, name: c.name });
+                          setClientIdFilter(c.id);
+                          setShowClientDropdown(false);
+                        }}
+                      >
+                        {c.name}
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            <div className="md:col-span-2 relative service-search-container">
+              <Label className="text-sm font-medium text-gray-700 mb-1 block opacity-0">
+                Servicio
+              </Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Servicio"
+                  value={selectedService ? selectedService.value : serviceSearchTerm}
+                  onChange={(e) => {
+                    setServiceSearchTerm(e.target.value);
+                    setSelectedService(null);
+                    setServiceIdFilter("all");
+                  }}
+                  onFocus={() => setShowServiceDropdown(true)}
+                  disabled={loading}
+                  className="pl-10 pr-10"
+                />
+                {(serviceSearchTerm || selectedService) && (
+                  <button
+                    onClick={() => {
+                      setServiceSearchTerm("");
+                      setSelectedService(null);
+                      setServiceIdFilter("all");
+                    }}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              {showServiceDropdown && (serviceSearchTerm || serviceLookup.length > 0) && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
+                  <div
+                    className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 cursor-pointer border-b"
+                    onClick={() => {
+                      setServiceSearchTerm("");
+                      setSelectedService(null);
+                      setServiceIdFilter("all");
+                      setShowServiceDropdown(false);
+                    }}
+                  >
+                    Todos los servicios
+                  </div>
+                  {serviceLookup
+                    .filter((s) => s.value.toLowerCase().includes(serviceSearchTerm.toLowerCase()))
+                    .map((s) => (
+                      <div
+                        key={s.id}
+                        className="px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer"
+                        onClick={() => {
+                          setServiceSearchTerm(s.value);
+                          setSelectedService({ id: s.id, value: s.value });
+                          setServiceIdFilter(s.id);
+                          setShowServiceDropdown(false);
+                        }}
+                      >
+                        {s.value}
+                      </div>
+                    ))}
+                </div>
+              )}
             </div>
 
             <div className="md:col-span-2">
-              <Select value={serviceIdFilter} onValueChange={setServiceIdFilter} disabled={loading}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Servicio" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos los servicios</SelectItem>
-                  {serviceLookup.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.value}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="md:col-span-2">
+              <Label htmlFor="status-filter" className="text-sm font-medium text-gray-700 mb-1 block">
+                Estado
+              </Label>
               <Select
                 value={statusFilter}
                 onValueChange={(value) => setStatusFilter(value as ServiceStatus | "all")}
                 disabled={loading}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full" id="status-filter">
                   <SelectValue placeholder="Estado" />
                 </SelectTrigger>
                 <SelectContent>
@@ -333,7 +455,11 @@ export default function ServiciosPage() {
             </div>
 
             <div className="md:col-span-2">
+              <Label htmlFor="from-date" className="text-sm font-medium text-gray-700 mb-1 block">
+                Desde
+              </Label>
               <Input
+                id="from-date"
                 type="date"
                 value={fromDate}
                 onChange={(e) => setFromDate(e.target.value)}
@@ -342,7 +468,11 @@ export default function ServiciosPage() {
             </div>
 
             <div className="md:col-span-2">
+              <Label htmlFor="to-date" className="text-sm font-medium text-gray-700 mb-1 block">
+                Hasta
+              </Label>
               <Input
+                id="to-date"
                 type="date"
                 value={toDate}
                 onChange={(e) => setToDate(e.target.value)}

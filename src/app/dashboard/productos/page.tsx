@@ -201,18 +201,10 @@ export default function ProductsPage() {
     fetchStoreProductsRef.current?.(1);
   }, [isAuthenticated, activeStoreId]);
 
+  // Remove the automatic filter loading - only load on explicit search or Enter
   useEffect(() => {
-    if (!isAuthenticated || !activeStoreId || !hasFetchedInitialRef.current) {
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      setPage(1);
-      fetchStoreProductsRef.current?.(1);
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [filtersKey, isAuthenticated, activeStoreId]);
+    // This useEffect is removed to prevent double loading
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -235,6 +227,20 @@ export default function ProductsPage() {
 
     return () => clearTimeout(timer);
   }, [nameQuery]);
+
+  // Handle nameFilter changes to fetch products
+  useEffect(() => {
+    if (nameFilter !== undefined) {
+      setPage(1);
+      fetchStoreProductsRef.current?.(1);
+    }
+  }, [nameFilter]);
+
+  // Handle hideOutOfStock changes to fetch products
+  useEffect(() => {
+    setPage(1);
+    fetchStoreProductsRef.current?.(1);
+  }, [hideOutOfStock]);
 
   // Debug: verificar estado actual
   useEffect(() => {
@@ -639,9 +645,16 @@ export default function ProductsPage() {
                 onChange={(e) => {
                   setNameQuery(e.target.value);
                   setShowNameSuggestions(true);
-                  setNameFilter(e.target.value);
+                  // Don't set nameFilter on every keystroke - only on Enter or selection
                 }}
                 onFocus={() => setShowNameSuggestions(true)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    setNameFilter(nameQuery);
+                    setShowNameSuggestions(false);
+                  }
+                }}
                 placeholder={nameLookupLoading ? 'Buscando...' : 'Buscar producto...'}
                 className="pl-8"
               />
@@ -688,16 +701,22 @@ export default function ProductsPage() {
             </div>
           </div>
         </div>
-        
+      </div>
+
+      {/* Add click outside handler */}
+      <div 
+        className="fixed inset-0 z-10" 
+        style={{ display: showNameSuggestions ? 'block' : 'none' }}
+        onClick={() => setShowNameSuggestions(false)}
+      />
+
+      <div className="mb-6 space-y-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Info className="h-3.5 w-3.5" />
-            <span>
-              Mostrando {visibleProducts.length} de {total} productos
-              {nameFilter.trim() && ` (filtrados por "${nameFilter}")`}
-              {hideOutOfStock && ' (sin stock oculto)'}
-            </span>
-          </div>
+          <span>
+            Mostrando {visibleProducts.length} de {total} productos
+            {nameFilter.trim() && ` (filtrados por "${nameFilter}")`}
+            {hideOutOfStock && ' (sin stock oculto)'}
+          </span>
           
           <div className="flex items-center space-x-2">
             <Checkbox
