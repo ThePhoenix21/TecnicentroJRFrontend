@@ -38,6 +38,28 @@ export interface CashMovement {
   updatedAt: string;
 }
 
+export interface CashMovementListItem {
+  id: string;
+  type: 'INCOME' | 'EXPENSE';
+  amount: string;
+  payment: string;
+  description: string;
+  createdAt: string;
+}
+
+export interface CashMovementListResponse {
+  data: CashMovementListItem[];
+  total: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface CashMovementLookupItem {
+  id: string;
+  value: string;
+}
+
 export interface CashBalance {
   sessionInfo: {
     id: string;

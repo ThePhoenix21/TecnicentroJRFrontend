@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -21,7 +22,8 @@ import {
 import { toast } from 'sonner';
 import { cashSessionService } from '@/services/cash-session.service';
 import { cashService } from '@/services/cash.service';
-import { CashSession, CashBalance, CashMovement } from '@/types/cash.types';
+import { clientService } from '@/services/client.service';
+import { CashSession, CashBalance, CashMovement, CashMovementListItem, CashMovementLookupItem } from '@/types/cash.types';
 import { useAuth } from '@/contexts/auth-context';
 import { formatCurrency } from '@/lib/utils';
 
@@ -63,43 +65,101 @@ export default function CajaPage() {
   const [showPrintHistoricalDialog, setShowPrintHistoricalDialog] = useState(false);
   const [historicalCashId, setHistoricalCashId] = useState('');
   const [isPrintingHistorical, setIsPrintingHistorical] = useState(false);
-  
-  // Estado para paginación de movimientos
-  const [currentPage, setCurrentPage] = useState(1);
-  const movementsPerPage = 10;
-  
-  // Estado para filtrar métodos de pago
-  const [showOnlyCash, setShowOnlyCash] = useState(false);
-  
-  // Funciones de paginación
-  const getFilteredMovements = () => {
-    if (!balance) return [];
-    // Ordenar por createdAt descendente (más nuevos primero)
-    const sortedMovements = [...balance.movements].sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-    
-    // Filtrar por método de pago si está activado
-    return showOnlyCash 
-      ? sortedMovements.filter(movement => !movement.paymentMethod || movement.paymentMethod === 'EFECTIVO')
-      : sortedMovements;
-  };
-  
-  const totalPages = balance ? Math.ceil(getFilteredMovements().length / movementsPerPage) : 1;
-  
-  const getCurrentMovements = () => {
-    const filteredMovements = getFilteredMovements();
-    const startIndex = (currentPage - 1) * movementsPerPage;
-    const endIndex = startIndex + movementsPerPage;
-    return filteredMovements.slice(startIndex, endIndex);
-  };
-  
-  // Resetear página cuando cambian los movimientos o el filtro
-  useEffect(() => {
-    if (balance) {
-      setCurrentPage(1);
+
+  // =====================
+  // Movimientos (nuevo listado paginado con filtros)
+  // =====================
+  const [movements, setMovements] = useState<CashMovementListItem[]>([]);
+  const [movementsLoading, setMovementsLoading] = useState(false);
+  const [movementsPage, setMovementsPage] = useState(1);
+  const [movementsTotalPages, setMovementsTotalPages] = useState(1);
+  const [movementsTotal, setMovementsTotal] = useState(0);
+
+  const [paymentLookup, setPaymentLookup] = useState<CashMovementLookupItem[]>([]);
+  const [operationLookup, setOperationLookup] = useState<CashMovementLookupItem[]>([]);
+  const [clientLookup, setClientLookup] = useState<Array<{ id: string; name: string }>>([]);
+
+  const [paymentFilter, setPaymentFilter] = useState('');
+  const [operationFilter, setOperationFilter] = useState('');
+  const [clientQuery, setClientQuery] = useState('');
+  const [showClientSuggestions, setShowClientSuggestions] = useState(false);
+
+  const filtersActive = useMemo(() => {
+    return !!(paymentFilter.trim() || operationFilter.trim() || clientQuery.trim());
+  }, [paymentFilter, operationFilter, clientQuery]);
+
+  const movementsPageSize = filtersActive ? 20 : 50;
+
+  const loadMovements = useCallback(async (targetPage: number) => {
+    if (!currentSession?.id) return;
+    if (!canViewCash) return;
+
+    setMovementsLoading(true);
+    try {
+      const response = await cashService.getCashMovementsList({
+        sessionId: currentSession.id,
+        page: targetPage,
+        pageSize: movementsPageSize,
+        payment: paymentFilter.trim() || undefined,
+        operation: operationFilter.trim() || undefined,
+        clientName: clientQuery.trim() || undefined,
+      });
+
+      setMovements(Array.isArray(response.data) ? response.data : []);
+      setMovementsTotal(response.total || 0);
+      setMovementsTotalPages(response.totalPages || 1);
+      setMovementsPage(response.page || targetPage);
+    } catch (error) {
+      console.error('Error al cargar movimientos (listado):', error);
+      setMovements([]);
+      setMovementsTotal(0);
+      setMovementsTotalPages(1);
+      toast.error('Error al cargar movimientos de caja');
+    } finally {
+      setMovementsLoading(false);
     }
-  }, [balance?.movements.length, showOnlyCash]);
+  }, [currentSession?.id, currentSession?.id, canViewCash, movementsPageSize, paymentFilter, operationFilter, clientQuery]);
+
+  const loadMovementsRef = useRef(loadMovements);
+
+  useEffect(() => {
+    loadMovementsRef.current = loadMovements;
+  }, [loadMovements]);
+
+  useEffect(() => {
+    const loadLookups = async () => {
+      try {
+        const [payments, operations, clients] = await Promise.all([
+          cashService.getCashMovementsLookupPayment(),
+          cashService.getCashMovementsLookupOperation(),
+          clientService.getLookupName(),
+        ]);
+        setPaymentLookup(Array.isArray(payments) ? payments : []);
+        setOperationLookup(Array.isArray(operations) ? operations : []);
+        setClientLookup(Array.isArray(clients) ? clients : []);
+      } catch (error) {
+        console.error('Error loading cash movement lookups:', error);
+      }
+    };
+
+    loadLookups();
+  }, []);
+
+  useEffect(() => {
+    if (!currentSession?.id) return;
+    setMovementsPage(1);
+    loadMovementsRef.current?.(1);
+  }, [currentSession?.id]);
+
+  useEffect(() => {
+    if (!currentSession?.id) return;
+    const timer = setTimeout(() => {
+      setMovementsPage(1);
+      loadMovementsRef.current?.(1);
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [paymentFilter, operationFilter, clientQuery, currentSession?.id]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -856,114 +916,170 @@ export default function CajaPage() {
         </Card>
       )}
 
-      {/* Últimos movimientos */}
-      {balance?.movements && balance.movements.length > 0 && (
+      {/* Movimientos de Caja (nuevo listado) */}
+      {currentSession?.id && (
         <Card>
           <CardHeader>
             <CardTitle>Movimientos de Caja</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {/* Información de movimientos */}
-              <div className="flex items-center justify-between text-sm text-muted-foreground">
-                <div className="flex items-center gap-4">
-                  <p>
-                    Mostrando {Math.min(movementsPerPage, getCurrentMovements().length)} de {getFilteredMovements().length} movimientos
-                    {showOnlyCash && " (solo efectivo)"}
-                  </p>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={showOnlyCash}
-                      onChange={(e) => setShowOnlyCash(e.target.checked)}
-                      className="rounded"
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Método de pago</label>
+                  <Select value={paymentFilter} onValueChange={(v) => setPaymentFilter(v === '__ALL__' ? '' : v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__ALL__">Todos</SelectItem>
+                      {paymentLookup.map((item) => (
+                        <SelectItem key={item.id} value={item.value}>
+                          {item.value}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Operación</label>
+                  <Select value={operationFilter} onValueChange={(v) => setOperationFilter(v === '__ALL__' ? '' : v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__ALL__">Todas</SelectItem>
+                      {operationLookup.map((item) => (
+                        <SelectItem key={item.id} value={item.value}>
+                          {item.value}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Cliente</label>
+                  <div className="relative">
+                    <Input
+                      value={clientQuery}
+                      onChange={(e) => {
+                        setClientQuery(e.target.value);
+                        setShowClientSuggestions(true);
+                      }}
+                      onFocus={() => setShowClientSuggestions(true)}
+                      placeholder="Buscar cliente..."
                     />
-                    <span>Solo efectivo</span>
-                  </label>
-                </div>
-                {getFilteredMovements().length > movementsPerPage && (
-                  <p>
-                    Página {currentPage} de {totalPages} ({movementsPerPage} por página)
-                  </p>
-                )}
-              </div>
-              
-              {/* Paginación */}
-              {getFilteredMovements().length > movementsPerPage && (
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                      disabled={currentPage === 1}
-                    >
-                      Anterior
-                    </Button>
-                    <span className="text-sm font-medium">
-                      Página {currentPage} de {totalPages}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                      disabled={currentPage === totalPages}
-                    >
-                      Siguiente
-                    </Button>
-                  </div>
-                </div>
-              )}
-              
-              {/* Lista de movimientos */}
-              <div className="space-y-2">
-                {getCurrentMovements().map((movement) => (
-                  <div key={movement.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-full ${
-                        movement.type === 'INCOME' ? 'bg-green-100' : 'bg-red-100'
-                      }`}>
-                        {movement.type === 'INCOME' ? (
-                          <TrendingUp className="h-4 w-4 text-green-600" />
-                        ) : (
-                          <TrendingDown className="h-4 w-4 text-red-600" />
-                        )}
-                      </div>
-                      <div>
-                        <p className="font-medium">{formatDescription(movement.description)}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date(movement.createdAt).toLocaleString()}
-                          {movement.clientName && ` • ${movement.clientName}`}
-                          {movement.paymentMethod && ` • ${movement.paymentMethod}`}
-                        </p>
-                      </div>
-                    </div>
-                    <div className={`font-bold ${
-                      movement.type === 'INCOME' ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      {movement.type === 'INCOME' ? '+' : '-'}
-                      {formatCurrency(movement.amount)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              
-              {/* Paginación inferior */}
-              {getFilteredMovements().length > movementsPerPage && (
-                <div className="flex items-center justify-center">
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                      <Button
-                        key={page}
-                        variant={currentPage === page ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setCurrentPage(page)}
-                        className="w-8 h-8 p-0"
+                    {clientQuery && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setClientQuery('');
+                          setShowClientSuggestions(false);
+                        }}
+                        className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground"
                       >
-                        {page}
-                      </Button>
-                    ))}
+                        ×
+                      </button>
+                    )}
+
+                    {showClientSuggestions && clientLookup.length > 0 && (
+                      <div className="absolute z-20 mt-1 w-full rounded-md border bg-background shadow">
+                        <div className="max-h-64 overflow-auto">
+                          {clientLookup
+                            .filter((c) => c.name.toLowerCase().includes(clientQuery.trim().toLowerCase()))
+                            .slice(0, 20)
+                            .map((c) => (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => {
+                                  setClientQuery(c.name);
+                                  setShowClientSuggestions(false);
+                                }}
+                                className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted"
+                              >
+                                <span>{c.name}</span>
+                              </button>
+                            ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-sm text-muted-foreground">
+                <p>
+                  Mostrando {movements.length} de {movementsTotal} movimientos
+                  {filtersActive && ` (filtrados)`}
+                </p>
+                <p>
+                  Página {movementsPage} de {movementsTotalPages}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const next = movementsPage - 1;
+                    if (next < 1) return;
+                    setMovementsPage(next);
+                    loadMovementsRef.current?.(next);
+                  }}
+                  disabled={movementsLoading || movementsPage <= 1}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const next = movementsPage + 1;
+                    if (next > movementsTotalPages) return;
+                    setMovementsPage(next);
+                    loadMovementsRef.current?.(next);
+                  }}
+                  disabled={movementsLoading || movementsPage >= movementsTotalPages}
+                >
+                  Siguiente
+                </Button>
+              </div>
+
+              {movementsLoading ? (
+                <div className="py-10 text-center text-sm text-muted-foreground">Cargando movimientos...</div>
+              ) : movements.length === 0 ? (
+                <div className="py-10 text-center text-sm text-muted-foreground">
+                  No hay movimientos para los filtros seleccionados.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {movements.map((movement) => (
+                    <div key={movement.id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-full ${movement.type === 'INCOME' ? 'bg-green-100' : 'bg-red-100'}`}>
+                          {movement.type === 'INCOME' ? (
+                            <TrendingUp className="h-4 w-4 text-green-600" />
+                          ) : (
+                            <TrendingDown className="h-4 w-4 text-red-600" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-medium">{formatDescription(movement.description)}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {new Date(movement.createdAt).toLocaleString()} • {movement.payment}
+                          </p>
+                        </div>
+                      </div>
+                      <div className={`font-bold ${movement.type === 'INCOME' ? 'text-green-600' : 'text-red-600'}`}>
+                        {movement.type === 'INCOME' ? '+' : '-'}
+                        {formatCurrency(Number(movement.amount) || 0)}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

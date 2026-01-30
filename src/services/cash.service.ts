@@ -5,7 +5,9 @@ import {
   OpenCashSessionRequest, 
   CloseCashSessionResponse,
   ManualMovementRequest,
-  CashMovement
+  CashMovement,
+  CashMovementListResponse,
+  CashMovementLookupItem
 } from '@/types/cash.types';
 
 class CashService {
@@ -82,6 +84,53 @@ class CashService {
       return response.data;
     } catch (error) {
       console.error('Error al obtener movimientos:', error);
+      throw error;
+    }
+  }
+
+  // Listar movimientos (nuevo endpoint con filtros opcionales)
+  async getCashMovementsList(params: {
+    sessionId: string;
+    page?: number;
+    pageSize?: number;
+    payment?: string;
+    operation?: string;
+    clientName?: string;
+  }): Promise<CashMovementListResponse> {
+    try {
+      const searchParams = new URLSearchParams();
+      searchParams.set('page', String(params.page ?? 1));
+      searchParams.set('pageSize', String(params.pageSize ?? 50));
+      if (params.payment) searchParams.set('payment', params.payment);
+      if (params.operation) searchParams.set('operation', params.operation);
+      if (params.clientName) searchParams.set('clientName', params.clientName);
+
+      const response = await api.get<CashMovementListResponse>(
+        `/cash-movement/session/${params.sessionId}?${searchParams.toString()}`
+      );
+      return response.data;
+    } catch (error) {
+      console.error('[CashService.getCashMovementsList] Error:', error);
+      throw error;
+    }
+  }
+
+  async getCashMovementsLookupPayment(): Promise<CashMovementLookupItem[]> {
+    try {
+      const response = await api.get<CashMovementLookupItem[]>('/cash-movement/lookup-payment');
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error('[CashService.getCashMovementsLookupPayment] Error:', error);
+      throw error;
+    }
+  }
+
+  async getCashMovementsLookupOperation(): Promise<CashMovementLookupItem[]> {
+    try {
+      const response = await api.get<CashMovementLookupItem[]>('/cash-movement/lookup-operation');
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error('[CashService.getCashMovementsLookupOperation] Error:', error);
       throw error;
     }
   }
