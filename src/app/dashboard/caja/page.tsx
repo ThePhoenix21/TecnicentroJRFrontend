@@ -969,6 +969,7 @@ export default function CajaPage() {
                         setShowClientSuggestions(true);
                       }}
                       onFocus={() => setShowClientSuggestions(true)}
+                      onBlur={() => setShowClientSuggestions(false)}
                       placeholder="Buscar cliente..."
                     />
                     {clientQuery && (

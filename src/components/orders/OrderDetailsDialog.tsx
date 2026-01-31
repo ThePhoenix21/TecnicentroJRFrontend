@@ -15,6 +15,11 @@ import { storeProductService } from '@/services/store-product.service';
 import { orderService } from '@/services/order.service';
 import { SaleData } from '@/types/sale.types';
 import { useAuth } from '@/contexts/auth-context';
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { serviceService, ServiceStatus } from '@/services/service.service';
+import { cashService } from '@/services/cash.service';
 
 interface OrderDetailsDialogProps {
   open: boolean;
@@ -86,8 +91,27 @@ interface ProductMap {
   [key: string]: { name: string; price: number; description?: string };
 }
 
+enum PaymentType {
+  EFECTIVO = 'EFECTIVO',
+  TARJETA = 'TARJETA',
+  TRANSFERENCIA = 'TRANSFERENCIA',
+  YAPE = 'YAPE',
+  PLIN = 'PLIN',
+  DATAPHONE = 'DATAPHONE',
+  BIZUM = 'BIZUM',
+  OTRO = 'OTRO',
+}
+
+type PaymentTypeValue = (typeof PaymentType)[keyof typeof PaymentType];
+
+type PaymentMethod = {
+  id: string;
+  type: PaymentTypeValue;
+  amount: number;
+};
+
 const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenChange, order, onOrderUpdate }) => {
-  const { user, currentStore, canIssuePdf, tenantFeatures } = useAuth();
+  const { user, currentStore, canIssuePdf, tenantFeatures, hasPermission, isAdmin: isAdminFromContext } = useAuth();
   const [showPDF, setShowPDF] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
@@ -95,8 +119,19 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
   const [orderDetails, setOrderDetails] = useState<any>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
+  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
+  const [pendingPayment, setPendingPayment] = useState<number>(0);
+  const [isLoadingPendingPayment, setIsLoadingPendingPayment] = useState(false);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [isCompletionConfirmationOpen, setIsCompletionConfirmationOpen] = useState(false);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([
+    { id: '1', type: PaymentType.EFECTIVO, amount: 0 },
+  ]);
+
   // Verificar si el usuario es administrador
   const isAdmin = user?.role === 'Admin' || user?.role === 'ADMIN';
+  const canManageServices = isAdmin || isAdminFromContext || hasPermission?.('MANAGE_SERVICES');
 
   const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
   const hasNamedServices = normalizedTenantFeatures.includes('NAMEDSERVICES');
@@ -132,6 +167,34 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
       setOrderDetails(null);
     }
   }, [open, order?.id]);
+
+  useEffect(() => {
+    if (!open) {
+      setSelectedServiceId(null);
+      setPendingPayment(0);
+      setIsPaymentModalOpen(false);
+      setIsCompletionConfirmationOpen(false);
+      setPaymentMethods([{ id: '1', type: PaymentType.EFECTIVO, amount: 0 }]);
+      return;
+    }
+
+    if (!selectedServiceId) return;
+
+    const loadPending = async () => {
+      try {
+        setIsLoadingPendingPayment(true);
+        const pending = await serviceService.getServicePendingAmount(selectedServiceId);
+        setPendingPayment(Number(pending) || 0);
+      } catch (error) {
+        console.error('Error loading service pending payment:', error);
+        setPendingPayment(0);
+      } finally {
+        setIsLoadingPendingPayment(false);
+      }
+    };
+
+    loadPending();
+  }, [open, selectedServiceId]);
 
   const handleCancelOrder = async () => {
     if (!order) return;
@@ -279,6 +342,176 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
 
   const namedServiceName = displayServices?.[0]?.name;
 
+  const selectedService = selectedServiceId
+    ? displayServices.find((s: any) => String(s.id) === String(selectedServiceId))
+    : null;
+
+  const addPaymentMethod = () => {
+    setPaymentMethods((prev) => [
+      ...prev,
+      { id: Date.now().toString(), type: PaymentType.EFECTIVO, amount: 0 },
+    ]);
+  };
+
+  const removePaymentMethod = (id: string) => {
+    setPaymentMethods((prev) => (prev.length > 1 ? prev.filter((pm) => pm.id !== id) : prev));
+  };
+
+  const updatePaymentMethod = (id: string, field: 'type' | 'amount', value: PaymentTypeValue | number) => {
+    setPaymentMethods((prev) => prev.map((pm) => (pm.id === id ? { ...pm, [field]: value } : pm)));
+  };
+
+  const updateServiceStatus = async (targetStatus: ServiceStatus) => {
+    if (!selectedServiceId) return;
+    if (!canManageServices) {
+      toast.error('No tienes permisos para cambiar el estado de este servicio (MANAGE_SERVICES requerido)');
+      return;
+    }
+
+    try {
+      await serviceService.updateServiceStatus(selectedServiceId, targetStatus);
+      toast.success('Estado del servicio actualizado correctamente');
+
+      if (targetStatus === ServiceStatus.COMPLETED) {
+        setIsPaymentModalOpen(false);
+        setIsCompletionConfirmationOpen(false);
+        onOpenChange(false);
+        window.location.reload();
+        return;
+      }
+
+      // Recargar detalles de la orden para reflejar el nuevo estado
+      if (order?.id) {
+        const details = await orderService.getOrderDetails(order.id);
+        setOrderDetails(details);
+      }
+    } catch (error: unknown) {
+      console.error('Error updating service status:', error);
+      const msg = error instanceof Error ? error.message : 'Error al actualizar el estado del servicio';
+      toast.error(msg);
+    }
+  };
+
+  const executeServicePayment = async (completeServiceAfterPayment = false, forceProceed = false) => {
+    if (!order?.id) return;
+    if (!selectedServiceId) return;
+
+    if (!canManageServices) {
+      toast.error('No tienes permisos para registrar pagos de servicios (MANAGE_SERVICES requerido)');
+      return;
+    }
+
+    const totalPayment = paymentMethods.reduce((sum, pm) => sum + (Number(pm.amount) || 0), 0);
+    if (totalPayment <= 0) {
+      toast.error('Ingresa un monto mayor a 0');
+      return;
+    }
+
+    if (pendingPayment > 0 && totalPayment > pendingPayment) {
+      toast.error('El pago no puede ser mayor al monto pendiente');
+      return;
+    }
+
+    const isFullPayment = pendingPayment > 0 && Math.abs(totalPayment - pendingPayment) < 0.01;
+
+    if (isFullPayment && !completeServiceAfterPayment && !forceProceed) {
+      setIsCompletionConfirmationOpen(true);
+      return;
+    }
+
+    try {
+      setIsProcessingPayment(true);
+
+      const paymentData = {
+        orderId: order.id,
+        services: [
+          {
+            serviceId: selectedServiceId,
+            payments: paymentMethods.map((pm) => ({
+              type: pm.type,
+              amount: Number(pm.amount) || 0,
+            })),
+          },
+        ],
+      };
+
+      await orderService.completeOrder(paymentData);
+      toast.success(`Pago de S/${totalPayment.toFixed(2)} procesado correctamente`);
+
+      // Registrar movimiento en la caja actual si el pago pertenece a una orden de otra sesión
+      // (misma lógica que ServiceDetailsModal para pagos diferidos)
+      try {
+        if (currentStore) {
+          const currentSession = await cashService.getCurrentCashSession(currentStore.id);
+          if (currentSession && currentSession.status === 'OPEN') {
+            const freshOrder = await orderService.getOrderById(order.id);
+
+            let shouldCreateManualMovement = false;
+            if (freshOrder.cashSessionId) {
+              shouldCreateManualMovement = freshOrder.cashSessionId !== currentSession.id;
+            } else {
+              const orderTime = new Date(freshOrder.createdAt).getTime();
+              const sessionOpenTime = new Date(currentSession.openedAt || Date.now()).getTime();
+              shouldCreateManualMovement = orderTime < sessionOpenTime;
+            }
+
+            if (shouldCreateManualMovement) {
+              await cashService.addManualMovement({
+                cashSessionId: currentSession.id,
+                amount: totalPayment,
+                type: 'INCOME',
+                payment: paymentMethods.map((pm) => pm.type).filter(Boolean).join('+') || 'EFECTIVO',
+                description: `Pago servicio ${selectedService?.name || selectedServiceId} - Orden ${freshOrder.orderNumber || freshOrder.id.substring(0, 8)}`,
+              });
+              toast.success('Ingreso registrado correctamente en la caja del día');
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error al intentar registrar movimiento en caja actual:', error);
+      }
+
+      if (isFullPayment && completeServiceAfterPayment) {
+        try {
+          await serviceService.updateServiceStatus(selectedServiceId, ServiceStatus.COMPLETED);
+        } catch (error) {
+          console.error('Error marking service as completed after payment:', error);
+        }
+        setIsPaymentModalOpen(false);
+        setIsCompletionConfirmationOpen(false);
+        onOpenChange(false);
+        window.location.reload();
+        return;
+      }
+
+      // Recargar detalles y pendiente
+      try {
+        setIsLoadingDetails(true);
+        const details = await orderService.getOrderDetails(order.id);
+        setOrderDetails(details);
+      } catch (error) {
+        console.error('Error al recargar detalles de la orden:', error);
+      } finally {
+        setIsLoadingDetails(false);
+      }
+
+      try {
+        const pending = await serviceService.getServicePendingAmount(selectedServiceId);
+        setPendingPayment(Number(pending) || 0);
+      } catch (_error) {
+        setPendingPayment(0);
+      }
+
+      setPaymentMethods([{ id: '1', type: PaymentType.EFECTIVO, amount: 0 }]);
+      setIsPaymentModalOpen(false);
+    } catch (error) {
+      console.error('Error processing service payment:', error);
+      toast.error('No se pudo procesar el pago del servicio');
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl w-[90%] max-h-[90vh] p-0 flex flex-col overflow-hidden">
@@ -405,9 +638,26 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                 <h3 className="font-medium">
                   Servicios {displayProducts.length ? 'Adicionales' : ''}
                 </h3>
+
+                {!selectedServiceId && (
+                  <p className="text-sm text-muted-foreground">
+                    Elige un servicio para ver el pago pendiente, adelantar pagos y modificar su estado.
+                  </p>
+                )}
+
                 <div className="space-y-4">
                   {displayServices.map((service: any) => (
-                    <div key={service.id || Math.random()} className="border rounded-lg p-4">
+                    <button
+                      key={service.id || Math.random()}
+                      type="button"
+                      onClick={() => setSelectedServiceId(String(service.id))}
+                      className={
+                        `w-full text-left border rounded-lg p-4 transition-colors ` +
+                        (String(service.id) === String(selectedServiceId)
+                          ? 'ring-2 ring-primary/40 bg-muted/20'
+                          : 'hover:bg-muted/10')
+                      }
+                    >
                       <div className="flex justify-between items-start">
                         <div>
                           <p className="font-medium">{service.name}</p>
@@ -461,9 +711,67 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                             ))}
                         </div>
                       )}
-                    </div>
+                    </button>
                   ))}
                 </div>
+
+                {selectedService && (
+                  <div className="border rounded-lg p-4 bg-muted/10">
+                    <div className="space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium">Servicio seleccionado</p>
+                          <p className="text-xs text-muted-foreground">
+                            {isLoadingPendingPayment
+                              ? 'Cargando pendiente...'
+                              : `Pendiente: S/${Number(pendingPayment || 0).toFixed(2)}`}
+                          </p>
+                        </div>
+
+                        <Button
+                          variant="default"
+                          onClick={() => setIsPaymentModalOpen(true)}
+                          disabled={!canManageServices || isLoadingPendingPayment || pendingPayment <= 0 || selectedService.status === ServiceStatus.ANNULLATED}
+                        >
+                          Adelantar pago
+                        </Button>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">Estado del servicio</Label>
+                        <Select
+                          value={selectedService.status}
+                          onValueChange={(value) => {
+                            const confirmed = window.confirm(
+                              `¿Confirmas cambiar el estado del servicio de "${translateServiceType(selectedService.status)}" a "${translateServiceType(value)}"?`
+                            );
+                            if (confirmed) updateServiceStatus(value as ServiceStatus);
+                          }}
+                          disabled={!canManageServices}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar estado" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={ServiceStatus.PENDING}>Pendiente</SelectItem>
+                            <SelectItem value={ServiceStatus.IN_PROGRESS}>En Progreso</SelectItem>
+                            <SelectItem value={ServiceStatus.COMPLETED}>Completado</SelectItem>
+                            <SelectItem value={ServiceStatus.DELIVERED}>Entregado</SelectItem>
+                            <SelectItem value={ServiceStatus.PAID}>Pagado</SelectItem>
+                            <SelectItem value={ServiceStatus.ANNULLATED}>Anulado</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {!canManageServices && (
+                        <p className="text-xs text-muted-foreground">
+                          No tienes permisos para registrar pagos ni cambiar el estado.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {displayServices.some((s: any) => s.price > 0) && (
                   <div className="text-right font-medium">
                     <p>Total Servicios: S/
@@ -571,12 +879,164 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
         </div>
       </DialogContent>
 
+      <Dialog open={isPaymentModalOpen} onOpenChange={setIsPaymentModalOpen}>
+        <DialogContent className="sm:max-w-lg w-[90%]">
+          <DialogHeader>
+            <DialogTitle>Adelantar pago</DialogTitle>
+            <DialogDescription>
+              {selectedService
+                ? `Servicio: ${selectedService.name}`
+                : 'Selecciona un servicio para registrar un pago.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {!selectedService ? (
+            <Alert>
+              <AlertDescription>Debes seleccionar un servicio antes de registrar un pago.</AlertDescription>
+            </Alert>
+          ) : (
+            <div className="space-y-4">
+              <div className="rounded-md border p-3 bg-muted/10">
+                <p className="text-sm font-medium">Monto pendiente</p>
+                <p className="text-sm text-muted-foreground">
+                  {isLoadingPendingPayment
+                    ? 'Cargando...'
+                    : `S/${Number(pendingPayment || 0).toFixed(2)}`}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Métodos de pago</p>
+                  <Button type="button" variant="outline" size="sm" onClick={addPaymentMethod}>
+                    + Agregar
+                  </Button>
+                </div>
+
+                <div className="space-y-3">
+                  {paymentMethods.map((pm) => (
+                    <div key={pm.id} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
+                      <div className="sm:col-span-7 space-y-1">
+                        <Label>Método</Label>
+                        <Select
+                          value={pm.type}
+                          onValueChange={(value) => updatePaymentMethod(pm.id, 'type', value as PaymentTypeValue)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Método" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={PaymentType.EFECTIVO}>Efectivo</SelectItem>
+                            <SelectItem value={PaymentType.TARJETA}>Tarjeta</SelectItem>
+                            <SelectItem value={PaymentType.TRANSFERENCIA}>Transferencia</SelectItem>
+                            <SelectItem value={PaymentType.YAPE}>Yape</SelectItem>
+                            <SelectItem value={PaymentType.PLIN}>Plin</SelectItem>
+                            <SelectItem value={PaymentType.DATAPHONE}>Dataphone</SelectItem>
+                            <SelectItem value={PaymentType.BIZUM}>Bizum</SelectItem>
+                            <SelectItem value={PaymentType.OTRO}>Otro</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="sm:col-span-4 space-y-1">
+                        <Label>Monto</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={pm.amount}
+                          onChange={(e) => updatePaymentMethod(pm.id, 'amount', Number(e.target.value) || 0)}
+                        />
+                      </div>
+
+                      <div className="sm:col-span-1 flex justify-end">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removePaymentMethod(pm.id)}
+                          disabled={paymentMethods.length === 1}
+                        >
+                          X
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between border-t pt-3">
+                  <p className="text-sm text-muted-foreground">Total a pagar</p>
+                  <p className="text-sm font-medium">
+                    S/
+                    {paymentMethods
+                      .reduce((sum, pm) => sum + (Number(pm.amount) || 0), 0)
+                      .toFixed(2)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => setIsPaymentModalOpen(false)} disabled={isProcessingPayment}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="default"
+              onClick={() => executeServicePayment(false)}
+              disabled={!selectedService || isProcessingPayment || isLoadingPendingPayment || pendingPayment <= 0}
+            >
+              {isProcessingPayment ? 'Procesando...' : 'Registrar pago'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isCompletionConfirmationOpen} onOpenChange={setIsCompletionConfirmationOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>¿Completar Servicio?</DialogTitle>
+          </DialogHeader>
+
+          <div className="py-4 space-y-4">
+            <p className="text-muted-foreground">
+              Este pago cubrirá el saldo total del servicio.
+            </p>
+            <p className="font-medium text-amber-600 bg-amber-50 p-3 rounded-md border border-amber-200">
+              ¿Deseas COMPLETAR el servicio?
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 justify-end mt-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsCompletionConfirmationOpen(false);
+                executeServicePayment(false, true);
+              }}
+              disabled={isProcessingPayment || !canManageServices}
+              className="sm:order-1"
+            >
+              No, solo registrar pago
+            </Button>
+            <Button
+              variant="default"
+              onClick={() => executeServicePayment(true, true)}
+              disabled={isProcessingPayment || !canManageServices}
+            >
+              Sí, completar servicio
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Dialog para mostrar el PDF */}
       <Dialog open={showPDF} onOpenChange={setShowPDF}>
         <DialogContent className="max-w-4xl w-[90vw] h-[90vh] p-0 flex flex-col">
           <DialogHeader className="px-6 py-8 border-b flex flex-row items-center justify-between position-relative">
             <div>
-              <DialogTitle>Comprobante de Venta {order?.orderNumber ? `- ${order.orderNumber}` : ''}</DialogTitle>
+              <DialogTitle>Comprobante de Venta {order.orderNumber ? `- ${order.orderNumber}` : ''}</DialogTitle>
               <DialogDescription>
                 Visualiza y descarga el comprobante PDF de esta venta
               </DialogDescription>
@@ -588,10 +1048,10 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                     <ReceiptThermalPDF
                       saleData={orderDetails}
                       businessInfo={businessInfo}
-                      isCompleted={order?.status === 'COMPLETED'}
+                      isCompleted={order.status === 'COMPLETED'}
                     />
                   }
-                  fileName={`${order?.orderNumber || 'comprobante-venta'}.pdf`}
+                  fileName={`${order.orderNumber || 'comprobante-venta'}.pdf`}
                   className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-black bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
                 >
                   {({ blob, url, loading, error }) =>
@@ -615,7 +1075,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                         <ReceiptThermalPDF 
                           saleData={orderDetails}
                           businessInfo={businessInfo}
-                          isCompleted={order?.status === 'COMPLETED'}
+                          isCompleted={order.status === 'COMPLETED'}
                         />
                       ).toBlob();
                       
@@ -641,7 +1101,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                         // Si el navegador bloquea la ventana emergente, descargar como fallback
                         const a = document.createElement('a');
                         a.href = url;
-                        a.download = `${order?.orderNumber || 'comprobante-venta'}-termico.pdf`;
+                        a.download = `${order.orderNumber || 'comprobante-venta'}-termico.pdf`;
                         document.body.appendChild(a);
                         a.click();
                         document.body.removeChild(a);
@@ -674,7 +1134,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                 <ReceiptThermalPDF
                   saleData={orderDetails}
                   businessInfo={businessInfo}
-                  isCompleted={order?.status === 'COMPLETED'}
+                  isCompleted={order.status === 'COMPLETED'}
                 />
               </PDFViewer>
             )}
