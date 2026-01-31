@@ -361,6 +361,37 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
     setPaymentMethods((prev) => prev.map((pm) => (pm.id === id ? { ...pm, [field]: value } : pm)));
   };
 
+  const handleServiceRefund = async (service: any) => {
+    try {
+      if (!currentStore) return;
+
+      const currentSession = await cashService.getCurrentCashSession(currentStore.id);
+      if (!currentSession || currentSession.status !== 'OPEN') return;
+
+      const paymentInfo = await serviceService.getServicePendingPayment(service.id);
+      const cashPayments = paymentInfo.paymentBreakdown?.filter((payment: any) =>
+        payment.type === 'EFECTIVO' && payment.amount > 0
+      ) || [];
+
+      if (cashPayments.length === 0) return;
+
+      const totalRefundAmount = cashPayments.reduce((sum: number, payment: any) => sum + payment.amount, 0);
+      if (totalRefundAmount > 0) {
+        await cashService.addManualMovement({
+          cashSessionId: currentSession.id,
+          amount: totalRefundAmount,
+          type: 'EXPENSE',
+          payment: 'EFECTIVO',
+          description: `Extorno por anulación de servicio - ${service.name || service.id} (Orden ${order?.orderNumber || order?.id?.substring(0, 8)})`,
+        });
+        toast.success(`Se ha generado un extorno de S/ ${totalRefundAmount.toFixed(2)} por pagos en efectivo del servicio anulado.`);
+      }
+    } catch (error) {
+      console.error('Error al procesar extorno:', error);
+      toast.error('Error al procesar el extorno. Contacte al administrador.');
+    }
+  };
+
   const updateServiceStatus = async (targetStatus: ServiceStatus) => {
     if (!selectedServiceId) return;
     if (!canManageServices) {
@@ -369,18 +400,33 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
     }
 
     try {
+      if (targetStatus === ServiceStatus.ANNULLATED) {
+        const selectedService = displayServices.find((s: any) => String(s.id) === String(selectedServiceId));
+        if (selectedService) {
+          await handleServiceRefund(selectedService);
+        }
+      }
+
       await serviceService.updateServiceStatus(selectedServiceId, targetStatus);
       toast.success('Estado del servicio actualizado correctamente');
 
-      if (targetStatus === ServiceStatus.COMPLETED) {
+      if (targetStatus === ServiceStatus.COMPLETED || targetStatus === ServiceStatus.ANNULLATED) {
         setIsPaymentModalOpen(false);
         setIsCompletionConfirmationOpen(false);
         onOpenChange(false);
-        window.location.reload();
+        if (onOrderUpdate && order?.id) {
+          try {
+            const updatedOrder = await orderService.getOrderById(order.id);
+            onOrderUpdate(updatedOrder);
+          } catch (error) {
+            console.error('Error fetching updated order:', error);
+            // Fallback: use original order if fetch fails
+            onOrderUpdate(order);
+          }
+        }
         return;
       }
 
-      // Recargar detalles de la orden para reflejar el nuevo estado
       if (order?.id) {
         const details = await orderService.getOrderDetails(order.id);
         setOrderDetails(details);
@@ -480,7 +526,16 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
         setIsPaymentModalOpen(false);
         setIsCompletionConfirmationOpen(false);
         onOpenChange(false);
-        window.location.reload();
+        if (onOrderUpdate && order?.id) {
+          try {
+            const updatedOrder = await orderService.getOrderById(order.id);
+            onOrderUpdate(updatedOrder);
+          } catch (error) {
+            console.error('Error fetching updated order:', error);
+            // Fallback: use original order if fetch fails
+            onOrderUpdate(order);
+          }
+        }
         return;
       }
 
