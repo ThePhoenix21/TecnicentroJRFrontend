@@ -339,6 +339,9 @@ export default function CajaPage() {
       setMovementData({ amount: '', type: 'INCOME', payment: 'EFECTIVO', description: '' });
       setShowMovementForm(false);
       await loadCurrentSession();
+      // Forzar recarga del listado de movimientos para reflejar el nuevo registro
+      setMovementsPage(1);
+      await loadMovementsRef.current?.(1);
     } catch (error: any) {
       console.error('Error al agregar movimiento:', error);
       toast.error(error.response?.data?.message || 'Error al agregar el movimiento');
