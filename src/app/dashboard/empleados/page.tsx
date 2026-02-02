@@ -792,12 +792,20 @@ export default function EmpleadosPage() {
                   <Input
                     placeholder="Nombre..."
                     value={firstNameQuery}
-                    onFocus={() => setShowFirstNameSuggestions(true)}
                     onBlur={() => setTimeout(() => setShowFirstNameSuggestions(false), 150)}
                     onChange={(e) => {
-                      setFirstNameQuery(e.target.value);
-                      setFirstNameFilter("");
-                      setShowFirstNameSuggestions(true);
+                      const nextValue = e.target.value;
+                      setFirstNameQuery(nextValue);
+                      setShowFirstNameSuggestions(nextValue.trim().length > 0);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+                      e.preventDefault();
+                      const trimmed = firstNameQuery.trim();
+                      if (!trimmed) return;
+                      setFirstNameFilter(trimmed);
+                      setFirstNameQuery(trimmed);
+                      setShowFirstNameSuggestions(false);
                     }}
                   />
                   {firstNameQuery && (
@@ -814,22 +822,26 @@ export default function EmpleadosPage() {
                       <Search className="h-4 w-4" />
                     </button>
                   )}
-                  {showFirstNameSuggestions && filteredFirstNameSuggestions.length > 0 && (
+                  {showFirstNameSuggestions && firstNameQuery.trim().length > 0 && (
                     <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
-                      {filteredFirstNameSuggestions.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => {
-                            setFirstNameFilter(item.firstName);
-                            setFirstNameQuery(item.firstName);
-                            setShowFirstNameSuggestions(false);
-                          }}
-                          className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
-                        >
-                          {item.firstName}
-                        </button>
-                      ))}
+                      {filteredFirstNameSuggestions.length === 0 ? (
+                        <div className="px-3 py-2 text-xs text-muted-foreground">Sin coincidencias</div>
+                      ) : (
+                        filteredFirstNameSuggestions.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => {
+                              setFirstNameFilter(item.firstName);
+                              setFirstNameQuery(item.firstName);
+                              setShowFirstNameSuggestions(false);
+                            }}
+                            className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                          >
+                            {item.firstName}
+                          </button>
+                        ))
+                      )}
                     </div>
                   )}
                 </div>
@@ -837,12 +849,20 @@ export default function EmpleadosPage() {
                   <Input
                     placeholder="Apellido..."
                     value={lastNameQuery}
-                    onFocus={() => setShowLastNameSuggestions(true)}
                     onBlur={() => setTimeout(() => setShowLastNameSuggestions(false), 150)}
                     onChange={(e) => {
-                      setLastNameQuery(e.target.value);
-                      setLastNameFilter("");
-                      setShowLastNameSuggestions(true);
+                      const nextValue = e.target.value;
+                      setLastNameQuery(nextValue);
+                      setShowLastNameSuggestions(nextValue.trim().length > 0);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+                      e.preventDefault();
+                      const trimmed = lastNameQuery.trim();
+                      if (!trimmed) return;
+                      setLastNameFilter(trimmed);
+                      setLastNameQuery(trimmed);
+                      setShowLastNameSuggestions(false);
                     }}
                   />
                   {lastNameQuery && (
@@ -859,22 +879,26 @@ export default function EmpleadosPage() {
                       <Search className="h-4 w-4" />
                     </button>
                   )}
-                  {showLastNameSuggestions && filteredLastNameSuggestions.length > 0 && (
+                  {showLastNameSuggestions && lastNameQuery.trim().length > 0 && (
                     <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
-                      {filteredLastNameSuggestions.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => {
-                            setLastNameFilter(item.lastName);
-                            setLastNameQuery(item.lastName);
-                            setShowLastNameSuggestions(false);
-                          }}
-                          className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
-                        >
-                          {item.lastName}
-                        </button>
-                      ))}
+                      {filteredLastNameSuggestions.length === 0 ? (
+                        <div className="px-3 py-2 text-xs text-muted-foreground">Sin coincidencias</div>
+                      ) : (
+                        filteredLastNameSuggestions.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => {
+                              setLastNameFilter(item.lastName);
+                              setLastNameQuery(item.lastName);
+                              setShowLastNameSuggestions(false);
+                            }}
+                            className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                          >
+                            {item.lastName}
+                          </button>
+                        ))
+                      )}
                     </div>
                   )}
                 </div>
@@ -956,6 +980,7 @@ export default function EmpleadosPage() {
                     <Input
                       type="date"
                       value={fromDate}
+                      onClick={(e) => e.currentTarget.showPicker?.()}
                       onChange={(e) => setFromDate(e.target.value)}
                       className="w-full"
                     />
@@ -965,6 +990,7 @@ export default function EmpleadosPage() {
                     <Input
                       type="date"
                       value={toDate}
+                      onClick={(e) => e.currentTarget.showPicker?.()}
                       onChange={(e) => setToDate(e.target.value)}
                       className="w-full"
                     />
@@ -1051,7 +1077,21 @@ export default function EmpleadosPage() {
                         <TableCell className="font-medium">{e.firstName}</TableCell>
                         <TableCell>{e.lastName}</TableCell>
                         <TableCell>{e.position}</TableCell>
-                        <TableCell>{e.status}</TableCell>
+                        <TableCell>
+                          <span
+                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold
+                              ${
+                                e.status === "ACTIVE"
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : e.status === "SUSPENDED"
+                                  ? "bg-amber-100 text-amber-800"
+                                  : "bg-slate-200 text-slate-700"
+                              }
+                            `}
+                          >
+                            {statusLabel[e.status] ?? e.status}
+                          </span>
+                        </TableCell>
                         <TableCell>
                           <div className="flex flex-col">
                             <span>{assigned.store ?? "-"}</span>

@@ -124,6 +124,8 @@ export function SalesList({ sales, onNewSale, onViewSale }: SalesListProps) {
     switch (status) {
       case 'COMPLETED':
         return { text: 'Completado', className: 'bg-green-100 text-green-800' };
+      case 'PAID':
+        return { text: 'Pagado', className: 'bg-sky-100 text-sky-800' };
       case 'PENDING':
         return { text: 'Pendiente', className: 'bg-yellow-100 text-yellow-800' };
       case 'CANCELLED':

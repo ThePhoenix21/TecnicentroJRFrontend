@@ -56,6 +56,9 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
   const [userQuery, setUserQuery] = useState("");
   const [showUserSuggestions, setShowUserSuggestions] = useState(false);
 
+  const productFilterRef = useRef<HTMLDivElement | null>(null);
+  const userFilterRef = useRef<HTMLDivElement | null>(null);
+
   const [type, setType] = useState<InventoryMovementType | "ALL">("ALL");
 
   const [fromDate, setFromDate] = useState("");
@@ -102,6 +105,21 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
 
   const loadMovements = useCallback(async (targetPage?: number) => {
     await loadMovementsRef.current?.(targetPage);
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (productFilterRef.current && !productFilterRef.current.contains(target)) {
+        setShowProductSuggestions(false);
+      }
+      if (userFilterRef.current && !userFilterRef.current.contains(target)) {
+        setShowUserSuggestions(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   useEffect(() => {
@@ -248,7 +266,7 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
         <div className="mb-4">
           <div className="flex items-start justify-between gap-3">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 flex-1">
-              <div className="relative">
+              <div className="relative" ref={productFilterRef}>
                 <label className="text-sm text-muted-foreground">Producto</label>
                 <div className="relative mt-1">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -262,6 +280,13 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
                       }
                     }}
                     onFocus={() => setShowProductSuggestions(true)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        e.stopPropagation();
+                        setShowProductSuggestions(false);
+                        (e.currentTarget as HTMLInputElement).blur();
+                      }
+                    }}
                     placeholder="Buscar producto..."
                     className="pl-8"
                   />
@@ -325,7 +350,7 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
                 </div>
               </div>
 
-              <div>
+              <div ref={userFilterRef}>
                 <label className="text-sm text-muted-foreground">Usuario</label>
                 <div className="relative mt-1">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -339,6 +364,13 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
                       }
                     }}
                     onFocus={() => setShowUserSuggestions(true)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        e.stopPropagation();
+                        setShowUserSuggestions(false);
+                        (e.currentTarget as HTMLInputElement).blur();
+                      }
+                    }}
                     placeholder="Buscar usuario..."
                     className="pl-8"
                   />
@@ -399,11 +431,23 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-sm text-muted-foreground">Desde</label>
-                  <Input className="mt-1" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+                  <Input 
+                  className="mt-1" 
+                  type="date" 
+                  value={fromDate} 
+                  onClick={(e) => e.currentTarget.showPicker?.()}
+                  onChange={(e) => setFromDate(e.target.value)} 
+                  />
                 </div>
                 <div>
                   <label className="text-sm text-muted-foreground">Hasta</label>
-                  <Input className="mt-1" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+                  <Input 
+                    className="mt-1" 
+                    type="date" 
+                    value={toDate} 
+                    onClick={(e) => e.currentTarget.showPicker?.()} 
+                    onChange={(e) => setToDate(e.target.value)} 
+                  />
                 </div>
               </div>
             </div>
@@ -449,7 +493,7 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
                 </TableRow>
               ) : (
                 movements.map((movement) => (
-                  <TableRow key={movement.id ?? `${movement.date ?? movement.createdAt ?? ""}-${movement.name ?? movement.storeProduct?.product?.name ?? ""}-${movement.type}-${movement.quantity}`}> 
+                  <TableRow key={movement.id}>
                     <TableCell className="whitespace-nowrap">
                       {formatDate(movement.date || movement.createdAt)}
                     </TableCell>

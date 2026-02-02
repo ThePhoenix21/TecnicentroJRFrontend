@@ -924,41 +924,7 @@ export default function CajaPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Método de pago</label>
-                  <Select value={paymentFilter} onValueChange={(v) => setPaymentFilter(v === '__ALL__' ? '' : v)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Todos" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__ALL__">Todos</SelectItem>
-                      {paymentLookup.map((item) => (
-                        <SelectItem key={item.id} value={item.value}>
-                          {item.value}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Operación</label>
-                  <Select value={operationFilter} onValueChange={(v) => setOperationFilter(v === '__ALL__' ? '' : v)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Todas" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__ALL__">Todas</SelectItem>
-                      {operationLookup.map((item) => (
-                        <SelectItem key={item.id} value={item.value}>
-                          {item.value}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3 w-full md:w-auto max-w-3xl">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Cliente</label>
                   <div className="relative">
@@ -1009,8 +975,41 @@ export default function CajaPage() {
                     )}
                   </div>
                 </div>
-              </div>
 
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Operación</label>
+                  <Select value={operationFilter} onValueChange={(v) => setOperationFilter(v === '__ALL__' ? '' : v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__ALL__">Todas</SelectItem>
+                      {operationLookup.map((item) => (
+                        <SelectItem key={item.id} value={item.value}>
+                          {item.value}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Método de pago</label>
+                  <Select value={paymentFilter} onValueChange={(v) => setPaymentFilter(v === '__ALL__' ? '' : v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__ALL__">Todos</SelectItem>
+                      {paymentLookup.map((item) => (
+                        <SelectItem key={item.id} value={item.value}>
+                          {item.value}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               <div className="flex items-center justify-between text-sm text-muted-foreground">
                 <p>
                   Mostrando {movements.length} de {movementsTotal} movimientos

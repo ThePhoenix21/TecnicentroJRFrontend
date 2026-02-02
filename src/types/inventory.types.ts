@@ -1,7 +1,7 @@
 export type InventoryMovementType = 'INCOMING' | 'OUTGOING' | 'ADJUST' | 'SALE' | 'RETURN';
 
 export interface InventoryMovement {
-  id?: string;
+  id: string;
   storeProductId?: string;
   storeProduct?: {
     id: string;

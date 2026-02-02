@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { storeProductService } from '@/services/store-product.service';
 import { inventoryService } from '@/services/inventory.service';
@@ -50,6 +50,12 @@ export default function ProductsPage() {
   const [showNameSuggestions, setShowNameSuggestions] = useState(false);
   const [nameSuggestions, setNameSuggestions] = useState<Array<{ id: string; name: string }>>([]);
   const [nameLookupLoading, setNameLookupLoading] = useState(false);
+  const nameInputWrapperRef = useRef<HTMLDivElement | null>(null);
+  const filteredNameSuggestions = useMemo(() => {
+    const query = nameQuery.trim().toLowerCase();
+    if (!query) return [];
+    return nameSuggestions.filter((item) => item.name?.toLowerCase().includes(query));
+  }, [nameQuery, nameSuggestions]);
 
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -201,21 +207,11 @@ export default function ProductsPage() {
     fetchStoreProductsRef.current?.(1);
   }, [isAuthenticated, activeStoreId]);
 
-  // Remove the automatic filter loading - only load on explicit search or Enter
   useEffect(() => {
-    // This useEffect is removed to prevent double loading
-  }, []);
-
-  useEffect(() => {
-    const timer = setTimeout(async () => {
-      const query = nameQuery.trim();
-      if (!query) {
-        setNameSuggestions([]);
-        return;
-      }
+    const loadLookup = async () => {
       try {
         setNameLookupLoading(true);
-        const lookup = await storeProductService.getCatalogProductsLookup(query);
+        const lookup = await storeProductService.getCatalogProductsLookup('');
         setNameSuggestions(Array.isArray(lookup) ? lookup : []);
       } catch (error) {
         console.error('Error loading product name lookup:', error);
@@ -223,20 +219,30 @@ export default function ProductsPage() {
       } finally {
         setNameLookupLoading(false);
       }
-    }, 350);
+    };
 
-    return () => clearTimeout(timer);
-  }, [nameQuery]);
+    loadLookup();
+  }, []);
 
-  // Handle nameFilter changes to fetch products
   useEffect(() => {
-    if (nameFilter !== undefined) {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!nameInputWrapperRef.current) return;
+      if (!nameInputWrapperRef.current.contains(event.target as Node)) {
+        setShowNameSuggestions(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (nameFilter.trim()) {
       setPage(1);
       fetchStoreProductsRef.current?.(1);
     }
   }, [nameFilter]);
 
-  // Handle hideOutOfStock changes to fetch products
   useEffect(() => {
     setPage(1);
     fetchStoreProductsRef.current?.(1);
@@ -638,21 +644,33 @@ export default function ProductsPage() {
 
           <div className="space-y-2">
             <Label>Producto</Label>
-            <div className="relative">
+            <div className="relative" ref={nameInputWrapperRef}>
               <Search className="absolute left-2 top-3 h-4 w-4 text-muted-foreground" />
               <Input
                 value={nameQuery}
                 onChange={(e) => {
                   setNameQuery(e.target.value);
-                  setShowNameSuggestions(true);
-                  // Don't set nameFilter on every keystroke - only on Enter or selection
+                  if (e.target.value.trim()) {
+                    setShowNameSuggestions(true);
+                  } else {
+                    setShowNameSuggestions(false);
+                  }
                 }}
-                onFocus={() => setShowNameSuggestions(true)}
+                onFocus={() => {
+                  if (nameQuery.trim()) {
+                    setShowNameSuggestions(true);
+                  }
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
                     setNameFilter(nameQuery);
                     setShowNameSuggestions(false);
+                  }
+                  if (e.key === 'Escape') {
+                    e.stopPropagation();
+                    setShowNameSuggestions(false);
+                    (e.currentTarget as HTMLInputElement).blur();
                   }
                 }}
                 placeholder={nameLookupLoading ? 'Buscando...' : 'Buscar producto...'}
@@ -672,15 +690,15 @@ export default function ProductsPage() {
                 </button>
               )}
 
-              {showNameSuggestions && (
+              {showNameSuggestions && nameQuery.trim() && (
                 <div className="absolute z-20 mt-1 w-full rounded-md border bg-background shadow">
                   <div className="max-h-64 overflow-auto">
-                    {nameSuggestions.length === 0 ? (
+                    {filteredNameSuggestions.length === 0 ? (
                       <div className="px-3 py-4 text-sm text-muted-foreground">
                         {nameQuery ? 'No se encontraron productos' : 'Escribe para buscar'}
                       </div>
                     ) : (
-                      nameSuggestions.map((item) => (
+                      filteredNameSuggestions.map((item) => (
                         <button
                           key={item.id}
                           type="button"

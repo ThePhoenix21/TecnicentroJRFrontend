@@ -1214,7 +1214,10 @@ export function SaleForm({
           console.log(" Venta completada - mostrando hoja de servicio");
           setShowServiceSheet(true);
 
-          // El formulario se mantiene intacto hasta que el usuario cierre el PDF
+          // Cerrar inmediatamente el modal de venta para evitar que se vuelva a abrir
+          onClose();
+
+          // El formulario se mantiene en memoria hasta que se cierre el PDF para preservar los datos
           console.log(" Hoja de servicio se mostrará - el usuario decidirá cuándo cerrar");
         } else {
           resetSaleState();
@@ -1771,10 +1774,9 @@ export function SaleForm({
         {/* Diálogo de hoja de servicio */}
         <Dialog open={showServiceSheet} onOpenChange={(open) => {
           if (!open) {
-            console.log(" Usuario cerró hoja de servicio - reseteando formulario y cerrando modal padre");
+            console.log(" Usuario cerró hoja de servicio - reseteando formulario");
             resetSaleState(); // Reset completo cuando el usuario cierra la hoja de servicio
             setShowServiceSheet(false);
-            onClose(); // Cerrar el modal padre
           }
         }}>
           <DialogContent className="w-[98vw] max-w-[98vw] h-[98vh] max-h-[98vh] flex flex-col p-0 overflow-hidden">
@@ -2585,12 +2587,14 @@ export function SaleForm({
                               ? orderPaymentMethods
                               : [{ id: "1", type: PaymentType.EFECTIVO, amount: 0 }];
 
-                            const shouldPrefill = baseMethods.every((m) => m.amount === 0);
+                            const hasProducts = selectedItems.some((item) => item.type === "product");
+                            const initialAmount = hasProducts ? orderTotal : 0;
 
                             setOrderPaymentMethodsDraft(
-                              shouldPrefill
-                                ? baseMethods.map((m, idx) => (idx === 0 ? { ...m, amount: orderTotal } : m))
-                                : baseMethods
+                              baseMethods.map((m, idx) => ({
+                                ...m,
+                                amount: idx === 0 ? initialAmount : 0,
+                              }))
                             );
 
                             setIsOrderPaymentsModalOpen(true);

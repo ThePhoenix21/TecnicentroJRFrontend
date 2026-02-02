@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -157,9 +157,16 @@ export default function OrdenesSuministroPage() {
     products: [],
   });
 
+  const loadOrdersRef = useRef<((targetPage?: number) => void) | null>(null);
+
   const filtersKey = useMemo(
     () => [statusFilter, userIdFilter, codeFilter, fromDate, toDate].join("|"),
     [statusFilter, userIdFilter, codeFilter, fromDate, toDate]
+  );
+
+  const filtersApplied = useMemo(
+    () => Boolean(userIdFilter || codeFilter || fromDate || toDate || statusFilter !== "all"),
+    [userIdFilter, codeFilter, fromDate, toDate, statusFilter]
   );
 
   const filteredUsers = useMemo(() => {
@@ -207,6 +214,8 @@ export default function OrdenesSuministroPage() {
     [fromDate, toDate, statusFilter, userIdFilter, codeFilter]
   );
 
+  loadOrdersRef.current = loadOrders;
+
   useEffect(() => {
     const loadLookups = async () => {
       try {
@@ -231,13 +240,9 @@ export default function OrdenesSuministroPage() {
   }, [activeTab]);
 
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      setPage(1);
-      loadOrders(1);
-    }, 400);
-
-    return () => clearTimeout(timeout);
-  }, [filtersKey, loadOrders]);
+    setPage(1);
+    loadOrdersRef.current?.(1);
+  }, [filtersKey]);
 
   const handlePageChange = (nextPage: number) => {
     if (nextPage < 1 || nextPage > totalPages) return;
@@ -556,12 +561,11 @@ export default function OrdenesSuministroPage() {
                             placeholder="Buscar usuario creador..."
                             className="pl-9"
                             value={userQuery}
-                            onFocus={() => setShowUserSuggestions(true)}
                             onBlur={() => setTimeout(() => setShowUserSuggestions(false), 150)}
                             onChange={(e) => {
-                              setUserQuery(e.target.value);
-                              setUserIdFilter("");
-                              setShowUserSuggestions(true);
+                              const nextValue = e.target.value;
+                              setUserQuery(nextValue);
+                              setShowUserSuggestions(nextValue.trim().length > 0);
                             }}
                           />
                           {userQuery && (
@@ -578,22 +582,26 @@ export default function OrdenesSuministroPage() {
                               <X className="h-4 w-4" />
                             </button>
                           )}
-                          {showUserSuggestions && filteredUsers.length > 0 && (
+                          {showUserSuggestions && userQuery.trim().length > 0 && (
                             <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
-                              {filteredUsers.map((user) => (
-                                <button
-                                  key={user.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setUserIdFilter(user.id);
-                                    setUserQuery(user.name);
-                                    setShowUserSuggestions(false);
-                                  }}
-                                  className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
-                                >
-                                  {user.name}
-                                </button>
-                              ))}
+                              {filteredUsers.length === 0 ? (
+                                <div className="px-3 py-2 text-xs text-muted-foreground">Sin coincidencias</div>
+                              ) : (
+                                filteredUsers.map((user) => (
+                                  <button
+                                    key={user.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setUserIdFilter(user.id);
+                                      setUserQuery(user.name);
+                                      setShowUserSuggestions(false);
+                                    }}
+                                    className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                                  >
+                                    {user.name}
+                                  </button>
+                                ))
+                              )}
                             </div>
                           )}
                         </div>
@@ -610,12 +618,19 @@ export default function OrdenesSuministroPage() {
                             type="search"
                             placeholder="Buscar código de orden..."
                             value={codeQuery}
-                            onFocus={() => setShowCodeSuggestions(true)}
-                            onBlur={() => setTimeout(() => setShowCodeSuggestions(false), 150)}
                             onChange={(e) => {
-                              setCodeQuery(e.target.value);
-                              setCodeFilter("");
-                              setShowCodeSuggestions(true);
+                              const nextValue = e.target.value;
+                              setCodeQuery(nextValue);
+                              setShowCodeSuggestions(nextValue.trim().length > 0);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key !== "Enter") return;
+                              e.preventDefault();
+                              const trimmed = codeQuery.trim();
+                              if (!trimmed) return;
+                              setCodeFilter(trimmed);
+                              setCodeQuery(trimmed);
+                              setShowCodeSuggestions(false);
                             }}
                           />
                           {codeQuery && (
@@ -632,22 +647,26 @@ export default function OrdenesSuministroPage() {
                               <X className="h-4 w-4" />
                             </button>
                           )}
-                          {showCodeSuggestions && filteredOrders.length > 0 && (
+                          {showCodeSuggestions && codeQuery.trim().length > 0 && (
                             <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
-                              {filteredOrders.map((order) => (
-                                <button
-                                  key={order.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setCodeFilter(order.code);
-                                    setCodeQuery(order.code);
-                                    setShowCodeSuggestions(false);
-                                  }}
-                                  className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
-                                >
-                                  {order.code}
-                                </button>
-                              ))}
+                              {filteredOrders.length === 0 ? (
+                                <div className="px-3 py-2 text-xs text-muted-foreground">Sin coincidencias</div>
+                              ) : (
+                                filteredOrders.map((order) => (
+                                  <button
+                                    key={order.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setCodeFilter(order.code);
+                                      setCodeQuery(order.code);
+                                      setShowCodeSuggestions(false);
+                                    }}
+                                    className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                                  >
+                                    {order.code}
+                                  </button>
+                                ))
+                              )}
                             </div>
                           )}
                         </div>
@@ -677,6 +696,7 @@ export default function OrdenesSuministroPage() {
                       <Input
                         type="date"
                         value={fromDate}
+                        onClick={(e) => e.currentTarget.showPicker?.()}
                         onChange={(e) => setFromDate(e.target.value)}
                       />
                     </div>
@@ -686,15 +706,16 @@ export default function OrdenesSuministroPage() {
                       <Input
                         type="date"
                         value={toDate}
+                        onClick={(e) => e.currentTarget.showPicker?.()}
                         onChange={(e) => setToDate(e.target.value)}
                       />
                     </div>
                   </div>
 
-                  {(userIdFilter || statusFilter !== "all" || fromDate || toDate) && (
+                  {filtersApplied && (
                     <div className="flex justify-between items-center text-xs text-muted-foreground">
                       <span>Filtros activos</span>
-                      <Button variant="ghost" size="sm" onClick={clearFilters} className="h-7 px-2">
+                      <Button variant="ghost" size="sm" onClick={clearFilters} className="h-7 px-2 text-amber-600 hover:text-red-600">
                         Limpiar filtros
                       </Button>
                     </div>
@@ -716,7 +737,7 @@ export default function OrdenesSuministroPage() {
                 </div>
               ) : orders.length === 0 ? (
                 <div className="text-center py-10 text-muted-foreground">
-                  No se encontraron órdenes de suministro.
+                  {filtersApplied ? "No se encontraron coincidencias." : "No se encontraron órdenes de suministro."}
                 </div>
               ) : (
                 <div className="rounded-md border overflow-hidden">

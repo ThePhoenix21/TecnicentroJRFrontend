@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { storeProductService } from "@/services/store-product.service";
 import { inventoryService } from "@/services/inventory.service";
@@ -33,6 +33,7 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
   const [type, setType] = useState<InventoryMovementType>("INCOMING");
   const [quantity, setQuantity] = useState<string>("");
   const [description, setDescription] = useState<string>("");
+  const productInputRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (currentStore?.id) {
@@ -145,6 +146,20 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
     product.name.toLowerCase().includes(productQuery.trim().toLowerCase())
   );
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!productInputRef.current) return;
+      if (!productInputRef.current.contains(event.target as Node)) {
+        setShowProductSuggestions(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
   return (
     <Card>
       <CardHeader>
@@ -173,7 +188,7 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
 
           <div className="space-y-2">
             <Label>Producto</Label>
-            <div className="relative">
+            <div className="relative" ref={productInputRef}>
               <Search className="absolute left-2 top-3 h-4 w-4 text-muted-foreground" />
               <Input
                 value={productQuery}
@@ -185,6 +200,13 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
                   }
                 }}
                 onFocus={() => setShowProductSuggestions(true)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.stopPropagation();
+                    setShowProductSuggestions(false);
+                    (e.currentTarget as HTMLInputElement).blur();
+                  }
+                }}
                 placeholder={isLoadingProducts ? "Cargando..." : "Buscar producto"}
                 disabled={isLoadingProducts}
                 className="pl-8"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { uniqueBy } from "@/utils/array";
 import { serviceService, ServiceStatus, type ServiceListItem, type ServiceLookupItem } from "@/services/service.service";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,18 @@ export default function ServiciosPage() {
   const [showServiceDropdown, setShowServiceDropdown] = useState(false);
   const [selectedClient, setSelectedClient] = useState<{ id: string; name: string } | null>(null);
   const [selectedService, setSelectedService] = useState<{ id: string; value: string } | null>(null);
+
+  const filteredClientLookup = useMemo(() => {
+    const query = clientSearchTerm.trim().toLowerCase();
+    if (!query) return [];
+    return clientLookup.filter((c) => c.name?.toLowerCase().includes(query));
+  }, [clientLookup, clientSearchTerm]);
+
+  const filteredServiceLookup = useMemo(() => {
+    const query = serviceSearchTerm.trim().toLowerCase();
+    if (!query) return [];
+    return serviceLookup.filter((s) => s.value?.toLowerCase().includes(query));
+  }, [serviceLookup, serviceSearchTerm]);
 
   const [clientIdFilter, setClientIdFilter] = useState<string>("all");
   const [serviceIdFilter, setServiceIdFilter] = useState<string>("all");
@@ -178,8 +191,15 @@ export default function ServiciosPage() {
           serviceService.getServicesLookup(),
         ]);
 
-        setClientLookup(Array.isArray(clients) ? clients : []);
-        setServiceLookup(Array.isArray(servicesLookup) ? servicesLookup : []);
+        const safeClients = Array.isArray(clients)
+          ? uniqueBy(clients, (c) => c.name?.trim().toLowerCase())
+          : [];
+        const safeServices = Array.isArray(servicesLookup)
+          ? uniqueBy(servicesLookup, (s) => `${s.id}-${s.value?.trim().toLowerCase()}`)
+          : [];
+
+        setClientLookup(safeClients);
+        setServiceLookup(safeServices);
       } catch {
         setClientLookup([]);
         setServiceLookup([]);
@@ -263,6 +283,23 @@ export default function ServiciosPage() {
     return `S/${numPrice.toFixed(2)}`;  
   };
 
+  const clearFilters = () => {
+    setClientSearchTerm("");
+    setServiceSearchTerm("");
+    setSelectedClient(null);
+    setSelectedService(null);
+    setClientIdFilter("all");
+    setServiceIdFilter("all");
+    setStatusFilter("all");
+    setOpenCashOnly(true);
+    setFromDate("");
+    setToDate("");
+    setShowClientDropdown(false);
+    setShowServiceDropdown(false);
+    setPage(1);
+    loadServices(1, { clear: true });
+  };
+
   if (!canViewServices) {
     return (
       <div className="space-y-6 p-4 sm:p-6">
@@ -289,9 +326,12 @@ export default function ServiciosPage() {
         <CardHeader className="pb-2 sm:pb-3">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <CardTitle className="text-lg sm:text-xl">Servicios</CardTitle>
+            <Button variant="outline" onClick={clearFilters} disabled={loading}>
+              Limpiar filtros
+            </Button>
           </div>
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-6 gap-2">
-            <div className="md:col-span-2 relative client-search-container">
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <div className="relative client-search-container min-w-[220px]">
               <Label className="text-sm font-medium text-gray-700 mb-1 block opacity-0">
                 Cliente
               </Label>
@@ -299,15 +339,41 @@ export default function ServiciosPage() {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
                   placeholder="Cliente"
-                  value={selectedClient ? selectedClient.name : clientSearchTerm}
+                  className="pl-10 pr-10 h-9 text-sm"
+                  value={clientSearchTerm}
                   onChange={(e) => {
-                    setClientSearchTerm(e.target.value);
+                    const value = e.target.value;
+                    setClientSearchTerm(value);
                     setSelectedClient(null);
-                    setClientIdFilter("all");
+                    if (value.trim()) {
+                      setShowClientDropdown(true);
+                    } else {
+                      setShowClientDropdown(false);
+                    }
                   }}
-                  onFocus={() => setShowClientDropdown(true)}
+                  onFocus={() => {
+                    if (clientSearchTerm.trim()) {
+                      setShowClientDropdown(true);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const match = filteredClientLookup[0];
+                      if (match) {
+                        setClientSearchTerm(match.name);
+                        setSelectedClient({ id: match.id, name: match.name });
+                        setClientIdFilter(match.id);
+                      }
+                      setShowClientDropdown(false);
+                    }
+                    if (e.key === "Escape") {
+                      e.stopPropagation();
+                      setShowClientDropdown(false);
+                      (e.currentTarget as HTMLInputElement).blur();
+                    }
+                  }}
                   disabled={loading}
-                  className="pl-10 pr-10"
                 />
                 {(clientSearchTerm || selectedClient) && (
                   <button
@@ -315,6 +381,7 @@ export default function ServiciosPage() {
                       setClientSearchTerm("");
                       setSelectedClient(null);
                       setClientIdFilter("all");
+                      setShowClientDropdown(false);
                     }}
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   >
@@ -322,7 +389,7 @@ export default function ServiciosPage() {
                   </button>
                 )}
               </div>
-              {showClientDropdown && (clientSearchTerm || clientLookup.length > 0) && (
+              {showClientDropdown && clientSearchTerm.trim() && (
                 <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
                   <div
                     className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 cursor-pointer border-b"
@@ -335,9 +402,10 @@ export default function ServiciosPage() {
                   >
                     Todos los clientes
                   </div>
-                  {clientLookup
-                    .filter((c) => c.name.toLowerCase().includes(clientSearchTerm.toLowerCase()))
-                    .map((c) => (
+                  {filteredClientLookup.length === 0 ? (
+                    <div className="px-3 py-2 text-sm text-gray-500">Sin coincidencias</div>
+                  ) : (
+                    filteredClientLookup.map((c) => (
                       <div
                         key={c.id}
                         className="px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer"
@@ -350,12 +418,13 @@ export default function ServiciosPage() {
                       >
                         {c.name}
                       </div>
-                    ))}
+                    ))
+                  )}
                 </div>
               )}
             </div>
 
-            <div className="md:col-span-2 relative service-search-container">
+            <div className="relative service-search-container min-w-[220px]">
               <Label className="text-sm font-medium text-gray-700 mb-1 block opacity-0">
                 Servicio
               </Label>
@@ -363,15 +432,41 @@ export default function ServiciosPage() {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
                   placeholder="Servicio"
-                  value={selectedService ? selectedService.value : serviceSearchTerm}
+                  className="pl-10 pr-10 h-9 text-sm"
+                  value={serviceSearchTerm}
                   onChange={(e) => {
-                    setServiceSearchTerm(e.target.value);
+                    const value = e.target.value;
+                    setServiceSearchTerm(value);
                     setSelectedService(null);
-                    setServiceIdFilter("all");
+                    if (value.trim()) {
+                      setShowServiceDropdown(true);
+                    } else {
+                      setShowServiceDropdown(false);
+                    }
                   }}
-                  onFocus={() => setShowServiceDropdown(true)}
+                  onFocus={() => {
+                    if (serviceSearchTerm.trim()) {
+                      setShowServiceDropdown(true);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const match = filteredServiceLookup[0];
+                      if (match) {
+                        setServiceSearchTerm(match.value);
+                        setSelectedService({ id: match.id, value: match.value });
+                        setServiceIdFilter(match.id);
+                      }
+                      setShowServiceDropdown(false);
+                    }
+                    if (e.key === "Escape") {
+                      e.stopPropagation();
+                      setShowServiceDropdown(false);
+                      (e.currentTarget as HTMLInputElement).blur();
+                    }
+                  }}
                   disabled={loading}
-                  className="pl-10 pr-10"
                 />
                 {(serviceSearchTerm || selectedService) && (
                   <button
@@ -379,6 +474,7 @@ export default function ServiciosPage() {
                       setServiceSearchTerm("");
                       setSelectedService(null);
                       setServiceIdFilter("all");
+                      setShowServiceDropdown(false);
                     }}
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   >
@@ -386,7 +482,7 @@ export default function ServiciosPage() {
                   </button>
                 )}
               </div>
-              {showServiceDropdown && (serviceSearchTerm || serviceLookup.length > 0) && (
+              {showServiceDropdown && serviceSearchTerm.trim() && (
                 <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
                   <div
                     className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 cursor-pointer border-b"
@@ -399,9 +495,10 @@ export default function ServiciosPage() {
                   >
                     Todos los servicios
                   </div>
-                  {serviceLookup
-                    .filter((s) => s.value.toLowerCase().includes(serviceSearchTerm.toLowerCase()))
-                    .map((s) => (
+                  {filteredServiceLookup.length === 0 ? (
+                    <div className="px-3 py-2 text-sm text-gray-500">Sin coincidencias</div>
+                  ) : (
+                    filteredServiceLookup.map((s) => (
                       <div
                         key={s.id}
                         className="px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer"
@@ -414,12 +511,13 @@ export default function ServiciosPage() {
                       >
                         {s.value}
                       </div>
-                    ))}
+                    ))
+                  )}
                 </div>
               )}
             </div>
 
-            <div className="md:col-span-2">
+            <div className="min-w-[170px]">
               <Label htmlFor="status-filter" className="text-sm font-medium text-gray-700 mb-1 block">
                 Estado
               </Label>
@@ -428,7 +526,7 @@ export default function ServiciosPage() {
                 onValueChange={(value) => setStatusFilter(value as ServiceStatus | "all")}
                 disabled={loading}
               >
-                <SelectTrigger className="w-full" id="status-filter">
+                <SelectTrigger className="w-full h-9 text-sm" id="status-filter">
                   <SelectValue placeholder="Estado" />
                 </SelectTrigger>
                 <SelectContent>
@@ -442,7 +540,39 @@ export default function ServiciosPage() {
               </Select>
             </div>
 
-            <div className="md:col-span-2 flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="min-w-[150px]">
+              <Label htmlFor="from-date" className="text-sm font-medium text-gray-700 mb-1 block">
+                Desde
+              </Label>
+              <Input
+                id="from-date"
+                type="date"
+                className="h-9 text-sm"
+                  value={fromDate}
+                  onClick={(e) => e.currentTarget.showPicker?.()}                
+                onChange={(e) => setFromDate(e.target.value)}
+                disabled={loading}
+              />
+            </div>
+
+            <div className="min-w-[150px]">
+              <Label htmlFor="to-date" className="text-sm font-medium text-gray-700 mb-1 block">
+                Hasta
+              </Label>
+              <Input
+                id="to-date"
+                type="date"
+                className="h-9 text-sm"
+                value={toDate}
+                onClick={(e) => e.currentTarget.showPicker?.()}                
+                onChange={(e) => setToDate(e.target.value)}
+                disabled={loading}
+              />
+            </div>
+
+            <div className="basis-full" />
+
+            <div className="min-w-[140px] flex items-center gap-2 text-xs text-muted-foreground pt-1">
               <Checkbox
                 id="open-cash-only"
                 checked={openCashOnly}
@@ -452,32 +582,6 @@ export default function ServiciosPage() {
               <label htmlFor="open-cash-only" className="cursor-pointer select-none">
                 Solo caja abierta
               </label>
-            </div>
-
-            <div className="md:col-span-2">
-              <Label htmlFor="from-date" className="text-sm font-medium text-gray-700 mb-1 block">
-                Desde
-              </Label>
-              <Input
-                id="from-date"
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                disabled={loading}
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <Label htmlFor="to-date" className="text-sm font-medium text-gray-700 mb-1 block">
-                Hasta
-              </Label>
-              <Input
-                id="to-date"
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                disabled={loading}
-              />
             </div>
           </div>
         </CardHeader>

@@ -440,12 +440,20 @@ export default function ProveedoresPage() {
                         placeholder="Buscar proveedor..."
                         className="pl-9"
                         value={providerQuery}
-                        onFocus={() => setShowProviderSuggestions(true)}
                         onBlur={() => setTimeout(() => setShowProviderSuggestions(false), 150)}
                         onChange={(e) => {
-                          setProviderQuery(e.target.value);
-                          setProviderFilter("");
-                          setShowProviderSuggestions(true);
+                          const nextValue = e.target.value;
+                          setProviderQuery(nextValue);
+                          setShowProviderSuggestions(nextValue.trim().length > 0);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key !== "Enter") return;
+                          e.preventDefault();
+                          const trimmed = providerQuery.trim();
+                          if (!trimmed) return;
+                          setProviderFilter(trimmed);
+                          setProviderQuery(trimmed);
+                          setShowProviderSuggestions(false);
                         }}
                       />
                       {providerQuery && (
@@ -462,7 +470,7 @@ export default function ProveedoresPage() {
                           <X className="h-4 w-4" />
                         </button>
                       )}
-                      {showProviderSuggestions && filteredProviderSuggestions.length > 0 && (
+                      {showProviderSuggestions && providerQuery.trim().length > 0 && filteredProviderSuggestions.length > 0 && (
                         <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
                           {filteredProviderSuggestions.map((item) => (
                             <button
@@ -494,12 +502,20 @@ export default function ProveedoresPage() {
                         type="search"
                         placeholder="Filtrar por RUC..."
                         value={rucQuery}
-                        onFocus={() => setShowRucSuggestions(true)}
                         onBlur={() => setTimeout(() => setShowRucSuggestions(false), 150)}
                         onChange={(e) => {
-                          setRucQuery(e.target.value);
-                          setRucFilter("");
-                          setShowRucSuggestions(true);
+                          const nextValue = e.target.value;
+                          setRucQuery(nextValue);
+                          setShowRucSuggestions(nextValue.trim().length > 0);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key !== "Enter") return;
+                          e.preventDefault();
+                          const trimmed = rucQuery.trim();
+                          if (!trimmed) return;
+                          setRucFilter(trimmed);
+                          setRucQuery(trimmed);
+                          setShowRucSuggestions(false);
                         }}
                       />
                       {rucQuery && (
@@ -516,7 +532,7 @@ export default function ProveedoresPage() {
                           <X className="h-4 w-4" />
                         </button>
                       )}
-                      {showRucSuggestions && filteredRucSuggestions.length > 0 && (
+                      {showRucSuggestions && rucQuery.trim().length > 0 && filteredRucSuggestions.length > 0 && (
                         <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
                           {filteredRucSuggestions.map((item) => (
                             <button
@@ -540,19 +556,32 @@ export default function ProveedoresPage() {
 
                 <div className="space-y-1">
                   <span className="text-xs font-medium text-muted-foreground">Desde</span>
-                  <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+                  <Input 
+                    type="date" 
+                    value={fromDate} 
+                    onClick={(e) => e.currentTarget.showPicker?.()}
+                    onChange={(e) => setFromDate(e.target.value)} />
                 </div>
 
                 <div className="space-y-1">
                   <span className="text-xs font-medium text-muted-foreground">Hasta</span>
-                  <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+                  <Input 
+                    type="date" 
+                    value={toDate} 
+                    onClick={(e) => e.currentTarget.showPicker?.()} 
+                    onChange={(e) => setToDate(e.target.value)} />
                 </div>
               </div>
 
               {(providerFilter || rucFilter || fromDate || toDate) && (
-                <div className="flex justify-between items-center text-xs text-muted-foreground">
-                  <span>Filtros activos</span>
-                  <Button variant="ghost" size="sm" onClick={clearFilters} className="h-7 px-2">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span className="font-semibold tracking-wide">Filtros activos</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearFilters}
+                    className="h-7 px-2 text-amber-600 hover:text-red-300"
+                  >
                     Limpiar filtros
                   </Button>
                 </div>
@@ -589,9 +618,9 @@ export default function ProveedoresPage() {
                     <TableHead>Nombre</TableHead>
                     <TableHead>RUC</TableHead>
                     <TableHead>Dirección</TableHead>
-                    <TableHead className="text-center">Órdenes activas</TableHead>
+                    <TableHead className="text-center">Órdenes totales</TableHead>
                     <TableHead className="text-center">Órdenes anuladas</TableHead>
-                    <TableHead>Creado</TableHead>
+                    <TableHead>Creación</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

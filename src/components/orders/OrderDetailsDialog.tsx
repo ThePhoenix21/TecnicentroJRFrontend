@@ -1,16 +1,16 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, XCircle, Download, Printer, AlertCircle } from "lucide-react";
+import { FileText, XCircle, Download, Printer, AlertCircle, ChevronDown } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { PDFViewer, pdf, PDFDownloadLink } from "@react-pdf/renderer";
 import ReceiptThermalPDF from "@/app/dashboard/ventas/ReceiptThermalPDF";
 import { CancelOrderDialog } from "./CancelOrderDialog";
-import { Order, OrderProduct } from '@/services/order.service';
+import { Order, OrderProduct, type PaymentTypeInput } from '@/services/order.service';
 import { storeProductService } from '@/services/store-product.service';
 import { orderService } from '@/services/order.service';
 import { SaleData } from '@/types/sale.types';
@@ -36,13 +36,22 @@ const calculateOrderStatus = (order: Order): OrderStatus => {
     return 'CANCELLED';
   }
 
+  if (order.status === 'PAID') {
+    return 'PAID';
+  }
+
+  if (order.status === 'COMPLETED') {
+    return 'COMPLETED';
+  }
+
   // Mantener el estado actual por defecto, asegurando que sea un valor válido
   let calculatedStatus: OrderStatus = (order.status in statusColors) 
     ? order.status as OrderStatus 
     : 'PENDING';
 
   // Solo aplicar la lógica de servicios si la orden tiene servicios
-  if (order.services && order.services.length > 0) {
+  // y el estado actual es PENDING (para no sobreescribir PAID/COMPLETED).
+  if (calculatedStatus === 'PENDING' && order.services && order.services.length > 0) {
     const nonCanceledServices = order.services.filter(service => service.status !== 'ANNULLATED');
     
     if (nonCanceledServices.length > 0) {
@@ -61,7 +70,7 @@ const statusColors = {
   CANCELLED: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
   IN_PROGRESS: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
   DELIVERED: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400',
-  PAID: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  PAID: 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-400',
   ANNULLATED: 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
 } as const;
 
@@ -102,7 +111,7 @@ enum PaymentType {
   OTRO = 'OTRO',
 }
 
-type PaymentTypeValue = (typeof PaymentType)[keyof typeof PaymentType];
+type PaymentTypeValue = PaymentTypeInput;
 
 type PaymentMethod = {
   id: string;
@@ -110,24 +119,31 @@ type PaymentMethod = {
   amount: number;
 };
 
+interface PaymentEntry {
+  id: string;
+  type?: string;
+  amount: number;
+  createdAt?: string;
+}
+
 const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenChange, order, onOrderUpdate }) => {
   const { user, currentStore, canIssuePdf, tenantFeatures, hasPermission, isAdmin: isAdminFromContext } = useAuth();
   const [showPDF, setShowPDF] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
+  const [isCompletingOrder, setIsCompletingOrder] = useState(false);
+  const [isCompleteAfterPaymentDialogOpen, setIsCompleteAfterPaymentDialogOpen] = useState(false);
   const [productMap, setProductMap] = useState<ProductMap>({});
   const [orderDetails, setOrderDetails] = useState<any>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
-  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
-  const [pendingPayment, setPendingPayment] = useState<number>(0);
   const [isLoadingPendingPayment, setIsLoadingPendingPayment] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-  const [isCompletionConfirmationOpen, setIsCompletionConfirmationOpen] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([
     { id: '1', type: PaymentType.EFECTIVO, amount: 0 },
   ]);
+  const [showAdvanceDetails, setShowAdvanceDetails] = useState(false);
 
   // Verificar si el usuario es administrador
   const isAdmin = user?.role === 'Admin' || user?.role === 'ADMIN';
@@ -170,39 +186,69 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
 
   useEffect(() => {
     if (!open) {
-      setSelectedServiceId(null);
-      setPendingPayment(0);
+      setIsLoadingPendingPayment(false);
       setIsPaymentModalOpen(false);
-      setIsCompletionConfirmationOpen(false);
       setPaymentMethods([{ id: '1', type: PaymentType.EFECTIVO, amount: 0 }]);
+      setShowAdvanceDetails(false);
+      setIsCompleteAfterPaymentDialogOpen(false);
       return;
     }
+  }, [open]);
 
-    if (!selectedServiceId) return;
 
-    const loadPending = async () => {
-      try {
-        setIsLoadingPendingPayment(true);
-        const pending = await serviceService.getServicePendingAmount(selectedServiceId);
-        setPendingPayment(Number(pending) || 0);
-      } catch (error) {
-        console.error('Error loading service pending payment:', error);
-        setPendingPayment(0);
-      } finally {
-        setIsLoadingPendingPayment(false);
-      }
-    };
+  const displayProducts = useMemo(() => {
+    if (orderDetails?.productos) {
+      return orderDetails.productos.map((p: any) => ({
+        id: p.productId || p.id,
+        productId: p.productId || p.id,
+        quantity: p.cantidad || p.quantity,
+        unitPrice: p.precioUnitario || p.price,
+        product: {
+          name: p.nombre || p.name,
+          description: p.descripcion || p.description,
+        },
+      }));
+    }
 
-    loadPending();
-  }, [open, selectedServiceId]);
+    return order?.orderProducts || [];
+  }, [orderDetails?.productos, order?.orderProducts]);
 
-  const handleCancelOrder = async () => {
+  const displayServices = useMemo(() => {
+    if (orderDetails?.servicios) {
+      return orderDetails.servicios.map((s: any) => ({
+        id: s.id,
+        name: s.nombre || s.name,
+        description: s.descripcion || s.description,
+        price: s.precio || s.price,
+        type: s.type,
+        status: s.status,
+        photoUrls: s.photoUrls,
+      }));
+    }
+
+    return order?.services || [];
+  }, [orderDetails?.servicios, order?.services]);
+
+  const orderStatus = useMemo<OrderStatus>(() => {
+    if (!order) return 'PENDING';
+    return calculateOrderStatus(order);
+  }, [order]);
+
+  const canShowActionButtons = orderStatus !== 'COMPLETED' && orderStatus !== 'CANCELLED';
+
+  const isOnlyProductsOrder = useMemo(() => {
+    const productsCount = (displayProducts?.length || 0);
+    const servicesCount = (displayServices?.length || 0);
+    return productsCount > 0 && servicesCount === 0;
+  }, [displayProducts, displayServices]);
+
+  const handleCancelOrder = async (refundMethods: Array<{ type: PaymentTypeInput; amount: number }> = []) => {
     if (!order) return;
     
     setIsCanceling(true);
     try {
-      // 1. Cancelar la orden (nuevo método sin credenciales)
-      const updatedOrder = await orderService.cancelOrder(order.id);
+      // 1. Cancelar la orden enviando métodos de reembolso si se proporcionan
+      const updatedOrder = await orderService.cancelOrder(order.id, refundMethods);
 
       // 2. Actualizar el estado local de la orden
       if (onOrderUpdate) {
@@ -224,6 +270,60 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
       });
     } finally {
       setIsCanceling(false);
+    }
+  };
+
+  const handleCompleteOrder = async () => {
+    if (!order?.id) return;
+
+    if (!canManageServices) {
+      toast.error('No tienes permisos para completar órdenes (MANAGE_SERVICES requerido)');
+      return;
+    }
+
+    if (isOnlyProductsOrder) {
+      return;
+    }
+
+    if (orderPendingAmount > 0) {
+      toast.error('La orden aún tiene pagos pendientes');
+      return;
+    }
+
+    try {
+      setIsCompletingOrder(true);
+
+      const result = await orderService.completeOrderById(order.id);
+      if (!result?.success) {
+        toast.error('No se pudo completar la orden');
+        return;
+      }
+
+      toast.success('Orden completada correctamente');
+
+      // Cerrar modales internos
+      setIsPaymentModalOpen(false);
+      setShowCancelDialog(false);
+      setShowPDF(false);
+
+      // Refrescar orden en el padre (para que refresque la lista)
+      if (onOrderUpdate) {
+        try {
+          const updatedOrder = await orderService.getOrderById(order.id);
+          onOrderUpdate(updatedOrder);
+        } catch (error) {
+          console.error('Error fetching updated order:', error);
+          onOrderUpdate(order);
+        }
+      }
+
+      // Cerrar modal principal
+      onOpenChange(false);
+    } catch (error) {
+      console.error('Error completing order:', error);
+      toast.error('No se pudo completar la orden');
+    } finally {
+      setIsCompletingOrder(false);
     }
   };
   
@@ -317,34 +417,35 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
     }
   };
 
-  // Determinar qué datos usar para mostrar (prioridad: orderDetails > order)
-  const displayProducts = orderDetails?.productos?.map((p: any) => ({
-    id: p.productId || p.id, // Ajustar según respuesta real
-    productId: p.productId || p.id,
-    quantity: p.cantidad || p.quantity,
-    unitPrice: p.precioUnitario || p.price,
-    // Mapear otros campos necesarios
-    product: {
-      name: p.nombre || p.name,
-      description: p.descripcion || p.description
-    }
-  })) || order.orderProducts || [];
-
-  const displayServices = orderDetails?.servicios?.map((s: any) => ({
-    id: s.id,
-    name: s.nombre || s.name,
-    description: s.descripcion || s.description, // Aquí viene la nota del servicio
-    price: s.precio || s.price,
-    type: s.type,
-    status: s.status,
-    photoUrls: s.photoUrls
-  })) || order.services || [];
 
   const namedServiceName = displayServices?.[0]?.name;
 
-  const selectedService = selectedServiceId
-    ? displayServices.find((s: any) => String(s.id) === String(selectedServiceId))
-    : null;
+  const selectedService = useMemo(() => displayServices[0] || null, [displayServices]);
+
+  const paymentEntries = useMemo<PaymentEntry[]>(() => {
+    const source = (orderDetails?.paymentMethods?.length ? orderDetails.paymentMethods : order?.paymentMethods) || [];
+    return source.map((method: any, index: number) => ({
+      id: method.id || `${method.type}-${index}`,
+      type: method.type,
+      amount: Number(method.amount || 0),
+      createdAt: method.createdAt,
+    }));
+  }, [orderDetails?.paymentMethods, order?.paymentMethods]);
+
+  const orderPendingAmount = useMemo(() => {
+    const rawTotal = orderDetails?.total ?? order?.totalAmount ?? 0;
+    const total = Number(rawTotal) || 0;
+
+    const totalPaid = paymentEntries.reduce((sum: number, method: PaymentEntry) => sum + Number(method?.amount || 0), 0);
+
+    const pending = total - totalPaid;
+    return pending > 0 ? pending : 0;
+  }, [paymentEntries, orderDetails?.total, order?.totalAmount]);
+
+  const totalPayment = useMemo(
+    () => paymentMethods.reduce((sum, pm) => sum + (Number(pm.amount) || 0), 0),
+    [paymentMethods]
+  );
 
   const addPaymentMethod = () => {
     setPaymentMethods((prev) => [
@@ -393,7 +494,6 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
   };
 
   const updateServiceStatus = async (targetStatus: ServiceStatus) => {
-    if (!selectedServiceId) return;
     if (!canManageServices) {
       toast.error('No tienes permisos para cambiar el estado de este servicio (MANAGE_SERVICES requerido)');
       return;
@@ -401,35 +501,30 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
 
     try {
       if (targetStatus === ServiceStatus.ANNULLATED) {
-        const selectedService = displayServices.find((s: any) => String(s.id) === String(selectedServiceId));
         if (selectedService) {
           await handleServiceRefund(selectedService);
         }
       }
 
-      await serviceService.updateServiceStatus(selectedServiceId, targetStatus);
-      toast.success('Estado del servicio actualizado correctamente');
-
-      if (targetStatus === ServiceStatus.COMPLETED || targetStatus === ServiceStatus.ANNULLATED) {
-        setIsPaymentModalOpen(false);
-        setIsCompletionConfirmationOpen(false);
-        onOpenChange(false);
-        if (onOrderUpdate && order?.id) {
-          try {
-            const updatedOrder = await orderService.getOrderById(order.id);
-            onOrderUpdate(updatedOrder);
-          } catch (error) {
-            console.error('Error fetching updated order:', error);
-            // Fallback: use original order if fetch fails
-            onOrderUpdate(order);
-          }
-        }
+      if (!selectedService) {
+        toast.error('No hay servicios disponibles para actualizar.');
         return;
       }
 
-      if (order?.id) {
-        const details = await orderService.getOrderDetails(order.id);
-        setOrderDetails(details);
+      await serviceService.updateServiceStatus(selectedService.id, targetStatus);
+      toast.success('Estado del servicio actualizado correctamente');
+
+      setIsPaymentModalOpen(false);
+      onOpenChange(false);
+
+      if (onOrderUpdate && order?.id) {
+        try {
+          const updatedOrder = await orderService.getOrderById(order.id);
+          onOrderUpdate(updatedOrder);
+        } catch (error) {
+          console.error('Error fetching updated order:', error);
+          onOrderUpdate(order);
+        }
       }
     } catch (error: unknown) {
       console.error('Error updating service status:', error);
@@ -438,9 +533,8 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
     }
   };
 
-  const executeServicePayment = async (completeServiceAfterPayment = false, forceProceed = false) => {
+  const executeServicePayment = async (completeAfterPayment?: boolean) => {
     if (!order?.id) return;
-    if (!selectedServiceId) return;
 
     if (!canManageServices) {
       toast.error('No tienes permisos para registrar pagos de servicios (MANAGE_SERVICES requerido)');
@@ -453,36 +547,29 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
       return;
     }
 
-    if (pendingPayment > 0 && totalPayment > pendingPayment) {
+    if (orderPendingAmount > 0 && totalPayment > orderPendingAmount) {
       toast.error('El pago no puede ser mayor al monto pendiente');
-      return;
-    }
-
-    const isFullPayment = pendingPayment > 0 && Math.abs(totalPayment - pendingPayment) < 0.01;
-
-    if (isFullPayment && !completeServiceAfterPayment && !forceProceed) {
-      setIsCompletionConfirmationOpen(true);
       return;
     }
 
     try {
       setIsProcessingPayment(true);
 
-      const paymentData = {
-        orderId: order.id,
-        services: [
-          {
-            serviceId: selectedServiceId,
-            payments: paymentMethods.map((pm) => ({
-              type: pm.type,
-              amount: Number(pm.amount) || 0,
-            })),
-          },
-        ],
-      };
-
-      await orderService.completeOrder(paymentData);
+      await orderService.addOrderPayments(order.id, paymentMethods.map((pm) => ({
+        type: pm.type,
+        amount: Number(pm.amount) || 0,
+      })));
       toast.success(`Pago de S/${totalPayment.toFixed(2)} procesado correctamente`);
+
+      if (completeAfterPayment) {
+        try {
+          await orderService.completeOrderById(order.id);
+          toast.success('Orden completada correctamente');
+        } catch (error) {
+          console.error('Error completing order after payment:', error);
+          toast.error('El pago se registró, pero no se pudo completar la orden');
+        }
+      }
 
       // Registrar movimiento en la caja actual si el pago pertenece a una orden de otra sesión
       // (misma lógica que ServiceDetailsModal para pagos diferidos)
@@ -507,7 +594,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                 amount: totalPayment,
                 type: 'INCOME',
                 payment: paymentMethods.map((pm) => pm.type).filter(Boolean).join('+') || 'EFECTIVO',
-                description: `Pago servicio ${selectedService?.name || selectedServiceId} - Orden ${freshOrder.orderNumber || freshOrder.id.substring(0, 8)}`,
+                description: `Pago orden ${freshOrder.orderNumber || freshOrder.id.substring(0, 8)}`,
               });
               toast.success('Ingreso registrado correctamente en la caja del día');
             }
@@ -515,28 +602,6 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
         }
       } catch (error) {
         console.error('Error al intentar registrar movimiento en caja actual:', error);
-      }
-
-      if (isFullPayment && completeServiceAfterPayment) {
-        try {
-          await serviceService.updateServiceStatus(selectedServiceId, ServiceStatus.COMPLETED);
-        } catch (error) {
-          console.error('Error marking service as completed after payment:', error);
-        }
-        setIsPaymentModalOpen(false);
-        setIsCompletionConfirmationOpen(false);
-        onOpenChange(false);
-        if (onOrderUpdate && order?.id) {
-          try {
-            const updatedOrder = await orderService.getOrderById(order.id);
-            onOrderUpdate(updatedOrder);
-          } catch (error) {
-            console.error('Error fetching updated order:', error);
-            // Fallback: use original order if fetch fails
-            onOrderUpdate(order);
-          }
-        }
-        return;
       }
 
       // Recargar detalles y pendiente
@@ -550,21 +615,56 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
         setIsLoadingDetails(false);
       }
 
-      try {
-        const pending = await serviceService.getServicePendingAmount(selectedServiceId);
-        setPendingPayment(Number(pending) || 0);
-      } catch (_error) {
-        setPendingPayment(0);
-      }
-
       setPaymentMethods([{ id: '1', type: PaymentType.EFECTIVO, amount: 0 }]);
       setIsPaymentModalOpen(false);
+      onOpenChange(false);
+      if (onOrderUpdate && order?.id) {
+        try {
+          const updatedOrder = await orderService.getOrderById(order.id);
+          onOrderUpdate(updatedOrder);
+        } catch (error) {
+          console.error('Error fetching updated order:', error);
+          onOrderUpdate(order);
+        }
+      }
     } catch (error) {
       console.error('Error processing service payment:', error);
       toast.error('No se pudo procesar el pago del servicio');
     } finally {
       setIsProcessingPayment(false);
     }
+  };
+
+  const isFullPayment = useMemo(() => {
+    if (!orderPendingAmount) return false;
+    return Math.abs(totalPayment - orderPendingAmount) < 0.01;
+  }, [orderPendingAmount, totalPayment]);
+
+  const handleRegisterPayment = () => {
+    if (!order?.id) return;
+
+    if (!canManageServices) {
+      toast.error('No tienes permisos para registrar pagos de servicios (MANAGE_SERVICES requerido)');
+      return;
+    }
+
+    if (totalPayment <= 0) {
+      toast.error('Ingresa un monto mayor a 0');
+      return;
+    }
+
+    if (orderPendingAmount > 0 && totalPayment > orderPendingAmount) {
+      toast.error('El pago no puede ser mayor al monto pendiente');
+      return;
+    }
+
+    // Si cubre exactamente el pendiente, preguntar si desea completar
+    if (isFullPayment && !isOnlyProductsOrder) {
+      setIsCompleteAfterPaymentDialogOpen(true);
+      return;
+    }
+
+    executeServicePayment(false);
   };
 
   return (
@@ -574,27 +674,29 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
         <div className="px-6 pt-6 pb-2 border-b border-border flex-shrink-0">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <DialogTitle className="text-lg sm:text-xl font-semibold">Detalles de la Venta</DialogTitle>
-            <Badge className={statusColors[calculateOrderStatus(order)]}>
-              {translateServiceType(calculateOrderStatus(order))}
+            <Badge className={statusColors[orderStatus]}>
+              {translateServiceType(orderStatus)}
             </Badge>
           </div>
         </div>
         
-        {/* Contenido con scroll */}
-        <div className="flex-1 overflow-y-auto p-6">
-            {isLoadingDetails ? (
-              <div className="flex justify-center py-8">
-                <p className="text-muted-foreground">Cargando detalles completos...</p>
-              </div>
-            ) : (
-             <>
-              {/* Información General */}
+        {/* Layout principal: contenido + acciones */}
+        <div className="flex flex-1 min-h-0 flex-col md:flex-row">
+          {/* Contenido con scroll */}
+          <div className="flex-1 min-h-0 overflow-y-auto p-6">
+              {isLoadingDetails ? (
+                <div className="flex justify-center py-8">
+                  <p className="text-muted-foreground">Cargando detalles completos...</p>
+                </div>
+              ) : (
+                <>
+                {/* Información General */}
             <div className="space-y-2">
               <h3 className="font-medium">Información General</h3>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="space-y-1">
-                  <p className="text-muted-foreground">ID de la Orden</p>
-                  <p className="font-medium">{order.id}</p>
+                  <p className="text-muted-foreground">Numero de Orden</p>
+                  <p className="font-medium">{order.orderNumber}</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Fecha</p>
@@ -694,148 +796,114 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                   Servicios {displayProducts.length ? 'Adicionales' : ''}
                 </h3>
 
-                {!selectedServiceId && (
-                  <p className="text-sm text-muted-foreground">
-                    Elige un servicio para ver el pago pendiente, adelantar pagos y modificar su estado.
-                  </p>
-                )}
-
                 <div className="space-y-4">
                   {displayServices.map((service: any) => (
-                    <button
-                      key={service.id || Math.random()}
-                      type="button"
-                      onClick={() => setSelectedServiceId(String(service.id))}
-                      className={
-                        `w-full text-left border rounded-lg p-4 transition-colors ` +
-                        (String(service.id) === String(selectedServiceId)
-                          ? 'ring-2 ring-primary/40 bg-muted/20'
-                          : 'hover:bg-muted/10')
-                      }
-                    >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-medium">{service.name}</p>
-                          {/* Mostrar la descripción del servicio (notas) */}
-                          {service.description && (
-                            <p className="text-sm text-muted-foreground mt-1">
-                              <span className="font-semibold">Nota:</span> {service.description}
-                            </p>
-                          )}
-                          <div className="mt-2">
-                            {service.type && (
-                                <Badge variant="outline" className="mr-2">
-                                {translateServiceType(service.type)}
-                                </Badge>
+                      <div
+                        key={service.id || Math.random()}
+                        className="w-full text-left border rounded-lg p-4 transition-all duration-200 bg-muted/10 hover:bg-primary/10 hover:shadow-sm"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-medium">{service.name}</p>
+                            {service.description && (
+                              <p className="text-sm text-muted-foreground mt-1">
+                                <span className="font-semibold">Nota:</span> {service.description}
+                              </p>
                             )}
-                            <Badge variant="secondary">
-                              S/{Number(service.price).toFixed(2)}
-                            </Badge>
+                            <div className="mt-2">
+                              {service.type && (
+                                <Badge variant="outline" className="mr-2">
+                                  {translateServiceType(service.type)}
+                                </Badge>
+                              )}
+                              <Badge variant="secondary">S/{Number(service.price).toFixed(2)}</Badge>
+                            </div>
                           </div>
                         </div>
-                        {service.status && (
-                            <Badge className={statusColors[service.status as keyof typeof statusColors] || statusColors.PENDING}>
-                            {translateServiceType(service.status)}
-                            </Badge>
+
+                        {service.photoUrls && service.photoUrls.length > 0 && (
+                          <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
+                            {service.photoUrls
+                              .filter((url: string) => url && isValidUrl(url))
+                              .map((url: string, index: number) => (
+                                <a
+                                  key={index}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex-shrink-0"
+                                >
+                                  <div className="relative h-16 w-16 rounded-md overflow-hidden border">
+                                    <img
+                                      src={url}
+                                      alt={`Imagen ${index + 1}`}
+                                      className="h-full w-full object-cover"
+                                      onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
+                                        e.currentTarget.style.display = 'none';
+                                      }}
+                                    />
+                                  </div>
+                                </a>
+                              ))}
+                          </div>
                         )}
                       </div>
-                      
-                      {service.photoUrls && service.photoUrls.length > 0 && (
-                        <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
-                          {service.photoUrls
-                            .filter((url: string) => url && isValidUrl(url))
-                            .map((url: string, index: number) => (
-                              <a 
-                                key={index} 
-                                href={url} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="flex-shrink-0"
-                              >
-                                <div className="relative h-16 w-16 rounded-md overflow-hidden border">
-                                  <img
-                                    src={url}
-                                    alt={`Imagen ${index + 1}`}
-                                    className="h-full w-full object-cover"
-                                    onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
-                                      e.currentTarget.style.display = 'none';
-                                    }}
-                                  />
-                                </div>
-                              </a>
-                            ))}
-                        </div>
-                      )}
-                    </button>
                   ))}
                 </div>
 
-                {selectedService && (
-                  <div className="border rounded-lg p-4 bg-muted/10">
-                    <div className="space-y-4">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium">Servicio seleccionado</p>
-                          <p className="text-xs text-muted-foreground">
-                            {isLoadingPendingPayment
-                              ? 'Cargando pendiente...'
-                              : `Pendiente: S/${Number(pendingPayment || 0).toFixed(2)}`}
-                          </p>
-                        </div>
-
-                        <Button
-                          variant="default"
-                          onClick={() => setIsPaymentModalOpen(true)}
-                          disabled={!canManageServices || isLoadingPendingPayment || pendingPayment <= 0 || selectedService.status === ServiceStatus.ANNULLATED}
-                        >
-                          Adelantar pago
-                        </Button>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">Estado del servicio</Label>
-                        <Select
-                          value={selectedService.status}
-                          onValueChange={(value) => {
-                            const confirmed = window.confirm(
-                              `¿Confirmas cambiar el estado del servicio de "${translateServiceType(selectedService.status)}" a "${translateServiceType(value)}"?`
-                            );
-                            if (confirmed) updateServiceStatus(value as ServiceStatus);
-                          }}
-                          disabled={!canManageServices}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Seleccionar estado" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={ServiceStatus.PENDING}>Pendiente</SelectItem>
-                            <SelectItem value={ServiceStatus.IN_PROGRESS}>En Progreso</SelectItem>
-                            <SelectItem value={ServiceStatus.COMPLETED}>Completado</SelectItem>
-                            <SelectItem value={ServiceStatus.DELIVERED}>Entregado</SelectItem>
-                            <SelectItem value={ServiceStatus.PAID}>Pagado</SelectItem>
-                            <SelectItem value={ServiceStatus.ANNULLATED}>Anulado</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {!canManageServices && (
-                        <p className="text-xs text-muted-foreground">
-                          No tienes permisos para registrar pagos ni cambiar el estado.
-                        </p>
-                      )}
+                <div className="border rounded-lg p-4 bg-muted/10">
+                  <div className="space-y-4">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">Resumen de la venta</p>
+                      <p
+                        className={`text-xs font-medium ${
+                          orderPendingAmount === 0 ? 'text-emerald-600' : 'text-red-600'
+                        }`}
+                      >
+                        Pendiente: S/{orderPendingAmount.toFixed(2)}
+                      </p>
                     </div>
-                  </div>
-                )}
 
-                {displayServices.some((s: any) => s.price > 0) && (
-                  <div className="text-right font-medium">
-                    <p>Total Servicios: S/
-                      {displayServices
-                        .reduce((sum: number, service: any) => sum + Number(service.price), 0)
-                        .toFixed(2)}
-                    </p>
+                    {paymentEntries.length > 0 && (
+                      <div className="rounded-md border border-dashed p-3 bg-white/40 dark:bg-transparent">
+                        <button
+                          type="button"
+                          className="w-full flex items-center justify-between text-sm font-medium"
+                          onClick={() => setShowAdvanceDetails((prev) => !prev)}
+                        >
+                          <span>{showAdvanceDetails ? 'Ocultar adelantos' : 'Ver detalles de adelantos'}</span>
+                          <ChevronDown
+                            className={`h-4 w-4 transition-transform ${showAdvanceDetails ? 'rotate-180' : ''}`}
+                          />
+                        </button>
+
+                        {showAdvanceDetails && (
+                          <div className="mt-3 space-y-2 text-sm">
+                            {paymentEntries.map((pm) => (
+                              <div
+                                key={pm.id}
+                                className="flex items-start justify-between gap-3 rounded-md border bg-muted/10 p-2"
+                              >
+                                <div>
+                                  <p className="font-medium">{pm.type || 'Método desconocido'}</p>
+                                  {pm.createdAt ? (
+                                    <p className="text-xs text-muted-foreground">
+                                      {format(new Date(pm.createdAt), 'PP p', { locale: es })}
+                                    </p>
+                                  ) : (
+                                    <p className="text-xs text-muted-foreground">Sin fecha registrada</p>
+                                  )}
+                                </div>
+                                <p className="font-semibold">S/{pm.amount.toFixed(2)}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                   </div>
-                )}
+                </div>
               </div>
             )}
 
@@ -893,44 +961,78 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
               </>
             )}
              </>
-            )}
-        </div>
-        
-        {/* Footer */}
-        <div className="border-t border-border p-4 flex justify-between flex-shrink-0 gap-2">
-          <div className="flex gap-2">
-            {canIssuePdf && (
+              )}
+          </div>
+
+          {/* Panel lateral de acciones */}
+          <div className="w-full md:w-80 border-t md:border-t-0 md:border-l border-border bg-muted/10 p-6 flex-shrink-0 flex flex-col gap-4">
+            <div className="space-y-3">
+              {!isOnlyProductsOrder && orderPendingAmount === 0 && canShowActionButtons && (
+                <div className="space-y-1">
+                  <Button
+                    type="button"
+                    variant="default"
+                    className="w-full h-14 text-base font-semibold bg-black text-white hover:bg-black/90"
+                    onClick={handleCompleteOrder}
+                    disabled={!canManageServices || isCompletingOrder || order.status === 'CANCELLED'}
+                  >
+                    {isCompletingOrder ? 'Completando...' : 'Completar'}
+                  </Button>
+                  {!canManageServices && (
+                    <p className="text-xs text-muted-foreground">
+                      No tienes permisos para completar órdenes.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {!isOnlyProductsOrder && canShowActionButtons && (
+                <Button
+                  variant="default"
+                  onClick={() => setIsPaymentModalOpen(true)}
+                  disabled={!canManageServices || (selectedService ? selectedService.status === ServiceStatus.ANNULLATED : true)}
+                  className="w-full"
+                >
+                  Adelantar pago
+                </Button>
+              )}
+
+              {canIssuePdf && (
+                <Button
+                  variant="secondary"
+                  onClick={() => setShowPDF(true)}
+                  className="w-full flex items-center justify-center gap-2"
+                  disabled={isLoadingDetails}
+                >
+                  <FileText className="h-4 w-4" />
+                  Ver comprobante
+                </Button>
+              )}
+
+              {isAdmin && order.status !== 'CANCELLED' && (
+                <Button
+                  variant="destructive"
+                  onClick={() => setShowCancelDialog(true)}
+                  className="w-full flex items-center justify-center gap-2"
+                  disabled={isCanceling}
+                >
+                  <XCircle className="h-4 w-4" />
+                  Anular orden
+                </Button>
+              )}
+            </div>
+
+            <div className="mt-auto pt-4 border-t border-border">
               <Button
                 variant="default"
-                onClick={() => {
-                  setShowPDF(true);
-                }}
-                className="flex items-center gap-2"
-                disabled={isLoadingDetails} // Deshabilitar si aún está cargando
-              >
-                <FileText className="h-4 w-4" />
-                Ver Comprobante
-              </Button>
-            )}
-            {isAdmin && order.status !== 'CANCELLED' && (
-              <Button
-                variant="destructive"
-                onClick={() => setShowCancelDialog(true)}
-                className="flex items-center gap-2"
+                onClick={() => onOpenChange(false)}
                 disabled={isCanceling}
+                className="w-full bg-black text-white hover:bg-black/90"
               >
-                <XCircle className="h-4 w-4" />
-                Anular Orden
+                Cerrar
               </Button>
-            )}
+            </div>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isCanceling}
-          >
-            Cerrar
-          </Button>
         </div>
       </DialogContent>
 
@@ -938,149 +1040,134 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
         <DialogContent className="sm:max-w-lg w-[90%]">
           <DialogHeader>
             <DialogTitle>Adelantar pago</DialogTitle>
-            <DialogDescription>
-              {selectedService
-                ? `Servicio: ${selectedService.name}`
-                : 'Selecciona un servicio para registrar un pago.'}
-            </DialogDescription>
+            <DialogDescription>Registra un abono para esta orden.</DialogDescription>
           </DialogHeader>
 
-          {!selectedService ? (
-            <Alert>
-              <AlertDescription>Debes seleccionar un servicio antes de registrar un pago.</AlertDescription>
-            </Alert>
-          ) : (
-            <div className="space-y-4">
-              <div className="rounded-md border p-3 bg-muted/10">
-                <p className="text-sm font-medium">Monto pendiente</p>
-                <p className="text-sm text-muted-foreground">
-                  {isLoadingPendingPayment
-                    ? 'Cargando...'
-                    : `S/${Number(pendingPayment || 0).toFixed(2)}`}
-                </p>
+          <div className="space-y-4">
+            <div className="rounded-md border p-3 bg-muted/10">
+              <p className="text-sm font-medium">Monto pendiente</p>
+              <p className="text-sm text-muted-foreground">
+                {isLoadingPendingPayment
+                  ? 'Cargando...'
+                  : `S/${Number(orderPendingAmount || 0).toFixed(2)}`}
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">Métodos de pago</p>
+                <Button type="button" variant="outline" size="sm" onClick={addPaymentMethod}>
+                  + Agregar
+                </Button>
               </div>
 
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">Métodos de pago</p>
-                  <Button type="button" variant="outline" size="sm" onClick={addPaymentMethod}>
-                    + Agregar
-                  </Button>
-                </div>
-
-                <div className="space-y-3">
-                  {paymentMethods.map((pm) => (
-                    <div key={pm.id} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
-                      <div className="sm:col-span-7 space-y-1">
-                        <Label>Método</Label>
-                        <Select
-                          value={pm.type}
-                          onValueChange={(value) => updatePaymentMethod(pm.id, 'type', value as PaymentTypeValue)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Método" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={PaymentType.EFECTIVO}>Efectivo</SelectItem>
-                            <SelectItem value={PaymentType.TARJETA}>Tarjeta</SelectItem>
-                            <SelectItem value={PaymentType.TRANSFERENCIA}>Transferencia</SelectItem>
-                            <SelectItem value={PaymentType.YAPE}>Yape</SelectItem>
-                            <SelectItem value={PaymentType.PLIN}>Plin</SelectItem>
-                            <SelectItem value={PaymentType.DATAPHONE}>Dataphone</SelectItem>
-                            <SelectItem value={PaymentType.BIZUM}>Bizum</SelectItem>
-                            <SelectItem value={PaymentType.OTRO}>Otro</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="sm:col-span-4 space-y-1">
-                        <Label>Monto</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={pm.amount}
-                          onChange={(e) => updatePaymentMethod(pm.id, 'amount', Number(e.target.value) || 0)}
-                        />
-                      </div>
-
-                      <div className="sm:col-span-1 flex justify-end">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removePaymentMethod(pm.id)}
-                          disabled={paymentMethods.length === 1}
-                        >
-                          X
-                        </Button>
-                      </div>
+                {paymentMethods.map((pm) => (
+                  <div key={pm.id} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
+                    <div className="sm:col-span-7 space-y-1">
+                      <Label>Método</Label>
+                      <Select
+                        value={pm.type}
+                        onValueChange={(value) => updatePaymentMethod(pm.id, 'type', value as PaymentTypeValue)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Método" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={PaymentType.EFECTIVO}>Efectivo</SelectItem>
+                          <SelectItem value={PaymentType.TARJETA}>Tarjeta</SelectItem>
+                          <SelectItem value={PaymentType.TRANSFERENCIA}>Transferencia</SelectItem>
+                          <SelectItem value={PaymentType.YAPE}>Yape</SelectItem>
+                          <SelectItem value={PaymentType.PLIN}>Plin</SelectItem>
+                          <SelectItem value={PaymentType.DATAPHONE}>Dataphone</SelectItem>
+                          <SelectItem value={PaymentType.BIZUM}>Bizum</SelectItem>
+                          <SelectItem value={PaymentType.OTRO}>Otro</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                  ))}
-                </div>
 
-                <div className="flex items-center justify-between border-t pt-3">
-                  <p className="text-sm text-muted-foreground">Total a pagar</p>
-                  <p className="text-sm font-medium">
-                    S/
-                    {paymentMethods
-                      .reduce((sum, pm) => sum + (Number(pm.amount) || 0), 0)
-                      .toFixed(2)}
-                  </p>
-                </div>
+                    <div className="sm:col-span-4 space-y-1">
+                      <Label>Monto</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={pm.amount}
+                        onChange={(e) => updatePaymentMethod(pm.id, 'amount', Number(e.target.value) || 0)}
+                      />
+                    </div>
+
+                    <div className="sm:col-span-1 flex justify-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removePaymentMethod(pm.id)}
+                        disabled={paymentMethods.length === 1}
+                      >
+                        X
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between border-t pt-3">
+                <p className="text-sm text-muted-foreground">Total a pagar</p>
+                <p className="text-sm font-medium">S/{totalPayment.toFixed(2)}</p>
               </div>
             </div>
-          )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setIsPaymentModalOpen(false)} disabled={isProcessingPayment}>
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                variant="default"
+                onClick={handleRegisterPayment}
+                disabled={isProcessingPayment || isLoadingPendingPayment || totalPayment <= 0}
+              >
+                {isProcessingPayment ? 'Procesando...' : 'Registrar pago'}
+              </Button>
+            </div>
+          </div>
+
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isCompleteAfterPaymentDialogOpen} onOpenChange={setIsCompleteAfterPaymentDialogOpen}>
+        <DialogContent className="sm:max-w-md w-[90%]">
+          <DialogHeader>
+            <DialogTitle>¿Desea completar la orden?</DialogTitle>
+            <DialogDescription>
+              El pago registrado cubre el monto total pendiente. Puedes completar la orden ahora.
+            </DialogDescription>
+          </DialogHeader>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => setIsPaymentModalOpen(false)} disabled={isProcessingPayment}>
-              Cancelar
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsCompleteAfterPaymentDialogOpen(false);
+                executeServicePayment(false);
+              }}
+              disabled={isProcessingPayment}
+            >
+              Solo pagar
             </Button>
             <Button
               type="button"
               variant="default"
-              onClick={() => executeServicePayment(false)}
-              disabled={!selectedService || isProcessingPayment || isLoadingPendingPayment || pendingPayment <= 0}
-            >
-              {isProcessingPayment ? 'Procesando...' : 'Registrar pago'}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={isCompletionConfirmationOpen} onOpenChange={setIsCompletionConfirmationOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>¿Completar Servicio?</DialogTitle>
-          </DialogHeader>
-
-          <div className="py-4 space-y-4">
-            <p className="text-muted-foreground">
-              Este pago cubrirá el saldo total del servicio.
-            </p>
-            <p className="font-medium text-amber-600 bg-amber-50 p-3 rounded-md border border-amber-200">
-              ¿Deseas COMPLETAR el servicio?
-            </p>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-3 justify-end mt-2">
-            <Button
-              variant="outline"
+              className="bg-black text-white hover:bg-black/90"
               onClick={() => {
-                setIsCompletionConfirmationOpen(false);
-                executeServicePayment(false, true);
+                setIsCompleteAfterPaymentDialogOpen(false);
+                executeServicePayment(true);
               }}
-              disabled={isProcessingPayment || !canManageServices}
-              className="sm:order-1"
+              disabled={isProcessingPayment}
             >
-              No, solo registrar pago
-            </Button>
-            <Button
-              variant="default"
-              onClick={() => executeServicePayment(true, true)}
-              disabled={isProcessingPayment || !canManageServices}
-            >
-              Sí, completar servicio
+              Pagar y completar
             </Button>
           </div>
         </DialogContent>
@@ -1200,7 +1287,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
       <CancelOrderDialog
         open={showCancelDialog}
         onOpenChange={setShowCancelDialog}
-        onConfirm={handleCancelOrder}
+        onConfirm={(paymentMethods) => handleCancelOrder(paymentMethods)}
         loading={isCanceling}
       />
     </Dialog>

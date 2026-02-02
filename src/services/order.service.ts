@@ -4,7 +4,7 @@ type CanonicalServiceType = 'REPAIR' | 'WARRANTY' | 'MISELANEOUS';
 type ServiceTypeInput = CanonicalServiceType | 'OTHER';
 
 type CanonicalPaymentType = 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
-type PaymentTypeInput = CanonicalPaymentType | 'DATAPHONE' | 'BIZUM';
+export type PaymentTypeInput = CanonicalPaymentType | 'DATAPHONE' | 'BIZUM';
 
 const normalizeServiceType = (type: ServiceTypeInput): CanonicalServiceType => {
   return type === 'OTHER' ? 'MISELANEOUS' : type;
@@ -24,7 +24,7 @@ export interface CreateOrderDto {
   paymentMethod?: string;
   clientId?: string | null;
   total: number;
-  status?: 'PENDING' | 'COMPLETED' | 'CANCELLED';
+  status?: 'PENDING' | 'PAID' | 'COMPLETED' | 'CANCELLED';
 }
 
 export interface OrderItem extends OrderItemDto {
@@ -86,13 +86,58 @@ export interface PaymentMethod {
   createdAt?: string;
 }
 
+export interface OrderLookupItem {
+  value: string;
+  label: string;
+}
+
+export interface OrderListProductItem {
+  name: string;
+  quantity: number;
+}
+
+export interface OrderListServiceItem {
+  name: string;
+  price: number;
+}
+
+export interface OrderListPaymentMethodItem {
+  type: PaymentTypeInput;
+  amount: number;
+}
+
+export interface OrderListItem {
+  id: string;
+  createdAt: string;
+  clientName: string;
+  sellerName: string;
+  products: OrderListProductItem[];
+  services: OrderListServiceItem[];
+  status: string;
+  paymentMethods: OrderListPaymentMethodItem[];
+  totalAmount?: number;
+  total?: number;
+}
+
+export interface OrdersListResponse {
+  data: OrderListItem[];
+  total: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface CompleteOrderResponse {
+  success: boolean;
+}
+
 export interface Order {
   id: string;
   orderNumber: string;
   items?: OrderItem[];
   userId: string;
   totalAmount: number;
-  status: "PENDING" | "COMPLETED" | "CANCELLED";
+  status: "PENDING" | "PAID" | "COMPLETED" | "CANCELLED";
   paymentMethod?: string;
   paymentMethods?: PaymentMethod[];
   isPriceModified?: boolean;
@@ -118,7 +163,70 @@ export interface Order {
 }
 
 export const orderService = {
-  // ✅ ACTUALIZADO: Completar orden (ahora soporta abonos parciales)
+  async listOrders(params: {
+    page?: number;
+    pageSize?: number;
+    clientName?: string;
+    status?: string;
+    currentCash?: boolean;
+    storeId?: string;
+    sellerName?: string;
+  }): Promise<OrdersListResponse> {
+    const token = localStorage.getItem("auth_token");
+    const response = await api.get<OrdersListResponse>('orders/list', {
+      params,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    return response.data;
+  },
+
+  async getOrderStatusLookup(): Promise<OrderLookupItem[]> {
+    const token = localStorage.getItem("auth_token");
+    const response = await api.get<OrderLookupItem[]>('orders/lookup-status', {
+      headers: {
+        "Content-Type": "application/json",
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    return response.data;
+  },
+
+  async addOrderPayments(orderId: string, payments: Array<{ type: PaymentTypeInput; amount: number }>): Promise<Order> {
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await api.patch<Order>(`orders/${orderId}/payments`, { payments }, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Error al registrar adelanto de pago:", error);
+      throw error;
+    }
+  },
+
+  async completeOrderById(orderId: string): Promise<CompleteOrderResponse> {
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await api.patch<CompleteOrderResponse>(`orders/${orderId}/complete`, {}, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        timeout: 30000,
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Error al completar la orden:", error);
+      throw error;
+    }
+  },
+
   async completeOrder(orderData: {
     orderId: string;
     services: Array<{
@@ -409,16 +517,18 @@ export const orderService = {
     }
   },
 
-  // ✅ ACTUALIZADO: Cancelar orden (ya no necesita credenciales)
-  async cancelOrder(id: string): Promise<Order> {
+  // ✅ ACTUALIZADO: Cancelar orden (acepta métodos de reembolso opcionales)
+  async cancelOrder(id: string, paymentMethods?: Array<{ type: PaymentTypeInput; amount: number }>): Promise<Order> {
     try {
       const token = localStorage.getItem("auth_token");
-      const response = await api.patch<Order>(`orders/${id}/cancel`, {}, {
+      const payload = paymentMethods && paymentMethods.length > 0 ? { paymentMethods } : {};
+      const response = await api.patch<Order>(`orders/${id}/cancel`, payload, {
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}` 
-        }
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
       });
+
       return response.data;
     } catch (error) {
       console.error(`Error al cancelar la orden ${id}:`, error);
