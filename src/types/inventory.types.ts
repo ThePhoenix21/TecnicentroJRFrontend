@@ -58,6 +58,7 @@ export interface InventoryMovementsQuery {
   name?: string;
   type?: InventoryMovementType;
   userId?: string;
+  userName?: string;
   fromDate?: string;
   toDate?: string;
 }

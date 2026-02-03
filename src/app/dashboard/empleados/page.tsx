@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Search, Users, Trash2, Edit2, Save, RotateCcw, Plus } from "lucide-react";
+import { ActiveFilters } from "@/components/ui/active-filters";
 
 import { employedService } from "@/services/employed.service";
 import { storeService } from "@/services/store.service";
@@ -276,6 +277,21 @@ export default function EmpleadosPage() {
       : base;
     return source.slice(0, 8);
   }, [lastNameQuery, nameLookup]);
+
+  const clearFilters = () => {
+    setFirstNameFilter("");
+    setFirstNameQuery("");
+    setShowFirstNameSuggestions(false);
+    setLastNameFilter("");
+    setLastNameQuery("");
+    setShowLastNameSuggestions(false);
+    setPositionFilter("all");
+    setStatusFilter("all");
+    setStoreIdFilter("all");
+    setWarehouseIdFilter("all");
+    setFromDate("");
+    setToDate("");
+  };
 
   const openDetail = async (employeeId: string) => {
     setSelectedEmployeeId(employeeId);
@@ -998,6 +1014,11 @@ export default function EmpleadosPage() {
                 </div>
               </div>
             </div>
+
+            <ActiveFilters 
+              hasActiveFilters={!!(firstNameFilter || lastNameFilter || positionFilter !== "all" || statusFilter !== "all" || storeIdFilter !== "all" || warehouseIdFilter !== "all" || fromDate || toDate)}
+              onClearFilters={clearFilters}
+            />
           </div>
         </CardHeader>
 

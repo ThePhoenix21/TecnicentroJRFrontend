@@ -54,6 +54,7 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
   const [usersLookup, setUsersLookup] = useState<UserLookupItem[]>([]);
   const [userId, setUserId] = useState<string>("");
   const [userQuery, setUserQuery] = useState("");
+  const [userNameFilter, setUserNameFilter] = useState<string>("");
   const [showUserSuggestions, setShowUserSuggestions] = useState(false);
 
   const productFilterRef = useRef<HTMLDivElement | null>(null);
@@ -65,6 +66,7 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
   const [toDate, setToDate] = useState("");
 
   const productNameFilterRef = useRef(productNameFilter);
+  const userNameFilterRef = useRef(userNameFilter);
   const userIdRef = useRef(userId);
   const typeRef = useRef(type);
   const fromDateRef = useRef(fromDate);
@@ -96,6 +98,7 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
     setShowProductSuggestions(false);
     setUserId("");
     setUserQuery("");
+    setUserNameFilter("");
     setShowUserSuggestions(false);
     setType("ALL");
     setFromDate("");
@@ -125,6 +128,10 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
   useEffect(() => {
     productNameFilterRef.current = productNameFilter;
   }, [productNameFilter]);
+
+  useEffect(() => {
+    userNameFilterRef.current = userNameFilter;
+  }, [userNameFilter]);
 
   useEffect(() => {
     userIdRef.current = userId;
@@ -161,6 +168,7 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
           name: productNameFilterRef.current.trim() || undefined,
           type: typeRef.current === "ALL" ? undefined : (typeRef.current as InventoryMovementType),
           userId: userIdRef.current || undefined,
+          userName: userNameFilterRef.current.trim() || undefined,
           fromDate: range?.fromDate,
           toDate: range?.toDate,
         });
@@ -220,7 +228,7 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
     }, 400);
 
     return () => clearTimeout(timeout);
-  }, [productNameFilter, type, userId, fromDate, toDate, loadMovements]);
+  }, [productNameFilter, userNameFilter, type, userId, fromDate, toDate, loadMovements]);
 
   useEffect(() => {
     loadMovements(page);
@@ -281,6 +289,13 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
                     }}
                     onFocus={() => setShowProductSuggestions(true)}
                     onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        setProductNameFilter(productQuery);
+                        setShowProductSuggestions(false);
+                        setPage(1);
+                        loadMovements(1);
+                      }
                       if (e.key === "Escape") {
                         e.stopPropagation();
                         setShowProductSuggestions(false);
@@ -365,6 +380,13 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
                     }}
                     onFocus={() => setShowUserSuggestions(true)}
                     onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        setUserNameFilter(userQuery);
+                        setShowUserSuggestions(false);
+                        setPage(1);
+                        loadMovements(1);
+                      }
                       if (e.key === "Escape") {
                         e.stopPropagation();
                         setShowUserSuggestions(false);
@@ -380,6 +402,7 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
                       onClick={() => {
                         setUserQuery("");
                         setUserId("");
+                        setUserNameFilter("");
                         setShowUserSuggestions(false);
                         setPage(1);
                         loadMovements(1);

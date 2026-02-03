@@ -111,7 +111,7 @@ export interface SupplyOrderFilters {
   page?: number;
   pageSize?: number;
   status?: SupplyOrderStatus;
-  userId?: string;
+  createdBy?: string;
   fromDate?: string;
   toDate?: string;
   code?: string;

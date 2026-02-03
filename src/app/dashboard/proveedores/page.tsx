@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Search, X, Users, Pencil, Trash2, Save, Plus } from "lucide-react";
+import { ActiveFilters } from "@/components/ui/active-filters";
 
 import { providerService } from "@/services/provider.service";
 import type {
@@ -573,19 +574,10 @@ export default function ProveedoresPage() {
                 </div>
               </div>
 
-              {(providerFilter || rucFilter || fromDate || toDate) && (
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span className="font-semibold tracking-wide">Filtros activos</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={clearFilters}
-                    className="h-7 px-2 text-amber-600 hover:text-red-300"
-                  >
-                    Limpiar filtros
-                  </Button>
-                </div>
-              )}              
+              <ActiveFilters 
+                hasActiveFilters={!!(providerFilter || rucFilter || fromDate || toDate)}
+                onClearFilters={clearFilters}
+              />
             </div>
           </div>
         </CardHeader>

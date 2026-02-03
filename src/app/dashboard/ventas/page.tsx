@@ -19,6 +19,7 @@ import { uniqueBy } from "@/utils/array";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ActiveFilters } from "@/components/ui/active-filters";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import {
@@ -155,6 +156,18 @@ export default function VentasPage() {
     setShowSellerSuggestions(false);
     setCurrentPage(1);
   }, []);
+
+  const clearFilters = () => {
+    setAppliedClientName('');
+    setClientQuery('');
+    setShowClientSuggestions(false);
+    setAppliedSellerName('');
+    setSellerQuery('');
+    setShowSellerSuggestions(false);
+    setSelectedStatus('');
+    setCurrentPage(1);
+    // No afectar el checkbox "Caja actual"
+  };
 
   const loadData = useCallback(async () => {
     try {
@@ -681,28 +694,6 @@ export default function VentasPage() {
                 </div>
 
                 <div>
-                  <Label className="text-xs text-muted-foreground">Tienda</Label>
-                  <Select
-                    value={selectedStoreId}
-                    onValueChange={(value) => {
-                      setSelectedStoreId(value);
-                      setCurrentPage(1);
-                    }}
-                  >
-                    <SelectTrigger className="w-full lg:max-w-[220px]">
-                      <SelectValue placeholder="Seleccionar tienda" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {storesLookup.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
                   <Label className="text-xs text-muted-foreground">Estado</Label>
                   <Select
                     value={selectedStatus}
@@ -744,6 +735,11 @@ export default function VentasPage() {
                   </div>
                 </div>
               </div>
+
+              <ActiveFilters 
+                hasActiveFilters={!!(appliedClientName || appliedSellerName || selectedStatus)}
+                onClearFilters={clearFilters}
+              />
 
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Info className="h-3.5 w-3.5" />

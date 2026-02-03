@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { toast } from "sonner";
+import { ActiveFilters } from "@/components/ui/active-filters";
 
 import { providerService } from "@/services/provider.service";
 import { storeService } from "@/services/store.service";
@@ -102,7 +103,7 @@ export default function OrdenesSuministroPage() {
   const [total, setTotal] = useState(0);
 
   const [statusFilter, setStatusFilter] = useState<SupplyOrderStatus | "all">("all");
-  const [userIdFilter, setUserIdFilter] = useState("");
+  const [createdByFilter, setCreatedByFilter] = useState("");
   const [userQuery, setUserQuery] = useState("");
   const [showUserSuggestions, setShowUserSuggestions] = useState(false);
   const [codeFilter, setCodeFilter] = useState("");
@@ -160,13 +161,13 @@ export default function OrdenesSuministroPage() {
   const loadOrdersRef = useRef<((targetPage?: number) => void) | null>(null);
 
   const filtersKey = useMemo(
-    () => [statusFilter, userIdFilter, codeFilter, fromDate, toDate].join("|"),
-    [statusFilter, userIdFilter, codeFilter, fromDate, toDate]
+    () => [statusFilter, createdByFilter, codeFilter, fromDate, toDate].join("|"),
+    [statusFilter, createdByFilter, codeFilter, fromDate, toDate]
   );
 
   const filtersApplied = useMemo(
-    () => Boolean(userIdFilter || codeFilter || fromDate || toDate || statusFilter !== "all"),
-    [userIdFilter, codeFilter, fromDate, toDate, statusFilter]
+    () => Boolean(createdByFilter || codeFilter || fromDate || toDate || statusFilter !== "all"),
+    [createdByFilter, codeFilter, fromDate, toDate, statusFilter]
   );
 
   const filteredUsers = useMemo(() => {
@@ -191,7 +192,7 @@ export default function OrdenesSuministroPage() {
           page: targetPage,
           pageSize: PAGE_SIZE,
           status: statusFilter === "all" ? undefined : statusFilter,
-          userId: userIdFilter.trim() || undefined,
+          createdBy: createdByFilter.trim() || undefined,
           code: codeFilter.trim() || undefined,
           fromDate: range?.fromDate,
           toDate: range?.toDate,
@@ -211,7 +212,7 @@ export default function OrdenesSuministroPage() {
         setLoading(false);
       }
     },
-    [fromDate, toDate, statusFilter, userIdFilter, codeFilter]
+    [fromDate, toDate, statusFilter, createdByFilter, codeFilter]
   );
 
   loadOrdersRef.current = loadOrders;
@@ -275,7 +276,7 @@ export default function OrdenesSuministroPage() {
 
   const clearFilters = () => {
     setStatusFilter("all");
-    setUserIdFilter("");
+    setCreatedByFilter("");
     setUserQuery("");
     setShowUserSuggestions(false);
     setCodeFilter("");
@@ -567,13 +568,22 @@ export default function OrdenesSuministroPage() {
                               setUserQuery(nextValue);
                               setShowUserSuggestions(nextValue.trim().length > 0);
                             }}
+                            onKeyDown={(e) => {
+                              if (e.key !== "Enter") return;
+                              e.preventDefault();
+                              const trimmed = userQuery.trim();
+                              if (!trimmed) return;
+                              setCreatedByFilter(trimmed);
+                              setUserQuery(trimmed);
+                              setShowUserSuggestions(false);
+                            }}
                           />
                           {userQuery && (
                             <button
                               type="button"
                               onClick={() => {
                                 setUserQuery("");
-                                setUserIdFilter("");
+                                setCreatedByFilter("");
                                 setShowUserSuggestions(false);
                               }}
                               className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
@@ -592,7 +602,7 @@ export default function OrdenesSuministroPage() {
                                     key={user.id}
                                     type="button"
                                     onClick={() => {
-                                      setUserIdFilter(user.id);
+                                      setCreatedByFilter(user.name);
                                       setUserQuery(user.name);
                                       setShowUserSuggestions(false);
                                     }}
@@ -712,14 +722,10 @@ export default function OrdenesSuministroPage() {
                     </div>
                   </div>
 
-                  {filtersApplied && (
-                    <div className="flex justify-between items-center text-xs text-muted-foreground">
-                      <span>Filtros activos</span>
-                      <Button variant="ghost" size="sm" onClick={clearFilters} className="h-7 px-2 text-amber-600 hover:text-red-600">
-                        Limpiar filtros
-                      </Button>
-                    </div>
-                  )}
+                  <ActiveFilters 
+                    hasActiveFilters={filtersApplied}
+                    onClearFilters={clearFilters}
+                  />
                 </div>
               </div>
             </CardHeader>

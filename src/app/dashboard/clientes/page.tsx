@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ActiveFilters } from '@/components/ui/active-filters';
 import {
   Table,
   TableBody,
@@ -109,6 +110,18 @@ function ClientesContent() {
     );
     setIsEditModalOpen(false);
     setEditingClient(null);
+  };
+
+  const clearFilters = () => {
+    setNameQuery('');
+    setNameFilter('');
+    setPhoneQuery('');
+    setPhoneFilter('');
+    setDniQuery('');
+    setDniFilter('');
+    setFromDate('');
+    setToDate('');
+    setPage(1);
   };
 
   const loadClients = useCallback(async () => {
@@ -237,182 +250,177 @@ function ClientesContent() {
           </div>
 
           <div className="rounded-md border bg-muted/30 p-4 space-y-4 mt-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="relative">
-                <Input
-                  placeholder="Nombre..."
-                  value={nameQuery}
-                  onBlur={() => setTimeout(() => setShowNameSuggestions(false), 150)}
-                  onChange={(e) => {
-                    const nextValue = e.target.value;
-                    setNameQuery(nextValue);
-                    setShowNameSuggestions(nextValue.trim().length > 0);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key !== 'Enter') return;
-                    e.preventDefault();
-                    const trimmed = nameQuery.trim();
-                    if (!trimmed) return;
-                    setNameFilter(trimmed);
-                    setNameQuery(trimmed);
-                    setShowNameSuggestions(false);
-                  }}
-                />
-                {showNameSuggestions && nameQuery.trim().length > 0 && (
-                  <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
-                    {filteredNameSuggestions.length === 0 ? (
-                      <div className="px-3 py-2 text-xs text-muted-foreground">Sin coincidencias</div>
-                    ) : (
-                      filteredNameSuggestions.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => {
-                            setNameFilter(item.name);
-                            setNameQuery(item.name);
-                            setShowNameSuggestions(false);
-                          }}
-                          className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
-                        >
-                          {item.name}
-                        </button>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="relative">
-                <Input
-                  placeholder="Teléfono..."
-                  value={phoneQuery}
-                  onBlur={() => setTimeout(() => setShowPhoneSuggestions(false), 150)}
-                  onChange={(e) => {
-                    const nextValue = e.target.value;
-                    setPhoneQuery(nextValue);
-                    setShowPhoneSuggestions(nextValue.trim().length > 0);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key !== 'Enter') return;
-                    e.preventDefault();
-                    const trimmed = phoneQuery.trim();
-                    if (!trimmed) return;
-                    setPhoneFilter(trimmed);
-                    setPhoneQuery(trimmed);
-                    setShowPhoneSuggestions(false);
-                  }}
-                />
-                {showPhoneSuggestions && phoneQuery.trim().length > 0 && (
-                  <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
-                    {filteredPhoneSuggestions.length === 0 ? (
-                      <div className="px-3 py-2 text-xs text-muted-foreground">Sin coincidencias</div>
-                    ) : (
-                      filteredPhoneSuggestions.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => {
-                            setPhoneFilter(item.phone);
-                            setPhoneQuery(item.phone);
-                            setShowPhoneSuggestions(false);
-                          }}
-                          className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
-                        >
-                          {item.phone}
-                        </button>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="relative">
-                <Input
-                  placeholder="DNI..."
-                  value={dniQuery}
-                  onBlur={() => setTimeout(() => setShowDniSuggestions(false), 150)}
-                  onChange={(e) => {
-                    const nextValue = e.target.value;
-                    setDniQuery(nextValue);
-                    setShowDniSuggestions(nextValue.trim().length > 0);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key !== 'Enter') return;
-                    e.preventDefault();
-                    const trimmed = dniQuery.trim();
-                    if (!trimmed) return;
-                    setDniFilter(trimmed);
-                    setDniQuery(trimmed);
-                    setShowDniSuggestions(false);
-                  }}
-                />
-                {showDniSuggestions && dniQuery.trim().length > 0 && (
-                  <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
-                    {filteredDniSuggestions.length === 0 ? (
-                      <div className="px-3 py-2 text-xs text-muted-foreground">Sin coincidencias</div>
-                    ) : (
-                      filteredDniSuggestions.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => {
-                            setDniFilter(item.dni);
-                            setDniQuery(item.dni);
-                            setShowDniSuggestions(false);
-                          }}
-                          className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
-                        >
-                          {item.dni}
-                        </button>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-start gap-2 pt-2 border-t border-muted/60">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
               <div className="space-y-1">
-                <span className="text-xs font-medium text-muted-foreground">Desde</span><br />
+                <span className="text-xs font-medium text-muted-foreground invisible">Nombre</span>
+                <div className="relative">
+                  <Input
+                    placeholder="Nombre..."
+                    value={nameQuery}
+                    onBlur={() => setTimeout(() => setShowNameSuggestions(false), 150)}
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      setNameQuery(nextValue);
+                      setShowNameSuggestions(nextValue.trim().length > 0);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter') return;
+                      e.preventDefault();
+                      const trimmed = nameQuery.trim();
+                      if (!trimmed) return;
+                      setNameFilter(trimmed);
+                      setNameQuery(trimmed);
+                      setShowNameSuggestions(false);
+                    }}
+                    className="text-sm"
+                  />
+                  {showNameSuggestions && nameQuery.trim().length > 0 && (
+                    <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
+                      {filteredNameSuggestions.length === 0 ? (
+                        <div className="px-3 py-2 text-xs text-muted-foreground">Sin coincidencias</div>
+                      ) : (
+                        filteredNameSuggestions.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => {
+                              setNameFilter(item.name);
+                              setNameQuery(item.name);
+                              setShowNameSuggestions(false);
+                            }}
+                            className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                          >
+                            {item.name}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-xs font-medium text-muted-foreground invisible">Teléfono</span>
+                <div className="relative">
+                  <Input
+                    placeholder="Teléfono..."
+                    value={phoneQuery}
+                    onBlur={() => setTimeout(() => setShowPhoneSuggestions(false), 150)}
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      setPhoneQuery(nextValue);
+                      setShowPhoneSuggestions(nextValue.trim().length > 0);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter') return;
+                      e.preventDefault();
+                      const trimmed = phoneQuery.trim();
+                      if (!trimmed) return;
+                      setPhoneFilter(trimmed);
+                      setPhoneQuery(trimmed);
+                      setShowPhoneSuggestions(false);
+                    }}
+                    className="text-sm"
+                  />
+                  {showPhoneSuggestions && phoneQuery.trim().length > 0 && (
+                    <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
+                      {filteredPhoneSuggestions.length === 0 ? (
+                        <div className="px-3 py-2 text-xs text-muted-foreground">Sin coincidencias</div>
+                      ) : (
+                        filteredPhoneSuggestions.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => {
+                              setPhoneFilter(item.phone);
+                              setPhoneQuery(item.phone);
+                              setShowPhoneSuggestions(false);
+                            }}
+                            className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                          >
+                            {item.phone}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-xs font-medium text-muted-foreground invisible">DNI</span>
+                <div className="relative">
+                  <Input
+                    placeholder="DNI..."
+                    value={dniQuery}
+                    onBlur={() => setTimeout(() => setShowDniSuggestions(false), 150)}
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      setDniQuery(nextValue);
+                      setShowDniSuggestions(nextValue.trim().length > 0);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter') return;
+                      e.preventDefault();
+                      const trimmed = dniQuery.trim();
+                      if (!trimmed) return;
+                      setDniFilter(trimmed);
+                      setDniQuery(trimmed);
+                      setShowDniSuggestions(false);
+                    }}
+                    className="text-sm"
+                  />
+                  {showDniSuggestions && dniQuery.trim().length > 0 && (
+                    <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
+                      {filteredDniSuggestions.length === 0 ? (
+                        <div className="px-3 py-2 text-xs text-muted-foreground">Sin coincidencias</div>
+                      ) : (
+                        filteredDniSuggestions.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => {
+                              setDniFilter(item.dni);
+                              setDniQuery(item.dni);
+                              setShowDniSuggestions(false);
+                            }}
+                            className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                          >
+                            {item.dni}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-xs font-medium text-muted-foreground">Desde</span>
                 <Input 
                   type="date" 
                   value={fromDate} 
                   onClick={(e) => e.currentTarget.showPicker?.()}
                   onChange={(e) => setFromDate(e.target.value)} 
-                  className="w-full sm:w-[180px]" 
+                  className="text-sm h-9"
                 />
               </div>
               <div className="space-y-1">
-                <span className="text-xs font-medium text-muted-foreground">Hasta</span><br />
+                <span className="text-xs font-medium text-muted-foreground">Hasta</span>
                 <Input 
                   type="date" 
                   value={toDate} 
                   onClick={(e) => e.currentTarget.showPicker?.()} 
                   onChange={(e) => setToDate(e.target.value)} 
-                  className="w-full sm:w-[180px]" 
+                  className="text-sm h-9"
                 />
               </div>
-              {(nameFilter || phoneFilter || dniFilter || fromDate || toDate) && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setNameQuery('');
-                    setNameFilter('');
-                    setPhoneQuery('');
-                    setPhoneFilter('');
-                    setDniQuery('');
-                    setDniFilter('');
-                    setFromDate('');
-                    setToDate('');
-                    setPage(1);
-                  }}
-                  className="h-9"
-                >
-                  Limpiar
-                </Button>
-              )}
             </div>
+
+            <ActiveFilters 
+              hasActiveFilters={!!(nameFilter || phoneFilter || dniFilter || fromDate || toDate)}
+              onClearFilters={clearFilters}
+            />
           </div>
         </CardHeader>
         

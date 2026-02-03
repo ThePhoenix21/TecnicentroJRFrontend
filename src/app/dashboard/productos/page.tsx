@@ -9,6 +9,7 @@ import { StoreProduct, CreateStoreProductRequest, StoreProductListItem, StorePro
 import { StoreLookupItem } from '@/types/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ActiveFilters } from '@/components/ui/active-filters';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -187,6 +188,17 @@ export default function ProductsPage() {
   const filtersKey = useMemo(() => {
     return [nameFilter, hideOutOfStock].join('|');
   }, [nameFilter, hideOutOfStock]);
+
+  const clearFilters = () => {
+    setNameFilter('');
+    setNameQuery('');
+    setShowNameSuggestions(false);
+    setHideOutOfStock(true);
+    // Forzar recarga después de limpiar filtros
+    setTimeout(() => {
+      fetchStoreProductsRef.current?.();
+    }, 0);
+  };
 
   const activeStoreId = selectedStoreId || currentStore?.id || '';
   const hasFetchedInitialRef = useRef(false);
@@ -619,29 +631,7 @@ export default function ProductsPage() {
 
       <div className="mb-6 space-y-4">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="space-y-2">
-            <Label>Tienda</Label>
-            <Select
-              value={selectedStoreId}
-              onValueChange={(value) => {
-                setSelectedStoreId(value);
-                const selectedStore = storesLookup.find(store => store.id === value);
-                setStoreQuery(selectedStore?.name || '');
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccionar tienda..." />
-              </SelectTrigger>
-              <SelectContent>
-                {storesLookup.map((store) => (
-                  <SelectItem key={store.id} value={store.id}>
-                    {store.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
+          
           <div className="space-y-2">
             <Label>Producto</Label>
             <div className="relative" ref={nameInputWrapperRef}>
@@ -720,6 +710,11 @@ export default function ProductsPage() {
           </div>
         </div>
       </div>
+
+      <ActiveFilters 
+        hasActiveFilters={!!(nameFilter || !hideOutOfStock)}
+        onClearFilters={clearFilters}
+      />
 
       {/* Add click outside handler */}
       <div 

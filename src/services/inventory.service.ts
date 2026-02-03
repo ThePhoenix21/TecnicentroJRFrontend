@@ -39,6 +39,7 @@ export const inventoryService = {
       if (query.name) params.set('name', query.name);
       if (query.type) params.set('type', query.type);
       if (query.userId) params.set('userId', query.userId);
+      if (query.userName) params.set('userName', query.userName);
       if (query.fromDate) params.set('fromDate', query.fromDate);
       if (query.toDate) params.set('toDate', query.toDate);
 

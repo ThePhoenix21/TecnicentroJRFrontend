@@ -5,6 +5,7 @@ import { uniqueBy } from "@/utils/array";
 import { serviceService, ServiceStatus, type ServiceListItem, type ServiceLookupItem } from "@/services/service.service";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { ActiveFilters } from "@/components/ui/active-filters";
 import {
   Table,
   TableBody,
@@ -291,7 +292,7 @@ export default function ServiciosPage() {
     setClientIdFilter("all");
     setServiceIdFilter("all");
     setStatusFilter("all");
-    setOpenCashOnly(true);
+    // No afectar el checkbox "Solo caja abierta"
     setFromDate("");
     setToDate("");
     setShowClientDropdown(false);
@@ -326,9 +327,6 @@ export default function ServiciosPage() {
         <CardHeader className="pb-2 sm:pb-3">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <CardTitle className="text-lg sm:text-xl">Servicios</CardTitle>
-            <Button variant="outline" onClick={clearFilters} disabled={loading}>
-              Limpiar filtros
-            </Button>
           </div>
           <div className="mt-3 flex flex-wrap items-end gap-3">
             <div className="relative client-search-container min-w-[220px]">
@@ -584,6 +582,11 @@ export default function ServiciosPage() {
               </label>
             </div>
           </div>
+
+          <ActiveFilters 
+            hasActiveFilters={!!(clientIdFilter !== "all" || serviceIdFilter !== "all" || statusFilter !== "all" || fromDate || toDate)}
+            onClearFilters={clearFilters}
+          />
         </CardHeader>
         <CardContent className="p-0 sm:p-4">
           {!currentStore ? (
