@@ -12,6 +12,13 @@ export interface CloseCashSessionRequest {
   declaredAmount?: number;
 }
 
+export interface GetClosedCashSessionsRequest {
+  storeId?: string;
+  from?: string;
+  to?: string;
+  openedByName?: string;
+}
+
 export class CashSessionService {
   // ✅ Obtener todas las sesiones de caja (solo ADMIN)
   async getCashSessions(): Promise<CashSession[]> {
@@ -30,6 +37,22 @@ export class CashSessionService {
     }
   }
 
+  // ✅ Obtener sesiones de caja cerradas por tienda (con filtros)
+  async getClosedCashSessionsByStore(payload: GetClosedCashSessionsRequest): Promise<CashSession[]> {
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await api.post('/cash-session/store/closed', payload, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error al obtener sesiones de caja cerradas:', error);
+      throw error;
+    }
+  }
 
   // ✅ Obtener sesiones de caja por tienda (con paginación)
   async getCashSessionsByStore(storeId: string, page: number = 1, limit: number = 20): Promise<any> {

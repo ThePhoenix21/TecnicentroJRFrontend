@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -65,6 +66,22 @@ export default function CajaPage() {
   const [showPrintHistoricalDialog, setShowPrintHistoricalDialog] = useState(false);
   const [historicalCashId, setHistoricalCashId] = useState('');
   const [isPrintingHistorical, setIsPrintingHistorical] = useState(false);
+  const [historicalSessionToPrint, setHistoricalSessionToPrint] = useState<CashSession | null>(null);
+
+  const [activeTab, setActiveTab] = useState<'open' | 'history'>('open');
+
+  const [closedFromDate, setClosedFromDate] = useState('');
+  const [closedToDate, setClosedToDate] = useState('');
+  const [closedOpenedByName, setClosedOpenedByName] = useState('');
+
+  const [closedSessions, setClosedSessions] = useState<CashSession[]>([]);
+  const [closedSessionsLoading, setClosedSessionsLoading] = useState(false);
+  const [selectedClosedSession, setSelectedClosedSession] = useState<CashSession | null>(null);
+  const [selectedMovements, setSelectedMovements] = useState<CashMovementListItem[]>([]);
+  const [selectedMovementsLoading, setSelectedMovementsLoading] = useState(false);
+  const [selectedMovementsPage, setSelectedMovementsPage] = useState(1);
+  const [selectedMovementsTotalPages, setSelectedMovementsTotalPages] = useState(1);
+  const [selectedMovementsTotal, setSelectedMovementsTotal] = useState(0);
 
   // =====================
   // Movimientos (nuevo listado paginado con filtros)
@@ -89,6 +106,7 @@ export default function CajaPage() {
   }, [paymentFilter, operationFilter, clientQuery]);
 
   const movementsPageSize = filtersActive ? 20 : 50;
+  const closedSessionMovementsPageSize = 50;
 
   const loadMovements = useCallback(async (targetPage: number) => {
     if (!currentSession?.id) return;
@@ -119,6 +137,32 @@ export default function CajaPage() {
       setMovementsLoading(false);
     }
   }, [currentSession?.id, currentSession?.id, canViewCash, movementsPageSize, paymentFilter, operationFilter, clientQuery]);
+
+  const loadSelectedSessionMovements = useCallback(async (sessionId: string, targetPage: number = 1) => {
+    if (!canViewCash) return;
+
+    setSelectedMovementsLoading(true);
+    try {
+      const response = await cashService.getCashMovementsList({
+        sessionId,
+        page: targetPage,
+        pageSize: closedSessionMovementsPageSize,
+      });
+
+      setSelectedMovements(Array.isArray(response.data) ? response.data : []);
+      setSelectedMovementsTotal(response.total || 0);
+      setSelectedMovementsTotalPages(response.totalPages || 1);
+      setSelectedMovementsPage(response.page || targetPage);
+    } catch (error) {
+      console.error('Error al cargar movimientos de sesión cerrada:', error);
+      setSelectedMovements([]);
+      setSelectedMovementsTotal(0);
+      setSelectedMovementsTotalPages(1);
+      toast.error('No se pudieron cargar los movimientos de la sesión seleccionada');
+    } finally {
+      setSelectedMovementsLoading(false);
+    }
+  }, [canViewCash, closedSessionMovementsPageSize]);
 
   const loadMovementsRef = useRef(loadMovements);
 
@@ -216,6 +260,50 @@ export default function CajaPage() {
   useEffect(() => {
     loadCurrentSession();
   }, [loadCurrentSession]);
+
+  const loadClosedSessions = useCallback(async () => {
+    if (!canViewCash) return;
+    if (!currentStore?.id) return;
+
+    const from = closedFromDate ? new Date(`${closedFromDate}T00:00:00.000Z`).toISOString() : undefined;
+    const to = closedToDate ? new Date(`${closedToDate}T23:59:59.999Z`).toISOString() : undefined;
+    const openedByName = closedOpenedByName.trim() || undefined;
+    const storeId = isAdmin ? (currentStore?.id || undefined) : undefined;
+
+    setClosedSessionsLoading(true);
+    try {
+      const data = await cashSessionService.getClosedCashSessionsByStore({
+        ...(storeId ? { storeId } : {}),
+        ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
+        ...(openedByName ? { openedByName } : {}),
+      });
+      setClosedSessions(Array.isArray(data) ? data : []);
+    } catch (error: any) {
+      console.error('Error al cargar historial de cajas:', error);
+      setClosedSessions([]);
+      toast.error(error.response?.data?.message || 'Error al cargar historial de cajas');
+    } finally {
+      setClosedSessionsLoading(false);
+    }
+  }, [canViewCash, closedFromDate, closedOpenedByName, closedToDate, currentStore?.id, isAdmin]);
+
+  const handleSelectClosedSessionDetail = useCallback((session: CashSession) => {
+    setSelectedClosedSession(session);
+    setSelectedMovements([]);
+    setSelectedMovementsPage(1);
+    setSelectedMovementsTotal(0);
+    setSelectedMovementsTotalPages(1);
+    loadSelectedSessionMovements(session.id, 1);
+  }, [loadSelectedSessionMovements]);
+
+  const handleBackToClosedSessions = useCallback(() => {
+    setSelectedClosedSession(null);
+    setSelectedMovements([]);
+    setSelectedMovementsPage(1);
+    setSelectedMovementsTotal(0);
+    setSelectedMovementsTotalPages(1);
+  }, []);
 
   const handleOpenCashSession = async () => {
     if (!canManageCash) {
@@ -446,48 +534,51 @@ export default function CajaPage() {
             {currentStore?.name} - {user?.name}
           </p>
         </div>
-        <div className="flex gap-2">
-          {canIssuePdf && (
-            <Button
-              variant="outline"
-              onClick={() => setShowPrintHistoricalDialog(true)}
-            >
-              <Printer className="h-4 w-4 mr-2" />
-              Imprimir Cierre
-            </Button>
-          )}
-          {currentSession?.status === 'OPEN' && canManageCash && (
-            <>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  if (isMobile) {
-                    setIsMobileMovementModalOpen(true);
-                    setMobileMovementStep('select');
-                    setMobileMovementType(null);
-                    setMobileMovementPayment('EFECTIVO');
-                    setMobileMovementAmount('');
-                    setMobileMovementDescription('');
-                    return;
-                  }
-                  setShowMovementForm(!showMovementForm);
-                }}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Movimiento
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={() => setShowCloseForm(true)}
-                disabled={isClosing}
-              >
-                <Power className="h-4 w-4 mr-2" />
-                Cerrar Caja
-              </Button>
-            </>
-          )}
-        </div>
       </div>
+
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'open' | 'history')}>
+        <TabsList>
+          <TabsTrigger value="open">Caja abierta</TabsTrigger>
+          <TabsTrigger value="history">Historial de cajas</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="open">
+          <div className="flex justify-end">
+            <div className="flex gap-2">              
+              {currentSession?.status === 'OPEN' && canManageCash && (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (isMobile) {
+                        setIsMobileMovementModalOpen(true);
+                        setMobileMovementStep('select');
+                        setMobileMovementType(null);
+                        setMobileMovementPayment('EFECTIVO');
+                        setMobileMovementAmount('');
+                        setMobileMovementDescription('');
+                        return;
+                      }
+                      setShowMovementForm(!showMovementForm);
+                    }}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Movimiento
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => setShowCloseForm(true)}
+                    disabled={isClosing}
+                  >
+                    <Power className="h-4 w-4 mr-2" />
+                    Cerrar Caja
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-6 space-y-8">
 
       {/* Estado de Caja */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -1059,27 +1150,26 @@ export default function CajaPage() {
                   No hay movimientos para los filtros seleccionados.
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {movements.map((movement) => (
-                    <div key={movement.id} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-full ${movement.type === 'INCOME' ? 'bg-green-100' : 'bg-red-100'}`}>
-                          {movement.type === 'INCOME' ? (
-                            <TrendingUp className="h-4 w-4 text-green-600" />
-                          ) : (
-                            <TrendingDown className="h-4 w-4 text-red-600" />
-                          )}
-                        </div>
-                        <div>
-                          <p className="font-medium">{formatDescription(movement.description)}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {new Date(movement.createdAt).toLocaleString()} • {movement.payment}
-                          </p>
+                    <div
+                      key={movement.id}
+                      className="flex items-center justify-between p-3 border rounded-lg"
+                    >
+                      <div className="space-y-1">
+                        <p className="font-medium">{formatDescription(movement.description)}</p>
+                        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                          <span>{movement.payment}</span>
+                          <span>•</span>
+                          <span>{new Date(movement.createdAt).toLocaleString()}</span>
                         </div>
                       </div>
-                      <div className={`font-bold ${movement.type === 'INCOME' ? 'text-green-600' : 'text-red-600'}`}>
-                        {movement.type === 'INCOME' ? '+' : '-'}
-                        {formatCurrency(Number(movement.amount) || 0)}
+                      <div className="text-right">
+                        <p
+                          className={`font-bold ${movement.type === 'INCOME' ? 'text-green-600' : 'text-red-600'}`}
+                        >
+                          {movement.type === 'INCOME' ? '+' : '-'} {formatCurrency(parseFloat(movement.amount || '0'))}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -1090,56 +1180,340 @@ export default function CajaPage() {
         </Card>
       )}
 
-      {/* Alertas informativas */}
-      {!currentSession && (
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            No hay una sesión de caja abierta. Debes abrir la caja para comenzar a registrar operaciones.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Diálogo para imprimir cierre histórico */}
-      <Dialog open={showPrintHistoricalDialog} onOpenChange={setShowPrintHistoricalDialog}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Imprimir Cierre de Caja Histórico</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">ID de Caja Cerrada</label>
-              <Input
-                placeholder="Ingrese el ID de la caja cerrada"
-                value={historicalCashId}
-                onChange={(e) => setHistoricalCashId(e.target.value)}
-                disabled={isPrintingHistorical}
-              />
-              <p className="text-xs text-muted-foreground">
-                Ingrese el ID de la sesión de caja cerrada que desea imprimir
-              </p>
-            </div>
-            <div className="flex gap-2 pt-4">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowPrintHistoricalDialog(false);
-                  setHistoricalCashId('');
-                }}
-                disabled={isPrintingHistorical}
-                className="flex-1"
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={handlePrintHistoricalClose}
-                disabled={isPrintingHistorical || !historicalCashId.trim()}
-                className="flex-1"
-              >
-                {isPrintingHistorical ? 'Imprimiendo...' : 'Imprimir'}
-              </Button>
-            </div>
           </div>
+
+        </TabsContent>
+
+        <TabsContent value="history">
+          {selectedClosedSession ? (
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <Button variant="outline" onClick={handleBackToClosedSessions} className="w-full md:w-auto">
+                  Volver al historial
+                </Button>
+                {canIssuePdf && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (!selectedClosedSession) return;
+                      setHistoricalSessionToPrint(selectedClosedSession);
+                      setHistoricalCashId(selectedClosedSession.id);
+                      setShowPrintHistoricalDialog(true);
+                    }}
+                    className="w-full md:w-auto"
+                  >
+                    <Printer className="h-4 w-4 mr-2" />
+                    Imprimir cierre
+                  </Button>
+                )}
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Sesión cerrada</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedClosedSession.closedAt
+                      ? new Date(selectedClosedSession.closedAt).toLocaleString()
+                      : new Date(selectedClosedSession.openedAt).toLocaleString()}
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Abierta</p>
+                      <p className="text-sm font-medium">{new Date(selectedClosedSession.openedAt).toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground">{selectedClosedSession.User?.name || ''}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Cerrada</p>
+                      <p className="text-sm font-medium">
+                        {selectedClosedSession.closedAt
+                          ? new Date(selectedClosedSession.closedAt).toLocaleString()
+                          : '-'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Montos</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Inicial</p>
+                          <p className="text-sm font-medium">{formatCurrency(selectedClosedSession.openingAmount || 0)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Cierre</p>
+                          <p className="text-sm font-medium">{formatCurrency(selectedClosedSession.closingAmount || 0)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Movimientos de la sesión</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Mostrando {selectedMovements.length} de {selectedMovementsTotal} movimientos
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (!selectedClosedSession) return;
+                          const next = selectedMovementsPage - 1;
+                          if (next < 1) return;
+                          loadSelectedSessionMovements(selectedClosedSession.id, next);
+                        }}
+                        disabled={selectedMovementsLoading || selectedMovementsPage <= 1}
+                      >
+                        Anterior
+                      </Button>
+                      <p className="text-sm text-muted-foreground">
+                        Página {selectedMovementsPage} de {selectedMovementsTotalPages}
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (!selectedClosedSession) return;
+                          const next = selectedMovementsPage + 1;
+                          if (next > selectedMovementsTotalPages) return;
+                          loadSelectedSessionMovements(selectedClosedSession.id, next);
+                        }}
+                        disabled={selectedMovementsLoading || selectedMovementsPage >= selectedMovementsTotalPages}
+                      >
+                        Siguiente
+                      </Button>
+                    </div>
+
+                    {selectedMovementsLoading ? (
+                      <div className="py-10 text-center text-sm text-muted-foreground">Cargando movimientos...</div>
+                    ) : selectedMovements.length === 0 ? (
+                      <div className="py-10 text-center text-sm text-muted-foreground">
+                        No hay movimientos para esta sesión.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {selectedMovements.map((movement) => (
+                          <div
+                            key={movement.id}
+                            className="flex items-center justify-between rounded-lg border p-3"
+                          >
+                            <div className="space-y-1">
+                              <p className="font-medium">{formatDescription(movement.description)}</p>
+                              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                                <span>{movement.payment}</span>
+                                <span>•</span>
+                                <span>{new Date(movement.createdAt).toLocaleString()}</span>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p
+                                className={`font-bold ${movement.type === 'INCOME' ? 'text-green-600' : 'text-red-600'}`}
+                              >
+                                {movement.type === 'INCOME' ? '+' : '-'} {formatCurrency(parseFloat(movement.amount || '0'))}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Filtros</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Desde</label>
+                      <Input
+                        type="date"
+                        value={closedFromDate}
+                        onChange={(e) => setClosedFromDate(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Hasta</label>
+                      <Input
+                        type="date"
+                        value={closedToDate}
+                        onChange={(e) => setClosedToDate(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Abierta por</label>
+                      <Input
+                        value={closedOpenedByName}
+                        onChange={(e) => setClosedOpenedByName(e.target.value)}
+                        placeholder="Ej: juan"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 mt-4">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setClosedFromDate('');
+                        setClosedToDate('');
+                        setClosedOpenedByName('');
+                        setClosedSessions([]);
+                      }}
+                      disabled={closedSessionsLoading}
+                    >
+                      Limpiar
+                    </Button>
+                    <Button onClick={loadClosedSessions} disabled={closedSessionsLoading}>
+                      {closedSessionsLoading ? 'Buscando...' : 'Buscar'}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <div className="space-y-3">
+                {closedSessionsLoading ? (
+                  <div className="py-10 text-center text-sm text-muted-foreground">Cargando historial...</div>
+                ) : closedSessions.length === 0 ? (
+                  <div className="py-10 text-center text-sm text-muted-foreground">
+                    No hay cajas cerradas para los filtros seleccionados.
+                  </div>
+                ) : (
+                  closedSessions.map((s) => (
+                    <Card
+                      key={s.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleSelectClosedSessionDetail(s)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleSelectClosedSessionDetail(s);
+                        }
+                      }}
+                      className="cursor-pointer transition-all duration-200 border border-border/60 hover:border-primary/40 hover:bg-muted/60 hover:shadow-md"
+                    >
+                      <CardHeader className="pb-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <CardTitle className="text-base">Caja cerrada</CardTitle>
+                            <p className="text-xs text-muted-foreground">
+                              {s.closedAt ? new Date(s.closedAt).toLocaleString() : 'Cerrada'}
+                            </p>
+                          </div>
+                          {canIssuePdf && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setHistoricalSessionToPrint(s);
+                                setHistoricalCashId(s.id);
+                                setShowPrintHistoricalDialog(true);
+                              }}
+                            >
+                              <Printer className="h-4 w-4 mr-2" />
+                              Imprimir
+                            </Button>
+                          )}
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid gap-3 md:grid-cols-3">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Abierta</p>
+                            <p className="text-sm font-medium">{new Date(s.openedAt).toLocaleString()}</p>
+                            <p className="text-xs text-muted-foreground">{s.User?.name || ''}</p>
+                          </div>
+
+                          <div>
+                            <p className="text-xs text-muted-foreground">Cerrada</p>
+                            <p className="text-sm font-medium">{s.closedAt ? new Date(s.closedAt).toLocaleString() : '-'}</p>
+                          </div>
+
+                          <div>
+                            <p className="text-xs text-muted-foreground">Montos</p>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <p className="text-xs text-muted-foreground">Inicial</p>
+                                <p className="text-sm font-medium">{formatCurrency(s.openingAmount || 0)}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground">Cierre</p>
+                                <p className="text-sm font-medium">{formatCurrency(s.closingAmount || 0)}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      <Dialog
+        open={showPrintHistoricalDialog}
+        onOpenChange={(open) => {
+          setShowPrintHistoricalDialog(open);
+          if (!open) {
+            setHistoricalCashId('');
+            setHistoricalSessionToPrint(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar impresión</DialogTitle>
+          </DialogHeader>
+          {historicalSessionToPrint ? (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                ¿Deseas imprimir el cierre de caja del{' '}
+                <span className="font-medium text-foreground">
+                  {historicalSessionToPrint.closedAt
+                    ? new Date(historicalSessionToPrint.closedAt).toLocaleString()
+                    : new Date(historicalSessionToPrint.openedAt).toLocaleString()}
+                </span>
+                ?
+              </p>
+              <div className="flex gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowPrintHistoricalDialog(false)}
+                  disabled={isPrintingHistorical}
+                  className="flex-1"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handlePrintHistoricalClose}
+                  disabled={isPrintingHistorical}
+                  className="flex-1"
+                >
+                  {isPrintingHistorical ? 'Imprimiendo...' : 'Imprimir'}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              Selecciona una caja cerrada para imprimir.
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
