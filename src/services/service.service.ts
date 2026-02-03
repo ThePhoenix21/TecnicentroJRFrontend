@@ -121,6 +121,8 @@ export interface GetServicesFilters {
   toDate?: string;
   clientId?: string;
   serviceId?: string;
+  clientName?: string;
+  serviceName?: string;
   storeId?: string;
 }
 
@@ -237,6 +239,8 @@ class ServiceService implements IServiceService {
 
       if (filters.status) params.append('status', filters.status);
       if (filters.storeId) params.append('storeId', filters.storeId);
+      if (filters.clientName) params.append('clientName', filters.clientName);
+      if (filters.serviceName) params.append('serviceName', filters.serviceName);
       // Note: /findAllWithClients does NOT support openCashOnly, fromDate, toDate, clientId, serviceId, type yet
 
       const url = params.toString()

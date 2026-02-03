@@ -62,6 +62,8 @@ export default function ServiciosPage() {
 
   const [clientIdFilter, setClientIdFilter] = useState<string>("all");
   const [serviceIdFilter, setServiceIdFilter] = useState<string>("all");
+  const [clientNameFilter, setClientNameFilter] = useState<string>("");
+  const [serviceNameFilter, setServiceNameFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<ServiceStatus | "all">("all");
   const [openCashOnly, setOpenCashOnly] = useState(true);
   const [fromDate, setFromDate] = useState("");
@@ -71,8 +73,8 @@ export default function ServiciosPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const filtersKey = useMemo(
-    () => [clientIdFilter, serviceIdFilter, statusFilter, openCashOnly, fromDate, toDate].join("|"),
-    [clientIdFilter, serviceIdFilter, statusFilter, openCashOnly, fromDate, toDate]
+    () => [clientIdFilter, serviceIdFilter, clientNameFilter, serviceNameFilter, statusFilter, openCashOnly, fromDate, toDate].join("|"),
+    [clientIdFilter, serviceIdFilter, clientNameFilter, serviceNameFilter, statusFilter, openCashOnly, fromDate, toDate]
   );
 
   const requestSeq = useRef(0);
@@ -127,6 +129,8 @@ export default function ServiciosPage() {
           toDate: toDate || undefined,
           clientId: clientIdFilter === "all" ? undefined : clientIdFilter,
           serviceId: serviceIdFilter === "all" ? undefined : serviceIdFilter,
+          clientName: clientNameFilter.trim() || undefined,
+          serviceName: serviceNameFilter.trim() || undefined,
           storeId: currentStore?.id,
         });
 
@@ -152,10 +156,12 @@ export default function ServiciosPage() {
       PAGE_SIZE,
       canViewServices,
       clientIdFilter,
+      serviceIdFilter,
+      clientNameFilter,
+      serviceNameFilter,
       currentStore,
       fromDate,
       openCashOnly,
-      serviceIdFilter,
       statusFilter,
       toDate,
     ]
@@ -291,6 +297,8 @@ export default function ServiciosPage() {
     setSelectedService(null);
     setClientIdFilter("all");
     setServiceIdFilter("all");
+    setClientNameFilter("");
+    setServiceNameFilter("");
     setStatusFilter("all");
     // No afectar el checkbox "Solo caja abierta"
     setFromDate("");
@@ -330,189 +338,139 @@ export default function ServiciosPage() {
           </div>
           <div className="mt-3 flex flex-wrap items-end gap-3">
             <div className="relative client-search-container min-w-[220px]">
-              <Label className="text-sm font-medium text-gray-700 mb-1 block opacity-0">
-                Cliente
-              </Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Cliente"
-                  className="pl-10 pr-10 h-9 text-sm"
-                  value={clientSearchTerm}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setClientSearchTerm(value);
-                    setSelectedClient(null);
-                    if (value.trim()) {
-                      setShowClientDropdown(true);
-                    } else {
-                      setShowClientDropdown(false);
-                    }
-                  }}
-                  onFocus={() => {
-                    if (clientSearchTerm.trim()) {
-                      setShowClientDropdown(true);
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
+              <div className="space-y-1">
+                <div className="relative invisible">
+                  <span className="text-xs font-medium text-muted-foreground">Cliente</span>
+                </div>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Buscar cliente..."
+                    className="pl-9"
+                    value={clientSearchTerm}
+                    onBlur={() => setTimeout(() => setShowClientDropdown(false), 150)}
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      setClientSearchTerm(nextValue);
+                      setShowClientDropdown(nextValue.trim().length > 0);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
                       e.preventDefault();
-                      const match = filteredClientLookup[0];
-                      if (match) {
-                        setClientSearchTerm(match.name);
-                        setSelectedClient({ id: match.id, name: match.name });
-                        setClientIdFilter(match.id);
-                      }
-                      setShowClientDropdown(false);
-                    }
-                    if (e.key === "Escape") {
-                      e.stopPropagation();
-                      setShowClientDropdown(false);
-                      (e.currentTarget as HTMLInputElement).blur();
-                    }
-                  }}
-                  disabled={loading}
-                />
-                {(clientSearchTerm || selectedClient) && (
-                  <button
-                    onClick={() => {
-                      setClientSearchTerm("");
-                      setSelectedClient(null);
-                      setClientIdFilter("all");
+                      const trimmed = clientSearchTerm.trim();
+                      if (!trimmed) return;
+                      setClientNameFilter(trimmed);
+                      setClientSearchTerm(trimmed);
                       setShowClientDropdown(false);
                     }}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-              {showClientDropdown && clientSearchTerm.trim() && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
-                  <div
-                    className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 cursor-pointer border-b"
-                    onClick={() => {
-                      setClientSearchTerm("");
-                      setSelectedClient(null);
-                      setClientIdFilter("all");
-                      setShowClientDropdown(false);
-                    }}
-                  >
-                    Todos los clientes
-                  </div>
-                  {filteredClientLookup.length === 0 ? (
-                    <div className="px-3 py-2 text-sm text-gray-500">Sin coincidencias</div>
-                  ) : (
-                    filteredClientLookup.map((c) => (
-                      <div
-                        key={c.id}
-                        className="px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer"
-                        onClick={() => {
-                          setClientSearchTerm(c.name);
-                          setSelectedClient({ id: c.id, name: c.name });
-                          setClientIdFilter(c.id);
-                          setShowClientDropdown(false);
-                        }}
-                      >
-                        {c.name}
-                      </div>
-                    ))
+                  />
+                  {clientSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setClientSearchTerm("");
+                        setClientNameFilter("");
+                        setShowClientDropdown(false);
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      title="Limpiar búsqueda"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                  {showClientDropdown && clientSearchTerm.trim().length > 0 && (
+                    <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
+                      {filteredClientLookup.length === 0 ? (
+                        <div className="px-3 py-2 text-xs text-muted-foreground">Sin coincidencias</div>
+                      ) : (
+                        filteredClientLookup.map((client) => (
+                          <button
+                            key={client.id}
+                            type="button"
+                            onClick={() => {
+                              setClientNameFilter(client.name);
+                              setClientSearchTerm(client.name);
+                              setShowClientDropdown(false);
+                            }}
+                            className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                          >
+                            {client.name}
+                          </button>
+                        ))
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
+              </div>
             </div>
 
             <div className="relative service-search-container min-w-[220px]">
-              <Label className="text-sm font-medium text-gray-700 mb-1 block opacity-0">
-                Servicio
-              </Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Servicio"
-                  className="pl-10 pr-10 h-9 text-sm"
-                  value={serviceSearchTerm}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setServiceSearchTerm(value);
-                    setSelectedService(null);
-                    if (value.trim()) {
-                      setShowServiceDropdown(true);
-                    } else {
-                      setShowServiceDropdown(false);
-                    }
-                  }}
-                  onFocus={() => {
-                    if (serviceSearchTerm.trim()) {
-                      setShowServiceDropdown(true);
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
+              <div className="space-y-1">
+                <div className="relative invisible">
+                  <span className="text-xs font-medium text-muted-foreground">Servicio</span>
+                </div>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Buscar servicio..."
+                    className="pl-9"
+                    value={serviceSearchTerm}
+                    onBlur={() => setTimeout(() => setShowServiceDropdown(false), 150)}
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      setServiceSearchTerm(nextValue);
+                      setShowServiceDropdown(nextValue.trim().length > 0);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
                       e.preventDefault();
-                      const match = filteredServiceLookup[0];
-                      if (match) {
-                        setServiceSearchTerm(match.value);
-                        setSelectedService({ id: match.id, value: match.value });
-                        setServiceIdFilter(match.id);
-                      }
-                      setShowServiceDropdown(false);
-                    }
-                    if (e.key === "Escape") {
-                      e.stopPropagation();
-                      setShowServiceDropdown(false);
-                      (e.currentTarget as HTMLInputElement).blur();
-                    }
-                  }}
-                  disabled={loading}
-                />
-                {(serviceSearchTerm || selectedService) && (
-                  <button
-                    onClick={() => {
-                      setServiceSearchTerm("");
-                      setSelectedService(null);
-                      setServiceIdFilter("all");
+                      const trimmed = serviceSearchTerm.trim();
+                      if (!trimmed) return;
+                      setServiceNameFilter(trimmed);
+                      setServiceSearchTerm(trimmed);
                       setShowServiceDropdown(false);
                     }}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-              {showServiceDropdown && serviceSearchTerm.trim() && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
-                  <div
-                    className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 cursor-pointer border-b"
-                    onClick={() => {
-                      setServiceSearchTerm("");
-                      setSelectedService(null);
-                      setServiceIdFilter("all");
-                      setShowServiceDropdown(false);
-                    }}
-                  >
-                    Todos los servicios
-                  </div>
-                  {filteredServiceLookup.length === 0 ? (
-                    <div className="px-3 py-2 text-sm text-gray-500">Sin coincidencias</div>
-                  ) : (
-                    filteredServiceLookup.map((s) => (
-                      <div
-                        key={s.id}
-                        className="px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer"
-                        onClick={() => {
-                          setServiceSearchTerm(s.value);
-                          setSelectedService({ id: s.id, value: s.value });
-                          setServiceIdFilter(s.id);
-                          setShowServiceDropdown(false);
-                        }}
-                      >
-                        {s.value}
-                      </div>
-                    ))
+                  />
+                  {serviceSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setServiceSearchTerm("");
+                        setServiceNameFilter("");
+                        setShowServiceDropdown(false);
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      title="Limpiar búsqueda"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                  {showServiceDropdown && serviceSearchTerm.trim().length > 0 && (
+                    <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
+                      {filteredServiceLookup.length === 0 ? (
+                        <div className="px-3 py-2 text-xs text-muted-foreground">Sin coincidencias</div>
+                      ) : (
+                        filteredServiceLookup.map((service) => (
+                          <button
+                            key={service.id}
+                            type="button"
+                            onClick={() => {
+                              setServiceNameFilter(service.value);
+                              setServiceSearchTerm(service.value);
+                              setShowServiceDropdown(false);
+                            }}
+                            className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                          >
+                            {service.value}
+                          </button>
+                        ))
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
+              </div>
             </div>
 
             <div className="min-w-[170px]">
@@ -584,7 +542,7 @@ export default function ServiciosPage() {
           </div>
 
           <ActiveFilters 
-            hasActiveFilters={!!(clientIdFilter !== "all" || serviceIdFilter !== "all" || statusFilter !== "all" || fromDate || toDate)}
+            hasActiveFilters={!!(clientIdFilter !== "all" || serviceIdFilter !== "all" || clientNameFilter || serviceNameFilter || statusFilter !== "all" || fromDate || toDate)}
             onClearFilters={clearFilters}
           />
         </CardHeader>

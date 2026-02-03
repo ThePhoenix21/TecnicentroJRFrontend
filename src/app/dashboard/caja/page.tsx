@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ActiveFilters } from '@/components/ui/active-filters';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -18,7 +19,9 @@ import {
   Calculator,
   AlertCircle,
   CheckCircle,
-  Printer
+  Printer,
+  Search,
+  X
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cashSessionService } from '@/services/cash-session.service';
@@ -99,14 +102,25 @@ export default function CajaPage() {
   const [paymentFilter, setPaymentFilter] = useState('');
   const [operationFilter, setOperationFilter] = useState('');
   const [clientQuery, setClientQuery] = useState('');
+  const [clientNameFilter, setClientNameFilter] = useState('');
   const [showClientSuggestions, setShowClientSuggestions] = useState(false);
 
   const filtersActive = useMemo(() => {
-    return !!(paymentFilter.trim() || operationFilter.trim() || clientQuery.trim());
-  }, [paymentFilter, operationFilter, clientQuery]);
+    return !!(paymentFilter.trim() || operationFilter.trim() || clientNameFilter.trim());
+  }, [paymentFilter, operationFilter, clientNameFilter]);
 
   const movementsPageSize = filtersActive ? 20 : 50;
   const closedSessionMovementsPageSize = 50;
+
+  const clearFilters = () => {
+    setPaymentFilter('');
+    setOperationFilter('');
+    setClientQuery('');
+    setClientNameFilter('');
+    setShowClientSuggestions(false);
+    setMovementsPage(1);
+    loadMovementsRef.current?.(1);
+  };
 
   const loadMovements = useCallback(async (targetPage: number) => {
     if (!currentSession?.id) return;
@@ -120,7 +134,7 @@ export default function CajaPage() {
         pageSize: movementsPageSize,
         payment: paymentFilter.trim() || undefined,
         operation: operationFilter.trim() || undefined,
-        clientName: clientQuery.trim() || undefined,
+        clientName: clientNameFilter.trim() || undefined,
       });
 
       setMovements(Array.isArray(response.data) ? response.data : []);
@@ -136,7 +150,7 @@ export default function CajaPage() {
     } finally {
       setMovementsLoading(false);
     }
-  }, [currentSession?.id, currentSession?.id, canViewCash, movementsPageSize, paymentFilter, operationFilter, clientQuery]);
+  }, [currentSession?.id, currentSession?.id, canViewCash, movementsPageSize, paymentFilter, operationFilter, clientNameFilter]);
 
   const loadSelectedSessionMovements = useCallback(async (sessionId: string, targetPage: number = 1) => {
     if (!canViewCash) return;
@@ -203,7 +217,7 @@ export default function CajaPage() {
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [paymentFilter, operationFilter, clientQuery, currentSession?.id]);
+  }, [paymentFilter, operationFilter, clientNameFilter, currentSession?.id]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1022,48 +1036,66 @@ export default function CajaPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Cliente</label>
                   <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                      value={clientQuery}
-                      onChange={(e) => {
-                        setClientQuery(e.target.value);
-                        setShowClientSuggestions(true);
-                      }}
-                      onFocus={() => setShowClientSuggestions(true)}
-                      onBlur={() => setShowClientSuggestions(false)}
+                      type="search"
                       placeholder="Buscar cliente..."
+                      className="pl-9"
+                      value={clientQuery}
+                      onBlur={() => setTimeout(() => setShowClientSuggestions(false), 150)}
+                      onChange={(e) => {
+                        const nextValue = e.target.value;
+                        setClientQuery(nextValue);
+                        setShowClientSuggestions(nextValue.trim().length > 0);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return;
+                        e.preventDefault();
+                        const trimmed = clientQuery.trim();
+                        if (!trimmed) return;
+                        setClientNameFilter(trimmed);
+                        setClientQuery(trimmed);
+                        setShowClientSuggestions(false);
+                      }}
                     />
                     {clientQuery && (
                       <button
                         type="button"
                         onClick={() => {
-                          setClientQuery('');
+                          setClientQuery("");
+                          setClientNameFilter("");
                           setShowClientSuggestions(false);
                         }}
-                        className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        title="Limpiar búsqueda"
                       >
-                        ×
+                        <X className="h-4 w-4" />
                       </button>
                     )}
-
-                    {showClientSuggestions && clientLookup.length > 0 && (
-                      <div className="absolute z-20 mt-1 w-full rounded-md border bg-background shadow">
-                        <div className="max-h-64 overflow-auto">
-                          {clientLookup
-                            .filter((c) => c.name.toLowerCase().includes(clientQuery.trim().toLowerCase()))
-                            .slice(0, 20)
-                            .map((c) => (
-                              <button
-                                key={c.id}
-                                type="button"
-                                onClick={() => {
-                                  setClientQuery(c.name);
-                                  setShowClientSuggestions(false);
-                                }}
-                                className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted"
-                              >
-                                <span>{c.name}</span>
-                              </button>
-                            ))}
+                    {showClientSuggestions && clientQuery.trim().length > 0 && (
+                      <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
+                        <div className="max-h-48 overflow-auto">
+                          {clientLookup.filter((c) => c.name.toLowerCase().includes(clientQuery.trim().toLowerCase())).length === 0 ? (
+                            <div className="px-3 py-2 text-xs text-muted-foreground">Sin coincidencias</div>
+                          ) : (
+                            clientLookup
+                              .filter((c) => c.name.toLowerCase().includes(clientQuery.trim().toLowerCase()))
+                              .slice(0, 20)
+                              .map((c) => (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setClientNameFilter(c.name);
+                                    setClientQuery(c.name);
+                                    setShowClientSuggestions(false);
+                                  }}
+                                  className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                                >
+                                  {c.name}
+                                </button>
+                              ))
+                          )}
                         </div>
                       </div>
                     )}
@@ -1104,6 +1136,13 @@ export default function CajaPage() {
                   </Select>
                 </div>
               </div>
+              
+              <ActiveFilters 
+                hasActiveFilters={filtersActive}
+                onClearFilters={clearFilters}
+                className="mt-2"
+              />
+              
               <div className="flex items-center justify-between text-sm text-muted-foreground">
                 <p>
                   Mostrando {movements.length} de {movementsTotal} movimientos
@@ -1156,12 +1195,30 @@ export default function CajaPage() {
                       key={movement.id}
                       className="flex items-center justify-between p-3 border rounded-lg"
                     >
-                      <div className="space-y-1">
-                        <p className="font-medium">{formatDescription(movement.description)}</p>
-                        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                          <span>{movement.payment}</span>
-                          <span>•</span>
-                          <span>{new Date(movement.createdAt).toLocaleString()}</span>
+                      <div className="flex items-center gap-3 flex-1">
+                        <div className={`p-3 rounded-full flex items-center justify-center w-14 h-14 flex-shrink-0 ${
+                          movement.type === 'INCOME' 
+                            ? 'bg-green-100 text-green-600' 
+                            : 'bg-red-100 text-red-600'
+                        }`}>
+                          {movement.type === 'INCOME' ? (
+                            <TrendingUp className="h-6 w-6" />
+                          ) : (
+                            <TrendingDown className="h-6 w-6" />
+                          )}
+                        </div>
+                        <div className="space-y-1 flex-1">
+                          <p className="font-medium">{formatDescription(movement.description)}</p>
+                          {movement.clientName && (
+                            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                              <span>{movement.clientName}</span>
+                            </div>
+                          )}
+                          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                            <span>{movement.payment}</span>
+                            <span>•</span>
+                            <span>{new Date(movement.createdAt).toLocaleString()}</span>
+                          </div>
                         </div>
                       </div>
                       <div className="text-right">
@@ -1303,12 +1360,30 @@ export default function CajaPage() {
                             key={movement.id}
                             className="flex items-center justify-between rounded-lg border p-3"
                           >
-                            <div className="space-y-1">
-                              <p className="font-medium">{formatDescription(movement.description)}</p>
-                              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                                <span>{movement.payment}</span>
-                                <span>•</span>
-                                <span>{new Date(movement.createdAt).toLocaleString()}</span>
+                            <div className="flex items-center gap-3 flex-1">
+                              <div className={`p-3 rounded-full flex items-center justify-center w-14 h-14 flex-shrink-0 ${
+                                movement.type === 'INCOME' 
+                                  ? 'bg-green-100 text-green-600' 
+                                  : 'bg-red-100 text-red-600'
+                              }`}>
+                                {movement.type === 'INCOME' ? (
+                                  <TrendingUp className="h-6 w-6" />
+                                ) : (
+                                  <TrendingDown className="h-6 w-6" />
+                                )}
+                              </div>
+                              <div className="space-y-1 flex-1">
+                                <p className="font-medium">{formatDescription(movement.description)}</p>
+                                {movement.clientName && (
+                                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                                    <span>{movement.clientName}</span>
+                                  </div>
+                                )}
+                                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                                  <span>{movement.payment}</span>
+                                  <span>•</span>
+                                  <span>{new Date(movement.createdAt).toLocaleString()}</span>
+                                </div>
                               </div>
                             </div>
                             <div className="text-right">

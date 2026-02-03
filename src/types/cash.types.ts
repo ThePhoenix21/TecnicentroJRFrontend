@@ -44,6 +44,7 @@ export interface CashMovementListItem {
   amount: string;
   payment: string;
   description: string;
+  clientName?: string;
   createdAt: string;
 }
 
