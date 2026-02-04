@@ -1,5 +1,5 @@
 import { api } from './api';
-import { CashSession } from '@/types/cash.types';
+import { CashSession, CashClosingPrintResponse } from '@/types/cash.types';
 
 export interface CreateCashSessionRequest {
   storeId: string;
@@ -163,7 +163,23 @@ export class CashSessionService {
       throw error;
     }
   }
-}
 
+  // ✅ Obtener datos listos para impresión del cierre de caja
+  async getCashClosingPrint(sessionId: string): Promise<CashClosingPrintResponse> {
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await api.get(`/cash-session/${sessionId}/closing-print`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}` 
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error al obtener datos de impresión de cierre de caja:', error);
+      throw error;
+    }
+  }
+}
 
 export const cashSessionService = new CashSessionService();

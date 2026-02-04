@@ -110,3 +110,54 @@ export interface ManualMovementRequest {
   payment: string;
   description: string;
 }
+
+export interface CashClosingPrintStoreInfo {
+  name: string;
+  address: string;
+  phone: string;
+}
+
+export interface CashClosingPrintSessionInfo {
+  openedAt: string;
+  closedAt: string;
+  openedBy: string;
+  closedBy: string;
+}
+
+export interface CashClosingPrintBalanceSummary {
+  openingAmount: number;
+  totalIngresos: number;
+  totalSalidas: number;
+  closingAmount: number;
+  declaredAmount: number;
+  difference: number;
+}
+
+export interface CashClosingPrintOrderItem {
+  orderNumber: string;
+  description: string;
+  amount: number;
+  isCanceled: boolean;
+}
+
+export interface CashClosingPrintExpenseItem {
+  description: string;
+  amount: number;
+}
+
+export interface CashClosingPrintManualMovement {
+  type: 'IN' | 'OUT';
+  description: string;
+  amount: number;
+}
+
+export interface CashClosingPrintResponse {
+  store: CashClosingPrintStoreInfo;
+  session: CashClosingPrintSessionInfo;
+  balance: CashClosingPrintBalanceSummary;
+  paymentSummary?: Record<string, number>;
+  orders: CashClosingPrintOrderItem[];
+  expenses: CashClosingPrintExpenseItem[];
+  manualMovements: CashClosingPrintManualMovement[];
+  printedAt: string;
+}

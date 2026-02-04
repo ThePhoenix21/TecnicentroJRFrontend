@@ -371,24 +371,14 @@ export default function CajaPage() {
       if (canIssuePdf) {
         // Generar e imprimir reporte PDF automáticamente
         try {
-          const { default: ReceiptClosingPDF } = await import('./ReceiptClosingPDF');
-          const { pdf } = await import('@react-pdf/renderer');
-
-          // Intentar obtener todos los movimientos de la sesión para que el PDF
-          // incluya también ingresos manuales (como pagos diferidos de servicios)
-          let closingData = response as any;
-          try {
-            const movementsResponse = await cashService.getCashMovements(currentSession.id, 1, 1000);
-            closingData = {
-              ...response,
-              movements: movementsResponse.data,
-            };
-          } catch (movErr) {
-            console.error('Error al obtener movimientos para el PDF de cierre:', movErr);
-          }
+          const [{ default: ReceiptClosingPDF }, { pdf }, closingPrintData] = await Promise.all([
+            import('./ReceiptClosingPDF'),
+            import('@react-pdf/renderer'),
+            cashSessionService.getCashClosingPrint(currentSession.id),
+          ]);
 
           const blob = await pdf(
-            <ReceiptClosingPDF data={closingData} />
+            <ReceiptClosingPDF data={closingPrintData} />
           ).toBlob();
           
           const pdfUrl = URL.createObjectURL(blob);
@@ -470,13 +460,12 @@ export default function CajaPage() {
 
     try {
       setIsPrintingHistorical(true);
-      
-      // Obtener datos del cierre histórico
-      const closingData = await cashService.getCashCloseReceipt(historicalCashId.trim());
-      
-      // Generar e imprimir PDF con el componente adaptador
-      const { default: HistoricalClosingPDF } = await import('./HistoricalClosingPDF');
-      const { pdf } = await import('@react-pdf/renderer');
+
+      const [{ default: HistoricalClosingPDF }, { pdf }, closingData] = await Promise.all([
+        import('./HistoricalClosingPDF'),
+        import('@react-pdf/renderer'),
+        cashSessionService.getCashClosingPrint(historicalCashId.trim()),
+      ]);
 
       const blob = await pdf(
         <HistoricalClosingPDF data={closingData} />
