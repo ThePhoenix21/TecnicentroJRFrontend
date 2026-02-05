@@ -137,12 +137,14 @@ export interface CashClosingPrintOrderItem {
   orderNumber: string;
   description: string;
   amount: number;
+  paymentMethod: string;
   isCanceled: boolean;
 }
 
 export interface CashClosingPrintExpenseItem {
   description: string;
   amount: number;
+  paymentMethod: string;
 }
 
 export interface CashClosingPrintManualMovement {
@@ -156,8 +158,9 @@ export interface CashClosingPrintResponse {
   session: CashClosingPrintSessionInfo;
   balance: CashClosingPrintBalanceSummary;
   paymentSummary?: Record<string, number>;
+  expenseSummary?: Record<string, number>;
   orders: CashClosingPrintOrderItem[];
   expenses: CashClosingPrintExpenseItem[];
-  manualMovements: CashClosingPrintManualMovement[];
   printedAt: string;
+  printedBy?: string;
 }
