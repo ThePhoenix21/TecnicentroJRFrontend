@@ -162,6 +162,15 @@ export interface Order {
   };
 }
 
+export interface OrderPaymentMethodsResponse {
+  orderId: string;
+  orderNumber: string;
+  totalAmount: number;
+  totalPaid: number;
+  pendingAmount: number;
+  payments: PaymentMethod[];
+}
+
 export const orderService = {
   async listOrders(params: {
     page?: number;
@@ -583,6 +592,22 @@ export const orderService = {
       return response.data;
     } catch (error) {
       console.error(`Error al obtener detalles de la orden ${id}:`, error);
+      throw error;
+    }
+  },
+
+  async getOrderPaymentMethods(orderId: string): Promise<OrderPaymentMethodsResponse> {
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await api.get<OrderPaymentMethodsResponse>(`orders/${orderId}/payment-methods`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Error al obtener los métodos de pago de la orden ${orderId}:`, error);
       throw error;
     }
   },

@@ -9,7 +9,7 @@ import { es } from "date-fns/locale";
 import { useState, useEffect, useMemo } from "react";
 import { PDFViewer, pdf, PDFDownloadLink } from "@react-pdf/renderer";
 import ReceiptThermalPDF from "@/app/dashboard/ventas/ReceiptThermalPDF";
-import { CancelOrderDialog } from "./CancelOrderDialog";
+import { CancelOrderDialog, type CancelOrderInfo } from "./CancelOrderDialog";
 import { Order, OrderProduct, type PaymentTypeInput } from '@/services/order.service';
 import { storeProductService } from '@/services/store-product.service';
 import { orderService } from '@/services/order.service';
@@ -263,6 +263,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
       });
       
       setShowCancelDialog(false);
+      onOpenChange(false);
     } catch (error) {
       console.error("Error al anular la orden:", error);
       toast.error("Error al anular la orden", {
@@ -433,14 +434,43 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
   }, [orderDetails?.paymentMethods, order?.paymentMethods]);
 
   const orderPendingAmount = useMemo(() => {
-    const rawTotal = orderDetails?.total ?? order?.totalAmount ?? 0;
-    const total = Number(rawTotal) || 0;
+    if (!orderDetails) return 0;
 
-    const totalPaid = paymentEntries.reduce((sum: number, method: PaymentEntry) => sum + Number(method?.amount || 0), 0);
+    const totalAmount = Number(orderDetails.total ?? 0) || 0;
+    const totalPaid = (orderDetails.paymentMethods || []).reduce(
+      (sum: number, method: any) => sum + (Number(method?.amount) || 0),
+      0
+    );
 
-    const pending = total - totalPaid;
-    return pending > 0 ? pending : 0;
-  }, [paymentEntries, orderDetails?.total, order?.totalAmount]);
+    return Math.max(totalAmount - totalPaid, 0);
+  }, [orderDetails]);
+
+  const cancelOrderInfo = useMemo<CancelOrderInfo | null>(() => {
+    if (!order) {
+      return null;
+    }
+
+    const productsList = (displayProducts || [])
+      .map((product: any) => ({
+        name: product?.product?.name || product?.product?.nombre || product?.name || "Producto",
+        quantity: product?.quantity,
+      }))
+      .filter((item: { name?: string }) => Boolean(item.name));
+
+    const servicesList = (displayServices || [])
+      .map((service: any) => ({
+        name: service?.name || service?.nombre || "Servicio",
+      }))
+      .filter((item: { name?: string }) => Boolean(item.name));
+
+    return {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      totalAmount: Number(orderDetails?.total ?? order.totalAmount ?? 0),
+      products: productsList.length ? productsList : undefined,
+      services: servicesList.length ? servicesList : undefined,
+    };
+  }, [order, orderDetails?.total, order?.totalAmount, displayProducts, displayServices]);
 
   const totalPayment = useMemo(
     () => paymentMethods.reduce((sum, pm) => sum + (Number(pm.amount) || 0), 0),
@@ -1289,6 +1319,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
         onOpenChange={setShowCancelDialog}
         onConfirm={(paymentMethods) => handleCancelOrder(paymentMethods)}
         loading={isCanceling}
+        orderInfo={cancelOrderInfo || undefined}
       />
     </Dialog>
   );
