@@ -84,6 +84,7 @@ export interface ReceiptClosingPDFProps {
   data: CashClosingPrintResponse;
   showOrders?: boolean;
   logoSrc?: string;
+  tenantName?: string;
 }
 
 const formatCurrency = (amount?: number) => `S/${Number(amount ?? 0).toFixed(2)}`;
@@ -95,7 +96,7 @@ const formatDate = (dateStr?: string) => {
   }
 };
 
-const ReceiptClosingPDF: React.FC<ReceiptClosingPDFProps> = ({ data, showOrders = true, logoSrc }) => {
+const ReceiptClosingPDF: React.FC<ReceiptClosingPDFProps> = ({ data, showOrders = true, logoSrc, tenantName }) => {
   const {
     store,
     session,
@@ -133,7 +134,10 @@ const ReceiptClosingPDF: React.FC<ReceiptClosingPDFProps> = ({ data, showOrders 
             <View style={styles.logoContainer}>
               {!!logoSrc && <Image src={logoSrc} style={styles.logo} />}
             </View>
-            <Text style={styles.textBold}>{store.name}</Text>
+            {!!tenantName && (
+              <Text style={[styles.textBold, { marginBottom: 4 }, { fontSize: 14 }]}>{tenantName}</Text>
+            )}
+            <Text style={styles.textBold}>tienda: {store.name}</Text>
             <Text>{store.address}</Text>
             <Text>Tel: {store.phone}</Text>
           </View>
