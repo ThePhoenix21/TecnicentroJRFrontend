@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { storeService } from "@/services/store.service";
+import { tenantService } from "@/services/tenant.service";
 import { type Store } from "@/types/store";
 import { StoreForm } from "./store-form";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/contexts/auth-context";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
     Table,
     TableBody,
@@ -18,13 +21,51 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Search, Plus, Edit2, MapPin, Phone, Building, Mail } from "lucide-react";
 import { toast } from "sonner";
+import { jwtDecode } from "jwt-decode";
+import { authService } from "@/services/auth";
+
+interface TenantTokenPayload {
+  tenantLogoUrl?: string;
+}
 
 export default function TiendasPage() {
+    const { isAdmin } = useAuth();
     const [stores, setStores] = useState<Store[]>([]);
     const [loading, setLoading] = useState(true);
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingStore, setEditingStore] = useState<Store | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
+
+    const [isLogoModalOpen, setIsLogoModalOpen] = useState(false);
+
+    const [selectedLogoFile, setSelectedLogoFile] = useState<File | null>(null);
+    const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+    const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+    const [tokenLogoUrl, setTokenLogoUrl] = useState<string | null>(null);
+
+    const allowedLogoMimeTypes = useMemo(() => {
+      return new Set([
+        'image/jpeg',
+        'image/png',
+        'image/gif',
+        'image/webp',
+      ]);
+    }, []);
+
+    const loadLogoFromToken = () => {
+      if (typeof window === 'undefined') return;
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (!token) {
+          setTokenLogoUrl(null);
+          return;
+        }
+        const decoded = jwtDecode<TenantTokenPayload>(token);
+        setTokenLogoUrl(decoded.tenantLogoUrl || null);
+      } catch {
+        setTokenLogoUrl(null);
+      }
+    };
 
     const loadStores = async () => {
     try {
@@ -41,6 +82,81 @@ export default function TiendasPage() {
     useEffect(() => {
     loadStores();
     }, []);
+
+    useEffect(() => {
+      loadLogoFromToken();
+    }, []);
+
+    useEffect(() => {
+      return () => {
+        if (logoPreviewUrl) {
+          URL.revokeObjectURL(logoPreviewUrl);
+        }
+      };
+    }, [logoPreviewUrl]);
+
+    useEffect(() => {
+      if (!isLogoModalOpen) {
+        handleSelectLogoFile(null);
+      }
+    }, [isLogoModalOpen]);
+
+    const handleSelectLogoFile = (file: File | null) => {
+      if (logoPreviewUrl) {
+        URL.revokeObjectURL(logoPreviewUrl);
+      }
+
+      setSelectedLogoFile(null);
+      setLogoPreviewUrl(null);
+
+      if (!file) return;
+
+      if (!allowedLogoMimeTypes.has(file.type)) {
+        toast.error('Formato inválido. Solo se permite: jpg, jpeg, png, gif, webp');
+        return;
+      }
+
+      const maxBytes = 5 * 1024 * 1024;
+      if (file.size > maxBytes) {
+        toast.error('El archivo supera el tamaño máximo de 5MB');
+        return;
+      }
+
+      setSelectedLogoFile(file);
+      setLogoPreviewUrl(URL.createObjectURL(file));
+    };
+
+    const handleUploadLogo = async () => {
+      if (!selectedLogoFile) {
+        toast.error('Selecciona un archivo primero');
+        return;
+      }
+
+      const confirmed = window.confirm('Este cambio actualizará el logo del tenant y tendrás que iniciar sesión nuevamente. ¿Deseas continuar?');
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        setIsUploadingLogo(true);
+        await tenantService.updateLogo(selectedLogoFile);
+
+        toast.success('Logo actualizado correctamente. Serás redirigido para iniciar sesión nuevamente.');
+        setSelectedLogoFile(null);
+        if (logoPreviewUrl) {
+          URL.revokeObjectURL(logoPreviewUrl);
+        }
+        setLogoPreviewUrl(null);
+
+        authService.logout();
+        return;
+      } catch (error) {
+        console.error('Error al actualizar el logo del tenant:', error);
+        toast.error(error instanceof Error ? error.message : 'Error al actualizar el logo');
+      } finally {
+        setIsUploadingLogo(false);
+      }
+    };
 
     const handleCreateStore = () => {
         setEditingStore(null);
@@ -72,6 +188,20 @@ export default function TiendasPage() {
           <div className="flex flex-col space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="space-y-1">
+                <div
+                  role="button"
+                  aria-disabled={!isAdmin}
+                  onClick={isAdmin ? () => setIsLogoModalOpen(true) : undefined}
+                  className={`mb-2 inline-flex h-40 w-40 items-center justify-center rounded-md border bg-muted/30 p-2 ${
+                    isAdmin ? 'cursor-pointer hover:border-primary/50 hover:bg-muted/50' : 'cursor-default opacity-90'
+                  }`}
+                >
+                  {tokenLogoUrl ? (
+                    <img src={tokenLogoUrl} alt="Logo" className="h-full w-full object-contain" />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Logo</span>
+                  )}
+                </div>
                 <CardTitle className="text-xl sm:text-2xl font-semibold tracking-tight">Tiendas</CardTitle>
                 <p className="text-sm text-muted-foreground">
                   Gestiona las tiendas del sistema
@@ -107,6 +237,65 @@ export default function TiendasPage() {
         </CardHeader>
         
         <CardContent className="p-4 sm:p-6">
+          {isAdmin && (
+            <Dialog open={isLogoModalOpen} onOpenChange={setIsLogoModalOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Logo de la empresa</DialogTitle>
+                </DialogHeader>
+
+                <div className="rounded-lg border bg-card p-4">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="space-y-1">
+                      <p className="text-sm text-muted-foreground">
+                        Este logo se usa en PDFs y comprobantes. Solo Admin puede actualizarlo.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-4 sm:grid-cols-[160px_1fr]">
+                    <div className="flex items-center justify-center rounded-md border bg-muted/30 p-3">
+                      {logoPreviewUrl ? (
+                        <img src={logoPreviewUrl} alt="Logo preview" className="max-h-24 w-auto object-contain" />
+                      ) : tokenLogoUrl ? (
+                        <img src={tokenLogoUrl} alt="Logo actual" className="max-h-24 w-auto object-contain" />
+                      ) : (
+                        <span className="text-sm text-muted-foreground">Sin logo</span>
+                      )}
+                    </div>
+
+                    <div className="space-y-3">
+                      <Input
+                        type="file"
+                        accept="image/jpeg,image/png,image/gif,image/webp"
+                        onChange={(e) => handleSelectLogoFile(e.target.files?.[0] || null)}
+                        disabled={isUploadingLogo}
+                      />
+
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Button
+                          onClick={handleUploadLogo}
+                          disabled={!selectedLogoFile || isUploadingLogo}
+                          size="sm"
+                        >
+                          {isUploadingLogo ? 'Subiendo...' : 'Guardar logo'}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleSelectLogoFile(null)}
+                          disabled={isUploadingLogo && !selectedLogoFile}
+                        >
+                          Limpiar
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
+
           {loading ? (
             <div className="flex justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>

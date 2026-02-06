@@ -1589,9 +1589,6 @@ export function SaleForm({
     </div>
   );
 
-  // Registrar la imagen del logo
-  const logo = '/icons/logo-jr-g.png';
-
   // Registrar fuentes
   Font.register({
     family: 'Helvetica',

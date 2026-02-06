@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { jwtDecode } from 'jwt-decode';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,6 +31,29 @@ import { clientService } from '@/services/client.service';
 import { CashSession, CashBalance, CashMovement, CashMovementListItem, CashMovementLookupItem } from '@/types/cash.types';
 import { useAuth } from '@/contexts/auth-context';
 import { formatCurrency } from '@/lib/utils';
+
+interface TenantTokenPayload {
+  tenantLogoUrl?: string;
+}
+
+const resolveTenantLogoUrlFromToken = (): string | undefined => {
+  if (typeof window === 'undefined') return undefined;
+
+  try {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      console.warn('No auth_token found in localStorage when resolving tenantLogoUrl');
+      return undefined;
+    }
+
+    const decoded = jwtDecode<TenantTokenPayload>(token);
+    console.log('Resolved tenantLogoUrl from token:', decoded.tenantLogoUrl);
+    return decoded.tenantLogoUrl || undefined;
+  } catch (error) {
+    console.error('Error al obtener tenantLogoUrl del token:', error);
+    return undefined;
+  }
+};
 
 export default function CajaPage() {
   const { user, currentStore, hasPermission, isAdmin, canIssuePdf } = useAuth();
@@ -371,6 +395,7 @@ export default function CajaPage() {
       if (canIssuePdf) {
         // Generar e imprimir reporte PDF automáticamente
         try {
+          const tenantLogoUrl = resolveTenantLogoUrlFromToken();
           const [{ default: ReceiptClosingPDF }, { pdf }, closingPrintData] = await Promise.all([
             import('./ReceiptClosingPDF'),
             import('@react-pdf/renderer'),
@@ -378,7 +403,7 @@ export default function CajaPage() {
           ]);
 
           const blob = await pdf(
-            <ReceiptClosingPDF data={closingPrintData} />
+            <ReceiptClosingPDF data={closingPrintData} logoSrc={tenantLogoUrl} />
           ).toBlob();
           
           const pdfUrl = URL.createObjectURL(blob);
@@ -461,6 +486,8 @@ export default function CajaPage() {
     try {
       setIsPrintingHistorical(true);
 
+      const tenantLogoUrl = resolveTenantLogoUrlFromToken();
+
       const [{ default: HistoricalClosingPDF }, { pdf }, closingData] = await Promise.all([
         import('./HistoricalClosingPDF'),
         import('@react-pdf/renderer'),
@@ -468,7 +495,7 @@ export default function CajaPage() {
       ]);
 
       const blob = await pdf(
-        <HistoricalClosingPDF data={closingData} />
+        <HistoricalClosingPDF data={closingData} logoSrc={tenantLogoUrl} />
       ).toBlob();
       
       const pdfUrl = URL.createObjectURL(blob);

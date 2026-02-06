@@ -214,25 +214,21 @@ export const authService = {
       });
     }
 
-    const refreshToken = getRefreshToken();
-    if (!refreshToken) {
-      this.logout();
-      return null;
-    }
-
     try {
       window.isRefreshing = true;
 
       // Usar la API centralizada para renovación
-      const response = await api.post<RefreshTokenResponse>('/auth/refresh', {
-        refreshToken: refreshToken
+      const response = await api.post<RefreshTokenResponse>('/auth/refresh', {}, {
+        withCredentials: true
       });
 
       const { access_token, refresh_token } = response.data;
 
       // Actualizar tokens
       localStorage.setItem('auth_token', access_token);
-      localStorage.setItem('refresh_token', refresh_token);
+      if (refresh_token) {
+        localStorage.setItem('refresh_token', refresh_token);
+      }
 
       // Actualizar header de autenticación
       api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;

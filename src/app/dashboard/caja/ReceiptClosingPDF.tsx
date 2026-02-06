@@ -4,9 +4,6 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { CashClosingPrintResponse } from '@/types/cash.types';
 
-// Logo
-const logo = '/icons/logo-jr-g.png';
-
 // Registrar fuentes
 Font.register({
   family: 'Helvetica',
@@ -86,6 +83,7 @@ const styles = StyleSheet.create({
 export interface ReceiptClosingPDFProps {
   data: CashClosingPrintResponse;
   showOrders?: boolean;
+  logoSrc?: string;
 }
 
 const formatCurrency = (amount?: number) => `S/${Number(amount ?? 0).toFixed(2)}`;
@@ -97,7 +95,7 @@ const formatDate = (dateStr?: string) => {
   }
 };
 
-const ReceiptClosingPDF: React.FC<ReceiptClosingPDFProps> = ({ data, showOrders = true }) => {
+const ReceiptClosingPDF: React.FC<ReceiptClosingPDFProps> = ({ data, showOrders = true, logoSrc }) => {
   const {
     store,
     session,
@@ -133,7 +131,7 @@ const ReceiptClosingPDF: React.FC<ReceiptClosingPDFProps> = ({ data, showOrders 
           {/* Encabezado */}
           <View style={styles.header}>
             <View style={styles.logoContainer}>
-              <Image src={logo} style={styles.logo} />
+              {!!logoSrc && <Image src={logoSrc} style={styles.logo} />}
             </View>
             <Text style={styles.textBold}>{store.name}</Text>
             <Text>{store.address}</Text>

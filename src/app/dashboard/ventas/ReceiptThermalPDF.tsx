@@ -2,9 +2,25 @@ import React from 'react';
 import { Document, Page, Text, View, StyleSheet, Font, Image } from '@react-pdf/renderer';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { jwtDecode } from 'jwt-decode';
 
-// Logo import
-const logo = '/icons/logo-jr-g.png';
+interface TenantTokenPayload {
+  tenantLogoUrl?: string;
+}
+
+const resolveTenantLogoUrlFromToken = (): string | undefined => {
+  if (typeof window === 'undefined') return undefined;
+
+  try {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return undefined;
+    const decoded = jwtDecode<TenantTokenPayload>(token);
+    return decoded.tenantLogoUrl || undefined;
+  } catch (error) {
+    console.error('Error al obtener tenantLogoUrl del token:', error);
+    return undefined;
+  }
+};
 
 // Register font for better text rendering
 Font.register({
@@ -224,6 +240,8 @@ const ReceiptThermalPDF: React.FC<ReceiptThermalPDFProps> = ({ saleData, busines
     ? (subtotalCalculado - (adelanto || 0)) 
     : subtotalCalculado;
 
+  const tenantLogoUrl = resolveTenantLogoUrlFromToken();
+
   return (
     <Document>
       <Page size={[PAGE_WIDTH, PAGE_HEIGHT]} style={styles.page}>
@@ -231,10 +249,7 @@ const ReceiptThermalPDF: React.FC<ReceiptThermalPDFProps> = ({ saleData, busines
           {/* Encabezado del negocio */}
           <View style={styles.header}>
             <View style={styles.logoContainer}>
-              <Image 
-                src={logo} 
-                style={styles.logo}
-              />
+              {!!tenantLogoUrl && <Image src={tenantLogoUrl} style={styles.logo} />}
             </View>
             <Text style={styles.businessName}>{businessInfo.name}</Text>
             <Text style={styles.businessInfo}>{businessInfo.address}</Text>

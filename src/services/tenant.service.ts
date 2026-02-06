@@ -53,6 +53,19 @@ class TenantService {
 
     return 'REPAIR';
   }
+
+  async updateLogo(file: File): Promise<unknown> {
+    const formData = new FormData();
+    formData.append('logo', file);
+
+    const response = await api.patch('/tenant/logo', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    return response.data as unknown;
+  }
 }
 
 export const tenantService = new TenantService();
