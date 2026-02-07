@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { toast } from "sonner";
+import { pdf } from '@react-pdf/renderer';
 import { ActiveFilters } from "@/components/ui/active-filters";
 
 import { providerService } from "@/services/provider.service";
@@ -49,6 +50,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SupplyOrderPDF } from "./SupplyOrderPDF";
 
 const PAGE_SIZE = 12;
 
@@ -505,12 +507,34 @@ export default function OrdenesSuministroPage() {
 
     try {
       setDetailSubmitting(true);
-      await supplyOrderService.approveSupplyOrder(detail.id);
-      toast.success("Orden aprobada");
+      
+      // Generate PDF
+      console.log("Generando PDF...");
+      const pdfBlob = await pdf(<SupplyOrderPDF order={detail} />).toBlob();
+      console.log("PDF generado, tamaño:", pdfBlob.size, "bytes");
+      
+      // Optional: Open PDF in new tab for preview
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      window.open(pdfUrl, '_blank');
+      
+      // Send email with PDF
+      console.log("Enviando al backend...");
+      const response = await supplyOrderService.approveSupplyOrderWithEmail(detail.id, pdfBlob);
+      console.log("Respuesta del backend:", response);
+      
+      // Show detailed success message
+      if (response.emailSent) {
+        toast.success(`Orden aprobada y email enviado a ${detail.provider?.email}`);
+      } else {
+        toast.success("Orden aprobada (email no enviado - revisar configuración)");
+      }
+      
       closeDetail();
       loadOrders(page);
     } catch (error: any) {
-      console.error(error);
+      console.error("Error completo:", error);
+      console.error("Response data:", error?.response?.data);
+      console.error("Status:", error?.response?.status);
       toast.error(error?.response?.data?.message || error?.message || "No se pudo aprobar la orden");
     } finally {
       setDetailSubmitting(false);

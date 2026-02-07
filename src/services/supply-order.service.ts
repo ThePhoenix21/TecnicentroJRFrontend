@@ -17,7 +17,7 @@ class SupplyOrderService {
     if (filters.page) params.set("page", String(filters.page));
     if (filters.pageSize) params.set("pageSize", String(filters.pageSize));
     if (filters.status) params.set("status", filters.status);
-    if (filters.userId) params.set("userId", filters.userId);
+    if (filters.createdBy) params.set("createdBy", filters.createdBy);
     if (filters.fromDate) params.set("fromDate", filters.fromDate);
     if (filters.toDate) params.set("toDate", filters.toDate);
     if (filters.code) params.set("code", filters.code);
@@ -53,6 +53,22 @@ class SupplyOrderService {
   async getSupplyOrdersLookup(): Promise<SupplyOrderLookupItem[]> {
     const response = await api.get<SupplyOrderLookupItem[]>(`${this.baseUrl}/lookup`);
     return response.data;
+  }
+
+  async approveSupplyOrderWithEmail(orderId: string, pdfBlob?: Blob): Promise<any> {
+    if (pdfBlob) {
+      const formData = new FormData();
+      formData.append('pdf', pdfBlob, `orden-${orderId}.pdf`);
+      const response = await api.post(`${this.baseUrl}/${orderId}/approve-with-email`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } else {
+      const response = await api.post(`${this.baseUrl}/${orderId}/approve-with-email`);
+      return response.data;
+    }
   }
 }
 
