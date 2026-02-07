@@ -452,7 +452,11 @@ export default function ServiciosPage() {
                       {filteredServiceLookup.length === 0 ? (
                         <div className="px-3 py-2 text-xs text-muted-foreground">Sin coincidencias</div>
                       ) : (
-                        filteredServiceLookup.map((service) => (
+                        Array.from(
+                          new Map(
+                            filteredServiceLookup.map((service) => [service.value.toLowerCase(), service])
+                          ).values()
+                        ).map((service) => (
                           <button
                             key={service.id}
                             type="button"
