@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
   divider: {
     borderBottomWidth: 1,
     borderBottomColor: '#000',
-    borderBottomStyle: 'solid',
+    borderBottomStyle: 'dashed',
     marginVertical: 4,
   },
   row: {
