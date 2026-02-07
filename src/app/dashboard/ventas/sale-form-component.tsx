@@ -28,6 +28,7 @@ import { PDFViewer, pdf, PDFDownloadLink, PDFDownloadLinkProps } from "@react-pd
 import ReceiptThermalPDF from './ReceiptThermalPDF';
 import { clientService } from '@/services/client.service';
 import { cashSessionService } from "@/services/cash-session.service";
+import { orderService } from "@/services/order.service";
 import { formatCurrency } from "@/lib/utils";
 
 // Definir el tipo para los props del PDFDownloadLink
@@ -195,6 +196,8 @@ export function SaleForm({
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
+  const hasAutoPrintedRef = useRef(false);
+  const pendingPrintWindowRef = useRef<Window | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
   const [orderResponse, setOrderResponse] = useState<any>(null);
@@ -466,6 +469,7 @@ export function SaleForm({
     setOrderNumber(null);
     setOrderError(null); // Limpiar errores de orden
     setOrderResponse(null); // Limpiar respuesta de orden
+    hasAutoPrintedRef.current = false;
     // Reset newItem form
     setNewItem({
       id: "",
@@ -1047,7 +1051,15 @@ export function SaleForm({
   };
 
   // Manejar envío del formulario
-  const handleSubmit = async (paymentMethodsOverride?: PaymentMethod[]) => {
+  const handleSubmit = async (paymentMethodsOverride?: PaymentMethod[], printWindow?: Window | null) => {
+    console.log('[SaleForm][debug] handleSubmit invoked - hasOverride:', !!paymentMethodsOverride, 'isOrderPaymentsModalOpen:', isOrderPaymentsModalOpen);
+    console.trace('[SaleForm][debug] handleSubmit call stack');
+
+    if (!paymentMethodsOverride) {
+      setIsOrderPaymentsModalOpen(true);
+      return;
+    }
+
     if (selectedItems.length === 0) {
       toast.error("No hay ítems en la venta");
       return;
@@ -1203,23 +1215,41 @@ export function SaleForm({
 
       const result = await onSubmit(saleData);
 
-      if (result.success) {
-        // Guardar la respuesta completa del backend para el PDF
-        console.log("este es el resultado: ", result);
-        setOrderResponse(result.orderData || result);
-        setOrderNumber(result.orderNumber || null);
+      console.log('[SaleForm][debug] onSubmit result:', result);
+
+      const isSuccess = Boolean((result as any)?.success);
+      const resolvedOrderData = (result as any)?.orderData ?? (result as any)?.data ?? result;
+      const resolvedOrderId = (result as any)?.orderId ?? (resolvedOrderData as any)?.id ?? (resolvedOrderData as any)?.orderId;
+      const resolvedOrderNumber = (result as any)?.orderNumber ?? (resolvedOrderData as any)?.orderNumber;
+
+      console.log('[SaleForm][debug] resolved submit payload:', {
+        isSuccess,
+        resolvedOrderId,
+        resolvedOrderNumber,
+        hasResolvedOrderData: !!resolvedOrderData,
+      });
+
+      if (isSuccess) {
+        setOrderId(resolvedOrderId ?? null);
+        setOrderNumber(resolvedOrderNumber || null);
 
         if (canIssuePdf) {
-          // Mostrar el PDF solo después de que la venta se concrete exitosamente
-          console.log(" Venta completada - mostrando hoja de servicio");
+          const idToFetch = String(resolvedOrderId ?? (resolvedOrderData as any)?.orderId ?? '');
+          const details = idToFetch ? await orderService.getOrderDetails(idToFetch) : resolvedOrderData;
+
+          setOrderResponse(details);
+          console.log('[SaleForm][debug] opening ServiceSheet PDF modal');
           setShowServiceSheet(true);
 
-          // Cerrar inmediatamente el modal de venta para evitar que se vuelva a abrir
+          // Cerrar modal de nueva venta (dejando el comprobante abierto)
           onClose();
 
-          // El formulario se mantiene en memoria hasta que se cierre el PDF para preservar los datos
-          console.log(" Hoja de servicio se mostrará - el usuario decidirá cuándo cerrar");
+          if (!hasAutoPrintedRef.current) {
+            hasAutoPrintedRef.current = true;
+            await printThermalLikeOrderDetailsDialog(details, printWindow);
+          }
         } else {
+          setOrderResponse(resolvedOrderData);
           resetSaleState();
           onClose();
         }
@@ -1747,8 +1777,57 @@ export function SaleForm({
     return 'dni'; // Valor por defecto
   };
 
+  const printThermalLikeOrderDetailsDialog = useCallback(async (details: any, printWindow?: Window | null) => {
+    if (!details) return;
+
+    try {
+      const blob = await pdf(
+        <ReceiptThermalPDF
+          saleData={details}
+          businessInfo={businessInfo}
+          isCompleted={false}
+        />
+      ).toBlob();
+
+      const url = URL.createObjectURL(blob);
+      const resolvedPrintWindow = printWindow ?? window.open(url, '_blank');
+
+      if (resolvedPrintWindow) {
+        if (printWindow) {
+          try {
+            resolvedPrintWindow.location.href = url;
+          } catch {
+            // Si falla por políticas del navegador, se intentará igualmente con onload
+          }
+        }
+
+        // Esperar a que cargue el PDF antes de imprimir (patrón usado en Caja)
+        setTimeout(() => {
+          resolvedPrintWindow.print();
+          resolvedPrintWindow.onafterprint = () => {
+            resolvedPrintWindow.close();
+            URL.revokeObjectURL(url);
+          };
+        }, 1000);
+      } else {
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${details?.orderNumber || 'comprobante-venta'}-termico.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.error("Ventana emergente bloqueada. El PDF se descargó en su lugar.");
+      }
+    } catch (error) {
+      console.error("Error al generar PDF para impresión:", error);
+      toast.error("Error al generar el PDF para impresión");
+    }
+  }, [businessInfo]);
+
   return (
-    <div className={`fixed inset-0 bg-black/90 flex items-start md:items-center justify-center z-50 p-2 md:p-4 overflow-y-auto ${!isOpen ? 'hidden' : ''}`}>
+    <div className={`fixed inset-0 bg-black/90 flex items-start md:items-center justify-center z-50 p-2 md:p-4 overflow-y-auto ${(!isOpen && !showServiceSheet) ? 'hidden' : ''}`}>
       <div className="bg-background border border-muted rounded-3xl shadow-xl w-full max-w-4xl max-h-[95vh] md:max-h-[90vh] flex flex-col">
         <div className="flex justify-between items-center p-3 md:p-4 border-b rounded-t-3xl sticky top-0 bg-background z-10">
           <h2 className="text-lg md:text-xl font-semibold">Nueva Venta</h2>
@@ -1765,9 +1844,6 @@ export function SaleForm({
           </div>
         </div>
 
-        {/* Referencia para la impresión - ya no se usa, se mantiene para compatibilidad */}
-        <div ref={receiptRef} className="hidden" />
-
         {/* Diálogo de hoja de servicio */}
         <Dialog open={showServiceSheet} onOpenChange={(open) => {
           if (!open) {
@@ -1776,7 +1852,7 @@ export function SaleForm({
             setShowServiceSheet(false);
           }
         }}>
-          <DialogContent className="w-[98vw] max-w-[98vw] h-[98vh] max-h-[98vh] flex flex-col p-0 overflow-hidden">
+          <DialogContent className="w-[98vw] max-w-[98vw] h-[98vh] max-h-[98vh] flex flex-col p-0 overflow-hidden z-[60]">
             <DialogHeader className="px-6 pt-4 pb-2 border-b">
               <div className="flex justify-between items-center">
                 <DialogTitle className="text-2xl font-bold">
@@ -2165,7 +2241,8 @@ export function SaleForm({
                                 }}
                                 className="text-sm text-primary hover:underline flex items-center cursor-pointer"
                               >
-                                <Plus className="w-3 h-3" /> Agregar más
+                                <Plus className="w-3 h-3" />
+                                Agregar más
                               </div>
                             </div>
 
@@ -2472,7 +2549,7 @@ export function SaleForm({
                                       e.stopPropagation();
                                       setForceSubmit(true);
                                       setShowUploadError(false);
-                                      handleSubmit();
+                                      setIsOrderPaymentsModalOpen(true);
                                     }}
                                   >
                                     Continuar sin imágenes
@@ -2727,7 +2804,8 @@ export function SaleForm({
               onClick={() => {
                 setOrderPaymentMethods(orderPaymentMethodsDraft);
                 setIsOrderPaymentsModalOpen(false);
-                handleSubmit(orderPaymentMethodsDraft);
+                pendingPrintWindowRef.current = window.open('about:blank', '_blank');
+                handleSubmit(orderPaymentMethodsDraft, pendingPrintWindowRef.current);
               }}
             >
               Aceptar
