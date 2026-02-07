@@ -80,11 +80,17 @@ export default function VentasPage() {
   const [appliedSellerName, setAppliedSellerName] = useState<string>("");
   const [showSellerSuggestions, setShowSellerSuggestions] = useState(false);
 
+  const [orderNumberLookup, setOrderNumberLookup] = useState<string[]>([]);
+  const [orderNumberQuery, setOrderNumberQuery] = useState("");
+  const [appliedOrderNumber, setAppliedOrderNumber] = useState<string>("");
+  const [showOrderNumberSuggestions, setShowOrderNumberSuggestions] = useState(false);
+
   const [selectedStatus, setSelectedStatus] = useState<string>("");
   const [onlyCurrentCash, setOnlyCurrentCash] = useState(true);
 
   const clientDropdownRef = useRef<HTMLDivElement | null>(null);
   const sellerDropdownRef = useRef<HTMLDivElement | null>(null);
+  const orderNumberDropdownRef = useRef<HTMLDivElement | null>(null);
 
   const clientOptions = useMemo(() => {
     return uniqueBy(clientLookup, (c) => c.name?.trim().toLowerCase() || "");
@@ -157,6 +163,14 @@ export default function VentasPage() {
     setCurrentPage(1);
   }, []);
 
+  const applyOrderNumberFilter = useCallback((value: string) => {
+    const next = value.trim();
+    setAppliedOrderNumber(next);
+    setOrderNumberQuery(next);
+    setShowOrderNumberSuggestions(false);
+    setCurrentPage(1);
+  }, []);
+
   const clearFilters = () => {
     setAppliedClientName('');
     setClientQuery('');
@@ -164,6 +178,9 @@ export default function VentasPage() {
     setAppliedSellerName('');
     setSellerQuery('');
     setShowSellerSuggestions(false);
+    setAppliedOrderNumber('');
+    setOrderNumberQuery('');
+    setShowOrderNumberSuggestions(false);
     setSelectedStatus('');
     setCurrentPage(1);
     // No afectar el checkbox "Caja actual"
@@ -196,6 +213,7 @@ export default function VentasPage() {
             storeId: effectiveStoreId,
             ...(appliedClientName ? { clientName: appliedClientName } : {}),
             ...(appliedSellerName ? { sellerName: appliedSellerName } : {}),
+            ...(appliedOrderNumber ? { orderNumber: appliedOrderNumber } : {}),
             ...(selectedStatus ? { status: selectedStatus } : {}),
             ...(onlyCurrentCash ? { currentCash: true } : {}),
           });
@@ -230,6 +248,7 @@ export default function VentasPage() {
     itemsPerPage,
     appliedClientName,
     appliedSellerName,
+    appliedOrderNumber,
     selectedStatus,
     onlyCurrentCash,
   ]);
@@ -462,6 +481,7 @@ export default function VentasPage() {
       if (e.key !== 'Escape') return;
       setShowClientSuggestions(false);
       setShowSellerSuggestions(false);
+      setShowOrderNumberSuggestions(false);
     };
 
     const onMouseDown = (e: MouseEvent) => {
@@ -472,6 +492,9 @@ export default function VentasPage() {
       if (sellerDropdownRef.current && !sellerDropdownRef.current.contains(target)) {
         setShowSellerSuggestions(false);
       }
+      if (orderNumberDropdownRef.current && !orderNumberDropdownRef.current.contains(target)) {
+        setShowOrderNumberSuggestions(false);
+      }
     };
 
     document.addEventListener('keydown', onKeyDown);
@@ -481,6 +504,32 @@ export default function VentasPage() {
       document.removeEventListener('mousedown', onMouseDown);
     };
   }, []);
+
+  useEffect(() => {
+    if (!showOrderNumberSuggestions) return;
+    const search = orderNumberQuery.trim();
+    if (!search) {
+      setOrderNumberLookup([]);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const data = await orderService.lookupOrderNumbers(search);
+        if (cancelled) return;
+        setOrderNumberLookup(Array.isArray(data) ? data : []);
+      } catch (error) {
+        if (cancelled) return;
+        setOrderNumberLookup([]);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [orderNumberQuery, showOrderNumberSuggestions]);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -600,7 +649,7 @@ export default function VentasPage() {
               </div>
             </div>
             <div className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
                 <div ref={clientDropdownRef} className="relative">
                   <Label className="text-xs text-muted-foreground">Cliente</Label>
                   <Input
@@ -640,6 +689,52 @@ export default function VentasPage() {
                           ))}
                         {clientQuery.trim() &&
                           clientOptions.filter((c) => c.name.toLowerCase().includes(clientQuery.trim().toLowerCase())).length === 0 && (
+                            <div className="px-3 py-2 text-sm text-muted-foreground">Sin coincidencias</div>
+                          )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div ref={orderNumberDropdownRef} className="relative">
+                  <Label className="text-xs text-muted-foreground">N° Orden</Label>
+                  <Input
+                    placeholder="Número de orden..."
+                    value={orderNumberQuery}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setOrderNumberQuery(val);
+                      setShowOrderNumberSuggestions(Boolean(val.trim()));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        applyOrderNumberFilter(orderNumberQuery);
+                      }
+                      if (e.key === 'Escape') {
+                        setShowOrderNumberSuggestions(false);
+                      }
+                    }}
+                    onFocus={() => setShowOrderNumberSuggestions(Boolean(orderNumberQuery.trim()))}
+                  />
+                  {showOrderNumberSuggestions && (
+                    <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
+                      <div className="max-h-56 overflow-auto">
+                        {orderNumberLookup
+                          .filter((n) => n.toLowerCase().includes(orderNumberQuery.trim().toLowerCase()))
+                          .slice(0, 12)
+                          .map((n) => (
+                            <button
+                              key={n}
+                              type="button"
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                              onClick={() => applyOrderNumberFilter(n)}
+                            >
+                              {n}
+                            </button>
+                          ))}
+                        {orderNumberQuery.trim() &&
+                          orderNumberLookup.filter((n) => n.toLowerCase().includes(orderNumberQuery.trim().toLowerCase())).length === 0 && (
                             <div className="px-3 py-2 text-sm text-muted-foreground">Sin coincidencias</div>
                           )}
                       </div>
@@ -737,7 +832,7 @@ export default function VentasPage() {
               </div>
 
               <ActiveFilters 
-                hasActiveFilters={!!(appliedClientName || appliedSellerName || selectedStatus)}
+                hasActiveFilters={!!(appliedClientName || appliedSellerName || appliedOrderNumber || selectedStatus)}
                 onClearFilters={clearFilters}
               />
 

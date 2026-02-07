@@ -177,6 +177,7 @@ export const orderService = {
     page?: number;
     pageSize?: number;
     clientName?: string;
+    orderNumber?: string;
     status?: string;
     currentCash?: boolean;
     storeId?: string;
@@ -195,7 +196,13 @@ export const orderService = {
     } catch (error) {
       const status = (error as any)?.response?.status;
       if (status === 404) {
-        return { data: [], total: 0, totalPages: 1, page: 1, pageSize: 10 };
+        return {
+          data: [],
+          total: 0,
+          totalPages: 1,
+          page: params?.page ?? 1,
+          pageSize: params?.pageSize ?? 10,
+        };
       }
       throw error;
     }
@@ -210,6 +217,18 @@ export const orderService = {
       },
     });
     return response.data;
+  },
+
+  async lookupOrderNumbers(search?: string): Promise<string[]> {
+    const token = localStorage.getItem("auth_token");
+    const response = await api.get<string[]>('orders/lookup-order-numbers', {
+      params: search?.trim() ? { search: search.trim() } : undefined,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    return Array.isArray(response.data) ? response.data : [];
   },
 
   async addOrderPayments(orderId: string, payments: Array<{ type: PaymentTypeInput; amount: number }>): Promise<Order> {
