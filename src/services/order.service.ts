@@ -183,14 +183,22 @@ export const orderService = {
     sellerName?: string;
   }): Promise<OrdersListResponse> {
     const token = localStorage.getItem("auth_token");
-    const response = await api.get<OrdersListResponse>('orders/list', {
-      params,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
-    });
-    return response.data;
+    try {
+      const response = await api.get<OrdersListResponse>('orders/list', {
+        params,
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      });
+      return response.data;
+    } catch (error) {
+      const status = (error as any)?.response?.status;
+      if (status === 404) {
+        return { data: [], total: 0, totalPages: 1, page: 1, pageSize: 10 };
+      }
+      throw error;
+    }
   },
 
   async getOrderStatusLookup(): Promise<OrderLookupItem[]> {

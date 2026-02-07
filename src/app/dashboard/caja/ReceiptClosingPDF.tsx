@@ -237,7 +237,7 @@ const ReceiptClosingPDF: React.FC<ReceiptClosingPDFProps> = ({ data, showOrders 
               <Text style={[styles.textBold, { marginBottom: 4 }]}>INGRESOS REGISTRADOS</Text>
               {groupedOrderEntries.map(([ticket, ticketOrders]) => (
                 <View key={ticket} style={{ marginBottom: 6 }}>
-                  <Text style={[styles.textBold, { marginBottom: 2 }]}>Ticket {ticket}</Text>
+                  <Text style={[styles.textBold, { marginBottom: 2 }]}>Ticket ...{ticket}</Text>
                   {ticketOrders.map((order, idx) => (
                     <View key={`${ticket}-${idx}`} style={styles.row}>
                       <Text style={{ flex: 1, marginRight: 4 }}>
