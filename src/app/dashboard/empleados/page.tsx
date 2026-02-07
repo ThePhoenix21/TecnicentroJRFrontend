@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Search, Users, Trash2, Edit2, Save, RotateCcw, Plus } from "lucide-react";
+import { Search, Users, Trash2, Edit2, Save, RotateCcw, Plus, CheckCircle2 } from "lucide-react";
 import { ActiveFilters } from "@/components/ui/active-filters";
 
 import { employedService } from "@/services/employed.service";
@@ -1691,13 +1691,52 @@ export default function EmpleadosPage() {
           )}
 
           {recreateStep === "result" && (
-            <div className="space-y-4">
-              <div className="rounded-md border p-4">
-                <p className="font-medium">Respuesta</p>
-                <pre className="mt-2 text-xs whitespace-pre-wrap break-words">
+            <div className="space-y-5">
+              <div className="rounded-2xl border border-emerald-200/60 bg-emerald-50/80 p-5 dark:border-emerald-900/40 dark:bg-emerald-950/30">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-full bg-white/70 p-2 text-emerald-600 shadow-sm dark:bg-emerald-900/50">
+                    <CheckCircle2 className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-base font-semibold">Empleado recreado correctamente</p>
+                    <p className="text-sm text-muted-foreground">Comparte estos datos con el responsable del área.</p>
+                  </div>
+                </div>
+
+                <dl className="mt-5 grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Nombre completo</dt>
+                    <dd className="text-sm font-semibold">{[recreateResult?.firstName, recreateResult?.lastName].filter(Boolean).join(" ") || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Documento</dt>
+                    <dd className="text-sm font-semibold">{recreateResult?.document || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Cargo</dt>
+                    <dd className="text-sm font-semibold">{recreateResult?.position || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Rol asignado</dt>
+                    <dd className="text-sm font-semibold">{recreateResult?.assignmentRole || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tienda</dt>
+                    <dd className="text-sm font-semibold">{recreateResult?.storeAssignments?.[0]?.store?.name || recreateResult?.store?.name || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Almacén</dt>
+                    <dd className="text-sm font-semibold">{recreateResult?.warehouseAssignments?.[0]?.warehouse?.name || recreateResult?.warehouse?.name || "—"}</dd>
+                  </div>
+                </dl>
+              </div>
+
+              <details className="rounded-xl border bg-muted/40 p-4 text-sm">
+                <summary className="cursor-pointer select-none font-medium">Ver respuesta completa (JSON)</summary>
+                <pre className="mt-3 text-xs whitespace-pre-wrap break-words">
                   {JSON.stringify(recreateResult, null, 2)}
                 </pre>
-              </div>
+              </details>
 
               <DialogFooter>
                 <Button onClick={closeRecreateResult}>Cerrar</Button>
@@ -1903,13 +1942,39 @@ export default function EmpleadosPage() {
           )}
 
           {createStep === "result" && (
-            <div className="space-y-4">
-              <div className="rounded-md border p-4">
-                <p className="font-medium">Respuesta</p>
-                <pre className="mt-2 text-xs whitespace-pre-wrap break-words">
-                  {JSON.stringify(createResult, null, 2)}
-                </pre>
-              </div>
+            <div className="space-y-5">
+              <div className="rounded-2xl border border-blue-200/60 bg-blue-50/80 p-5 dark:border-blue-900/40 dark:bg-blue-950/30">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-full bg-white/70 p-2 text-blue-600 shadow-sm dark:bg-blue-900/50">
+                    <CheckCircle2 className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-base font-semibold">Empleado creado correctamente</p>
+                    <p className="text-sm text-muted-foreground">Utiliza estos datos para completar el onboarding.</p>
+                  </div>
+                </div>
+
+                <dl className="mt-5 grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Nombre completo</dt>
+                    <dd className="text-sm font-semibold">{[createResult?.firstName, createResult?.lastName].filter(Boolean).join(" ") || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Cargo</dt>
+                    <dd className="text-sm font-semibold">{createResult?.position || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tienda / Almacén</dt>
+                    <dd className="text-sm font-semibold">{createResult?.assignmentName || "—"}</dd>
+                  </div>                  
+                </dl>
+
+                {createResult?.createdAt && (
+                  <p className="mt-4 text-xs text-muted-foreground">
+                    Registrado el {new Date(createResult.createdAt).toLocaleString()}
+                  </p>
+                )}
+              </div>              
 
               <DialogFooter>
                 <Button onClick={closeCreateResult}>Cerrar</Button>

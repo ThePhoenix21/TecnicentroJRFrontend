@@ -171,11 +171,11 @@ const ReceiptClosingPDF: React.FC<ReceiptClosingPDFProps> = ({ data, showOrders 
           
           {/* Balance */}
           <View style={[styles.row, styles.textBold]}>
-            <Text>BALANCE TEORICO EN EFECTIVO: </Text>
+            <Text>MONTO EFECTIVO EN SISTEMA: </Text>
             <Text>{formatCurrency(balance.closingAmount)}</Text>
           </View>
           <View style={[styles.row, { marginTop: 2 }]}>
-            <Text>Balance declarado:</Text>
+            <Text>Monto declarado (físico):</Text>
             <Text>{formatCurrency(balance.declaredAmount)}</Text>
           </View>
           <View style={[styles.row, { marginTop: 2 }]}>
@@ -186,7 +186,7 @@ const ReceiptClosingPDF: React.FC<ReceiptClosingPDFProps> = ({ data, showOrders 
           <View style={styles.divider} />
           
           {/* Resumen Financiero */}
-          <Text style={[styles.textBold, { marginBottom: 4 }]}>RESUMEN FINANCIERO</Text>
+          <Text style={[styles.textBold, { marginBottom: 4 }]}>RESUMEN INGRESO / EGRESO</Text>
           <View style={styles.row}>
             <Text>Monto Apertura:</Text>
             <Text>{formatCurrency(balance.openingAmount)}</Text>
@@ -196,9 +196,13 @@ const ReceiptClosingPDF: React.FC<ReceiptClosingPDFProps> = ({ data, showOrders 
             <Text>{formatCurrency(balance.totalIngresos)}</Text>
           </View>
           <View style={styles.row}>
-            <Text>(-) Egresos totales:</Text>
+            <Text style={{ flex: 1, marginRight: 4 }}>(-) Egresos totales:</Text>
             <Text>{formatCurrency(balance.totalSalidas)}</Text>
-          </View>          
+          </View>
+          <View style={styles.row}>
+            <Text style={[styles.textBold]}>Ganacia total:</Text>
+            <Text style={[styles.textBold]}>{formatCurrency(balance.totalIngresos - balance.totalSalidas)}</Text>
+          </View>
           
           <View style={styles.divider} />          
 
