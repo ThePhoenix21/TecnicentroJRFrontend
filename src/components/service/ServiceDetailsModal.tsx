@@ -129,6 +129,16 @@ export default function ServiceDetailsModal({ serviceId, isOpen, onClose }: Serv
 
   if (!currentService) return null;
 
+  const totalPaidAmount = currentService.order?.paymentMethods?.reduce((sum, method) => {
+    return sum + (Number(method?.amount) || 0);
+  }, 0) ?? 0;
+
+  const orderTotalAmount = Number(currentService.order?.totalAmount ?? currentService.service?.price ?? 0);
+  const isOrderMarkedPaid = (currentService.order?.status || '').toUpperCase() === 'PAID';
+  const isServiceMarkedPaid = currentService.service?.status === ServiceStatus.PAID;
+  const hasFullyPaidAmount = orderTotalAmount > 0 ? totalPaidAmount >= orderTotalAmount - 0.009 : totalPaidAmount > 0;
+  const isPaymentCompleted = isServiceMarkedPaid || isOrderMarkedPaid || hasFullyPaidAmount;
+
   // Función para validar URLs de imágenes
   const isValidImageUrl = (url: string | undefined): boolean => {
     if (!url) return false;
@@ -224,8 +234,8 @@ export default function ServiceDetailsModal({ serviceId, isOpen, onClose }: Serv
               <Badge variant={getStatusVariant(currentService?.service?.status)}>
                 {translateStatus(currentService?.service?.status)}
               </Badge>
-              <Badge variant={currentService?.service?.status === ServiceStatus.PAID ? 'default' : 'secondary'}>
-                {currentService?.service?.status === ServiceStatus.PAID ? 'Pagado' : 'Pago pendiente'}
+              <Badge variant={isPaymentCompleted ? 'default' : 'secondary'}>
+                {isPaymentCompleted ? 'Pagado' : 'Pago pendiente'}
               </Badge>
             </div>
           </DialogHeader>
