@@ -788,6 +788,7 @@ export default function VentasPage() {
                       const visiblePaymentMethods = paymentMethods.slice(0, 2);
                       const hasMorePaymentMethods = paymentMethods.length > 2;
                       const totalPaidAmount = paymentMethods.reduce((sum, pm) => sum + (Number(pm?.amount) || 0), 0);
+                      const latestPaymentMethod = paymentMethods[paymentMethods.length - 1];
                       const totalRefundAmount = refundPaymentMethods.reduce((sum, pm) => sum + (Number(pm?.amount) || 0), 0);
                       const hasRegisteredPayments = totalPaidAmount > 0;
 
@@ -906,19 +907,25 @@ export default function VentasPage() {
                           <TableCell className="px-2 py-3 text-center hidden md:table-cell">
                             {shouldShowPaymentMethods ? (
                               <div className="flex flex-col items-center gap-0.5">
-                                {visiblePaymentMethods.map((pm, idx) => (
-                                  <span
-                                    key={`${order.id || index}-${pm?.type || "pm"}-${idx}`}
-                                    className="text-xs whitespace-nowrap"
-                                    title={String(pm?.type || "")}
-                                  >
-                                    {paymentMethods.length > 1
-                                      ? `${pm?.type || "-"} ${formatCurrency(Number(pm?.amount) || 0)}`
-                                      : pm?.type || "-"}
+                                {statusKey === "PAID" ? (
+                                  <span className="text-xs whitespace-nowrap">
+                                    {`${latestPaymentMethod?.type || "-"} ${formatCurrency(totalPaidAmount)}`}
                                   </span>
-                                ))}
-                                {hasMorePaymentMethods && (
-                                  <span className="text-xs text-muted-foreground">...</span>
+                                ) : (
+                                  <>
+                                    {visiblePaymentMethods.map((pm, idx) => (
+                                      <span
+                                        key={`${order.id || index}-${pm?.type || "pm"}-${idx}`}
+                                        className="text-xs whitespace-nowrap"
+                                        title={String(pm?.type || "")}
+                                      >
+                                        {`${pm?.type || "-"} ${formatCurrency(Number(pm?.amount) || 0)}`}
+                                      </span>
+                                    ))}
+                                    {hasMorePaymentMethods && (
+                                      <span className="text-xs text-muted-foreground">...</span>
+                                    )}
+                                  </>
                                 )}
                               </div>
                             ) : (
