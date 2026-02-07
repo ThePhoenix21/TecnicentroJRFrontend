@@ -784,8 +784,12 @@ export default function VentasPage() {
                       const productCount = order.products?.length ?? 0;
                       const serviceCount = order.services?.length ?? 0;
                       const paymentMethods = order.paymentMethods ?? [];
+                      const refundPaymentMethods = order.refundPaymentMethods ?? [];
                       const visiblePaymentMethods = paymentMethods.slice(0, 2);
                       const hasMorePaymentMethods = paymentMethods.length > 2;
+                      const totalPaidAmount = paymentMethods.reduce((sum, pm) => sum + (Number(pm?.amount) || 0), 0);
+                      const totalRefundAmount = refundPaymentMethods.reduce((sum, pm) => sum + (Number(pm?.amount) || 0), 0);
+                      const hasRegisteredPayments = totalPaidAmount > 0;
 
                       const displayTotal = Number(order.total ?? 0);
 
@@ -819,6 +823,18 @@ export default function VentasPage() {
                       const statusKey = (order.status || "PENDING") as keyof typeof statusConfig;
                       const status = statusConfig[statusKey] || statusConfig.PENDING;
                       const orderId = order.id || String(index);
+                      const isServiceOrder = serviceCount > 0;
+                      const isCancelledOrder = statusKey === 'CANCELLED';
+                      const refundDifference = Math.abs(totalPaidAmount - totalRefundAmount);
+                      const hasRefundDifference = refundDifference > 0.009; // Consider cent-level differences
+                      let shouldShowPaymentMethods =
+                        paymentMethods.length > 0 &&
+                        (!isServiceOrder || hasRegisteredPayments) &&
+                        (!isCancelledOrder || (hasRegisteredPayments && hasRefundDifference));
+
+                      if (isCancelledOrder) {
+                        shouldShowPaymentMethods = false;
+                      }
 
                       return (
                         <TableRow
@@ -888,7 +904,7 @@ export default function VentasPage() {
                           </TableCell>
 
                           <TableCell className="px-2 py-3 text-center hidden md:table-cell">
-                            {visiblePaymentMethods.length > 0 ? (
+                            {shouldShowPaymentMethods ? (
                               <div className="flex flex-col items-center gap-0.5">
                                 {visiblePaymentMethods.map((pm, idx) => (
                                   <span

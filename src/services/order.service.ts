@@ -115,6 +115,7 @@ export interface OrderListItem {
   services: OrderListServiceItem[];
   status: string;
   paymentMethods: OrderListPaymentMethodItem[];
+  refundPaymentMethods?: OrderListPaymentMethodItem[];
   totalAmount?: number;
   total?: number;
 }
