@@ -180,7 +180,7 @@ const getSidebarItems = (
       requiredPermissions: ["VIEW_INVENTORY", "MANAGE_INVENTORY"],
     },
     {
-      name: "Configuración",
+      name: "Usuarios",
       href: "/dashboard/configuracion/usuarios",
       icon: Users,
       roles: ["ADMIN"],
