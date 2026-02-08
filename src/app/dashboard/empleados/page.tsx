@@ -429,6 +429,34 @@ export default function EmpleadosPage() {
       setCreateResult(res);
       setCreateStep("result");
       toast.success("Empleado creado");
+      
+      // Refresh all data including employees list and lookups
+      await Promise.all([
+        loadEmployees(),
+        // Reload all lookup data
+        employedService.getPositionsLookup().then(positions => {
+          const safePositions = Array.isArray(positions)
+            ? uniqueBy(positions, (item) => item?.toLowerCase())
+            : [];
+          setPositionOptions(safePositions);
+        }),
+        employedService.getStatusLookup().then(statuses => {
+          const safeStatuses = Array.isArray(statuses)
+            ? uniqueBy(statuses, (item) => item)
+            : [];
+          setStatusOptions(safeStatuses);
+        }),
+        employedService.getEmployedLookup().then(names => {
+          const safeNames = Array.isArray(names)
+            ? uniqueBy(
+                names,
+                (item) =>
+                  `${item.firstName?.trim().toLowerCase() ?? ""}|${item.lastName?.trim().toLowerCase() ?? ""}`
+              )
+            : [];
+          setNameLookup(safeNames);
+        })
+      ]);
     } catch (error: any) {
       console.error(error);
       toast.error(error?.response?.data?.message || error?.message || "Error al crear empleado");
