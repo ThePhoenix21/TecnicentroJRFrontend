@@ -135,6 +135,15 @@ export default function OrdenesSuministroPage() {
     products: [],
   });
 
+  // Estados para edición
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    description: '',
+    storeId: '',
+    products: [] as any[]
+  });
+  const [editSubmitting, setEditSubmitting] = useState(false);
+
   const [createOpen, setCreateOpen] = useState(false);
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [lookupLoading, setLookupLoading] = useState(false);
@@ -428,21 +437,93 @@ export default function OrdenesSuministroPage() {
   const closeDetail = () => {
     setDetailOpen(false);
     setDetail(null);
-    setDetailLoading(false);
-    setDetailSubmitting(false);
+    setIsEditing(false);
   };
 
-  const closeReceive = () => {
-    setReceiveOpen(false);
-    setReceiveDetail(null);
-    setReceiveDetailLoading(false);
-    setReceiveSubmitting(false);
-    setReceiveForm({
-      reference: "",
-      notes: "",
-      closePartial: false,
-      products: [],
+  const startEdit = () => {
+    if (!detail) return;
+    setIsEditing(true);
+    setEditForm({
+      description: detail.description || '',
+      storeId: detail.store?.id || '',
+      products: detail.products.map(p => ({
+        productId: p.productId,
+        quantity: p.quantity,
+        note: p.note || ''
+      }))
     });
+  };
+
+  const cancelEdit = () => {
+    setIsEditing(false);
+    setEditForm({
+      description: '',
+      storeId: '',
+      products: []
+    });
+  };
+
+  const handleEditSubmit = async () => {
+    if (!detail) return;
+    
+    // Validaciones básicas
+    if (!editForm.storeId) {
+      toast.error("Seleccione una tienda");
+      return;
+    }
+    
+    if (editForm.products.length === 0 || editForm.products.some(p => !p.productId || p.quantity <= 0)) {
+      toast.error("Complete los productos correctamente");
+      return;
+    }
+
+    try {
+      setEditSubmitting(true);
+      
+      const updateData = {
+        description: editForm.description,
+        storeId: editForm.storeId,
+        products: editForm.products
+      };
+
+      await supplyOrderService.updateSupplyOrder(detail.id, updateData);
+      
+      // Recargar el detalle
+      const updatedDetail = await supplyOrderService.getSupplyOrderById(detail.id);
+      setDetail(updatedDetail);
+      
+      setIsEditing(false);
+      toast.success("Orden actualizada correctamente");
+      loadOrders(page);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.response?.data?.message || error?.message || "No se pudo actualizar la orden");
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
+  const addEditProduct = () => {
+    setEditForm(prev => ({
+      ...prev,
+      products: [...prev.products, { productId: '', quantity: 1, note: '' }]
+    }));
+  };
+
+  const removeEditProduct = (index: number) => {
+    setEditForm(prev => ({
+      ...prev,
+      products: prev.products.filter((_, i) => i !== index)
+    }));
+  };
+
+  const updateEditProduct = (index: number, field: string, value: any) => {
+    setEditForm(prev => ({
+      ...prev,
+      products: prev.products.map((product, i) => 
+        i === index ? { ...product, [field]: value } : product
+      )
+    }));
   };
 
   const handleAnnull = async () => {
@@ -497,6 +578,17 @@ export default function OrdenesSuministroPage() {
     } finally {
       setReceiveSubmitting(false);
     }
+  };
+
+  const closeReceive = () => {
+    setReceiveOpen(false);
+    setReceiveDetail(null);
+    setReceiveForm({
+      reference: "",
+      notes: "",
+      closePartial: false,
+      products: [],
+    });
   };
 
   const handleApprove = async () => {
@@ -988,9 +1080,17 @@ export default function OrdenesSuministroPage() {
                   </div>
 
                   {detail.description && (
-                    <div className="space-y-1 rounded-lg border bg-background p-4">
-                      <span className="text-xs text-muted-foreground">Descripción</span>
-                      <div className="text-sm">{detail.description}</div>
+                    <div className="space-y-2 rounded-lg border bg-background p-4">
+                      <h3 className="text-sm font-semibold">Descripción</h3>
+                      {isEditing ? (
+                        <Input
+                          value={editForm.description}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
+                          placeholder="Descripción de la orden"
+                        />
+                      ) : (
+                        <div className="text-sm">{detail.description}</div>
+                      )}
                     </div>
                   )}
 
@@ -1017,11 +1117,29 @@ export default function OrdenesSuministroPage() {
                     {detail.store && (
                       <div className="space-y-2 rounded-lg border bg-background p-4">
                         <h3 className="text-sm font-semibold">Tienda</h3>
-                        <div className="text-sm space-y-1">
-                          <div>{detail.store.name}</div>
-                          {detail.store.address && <div className="text-muted-foreground">{detail.store.address}</div>}
-                          {detail.store.phone && <div className="text-muted-foreground">Tel: {detail.store.phone}</div>}
-                        </div>
+                        {isEditing ? (
+                          <Select
+                            value={editForm.storeId}
+                            onValueChange={(value) => setEditForm(prev => ({ ...prev, storeId: value }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Seleccionar tienda" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {storesLookup.map((store) => (
+                                <SelectItem key={store.id} value={store.id}>
+                                  {store.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <div className="text-sm space-y-1">
+                            <div>{detail.store.name}</div>
+                            {detail.store.address && <div className="text-muted-foreground">{detail.store.address}</div>}
+                            {detail.store.phone && <div className="text-muted-foreground">Tel: {detail.store.phone}</div>}
+                          </div>
+                        )}
                       </div>
                     )}
                     {detail.warehouse && (
@@ -1037,18 +1155,81 @@ export default function OrdenesSuministroPage() {
                   </div>
 
                   <div className="space-y-2 rounded-lg border bg-background p-4">
-                    <h3 className="text-sm font-semibold">Productos solicitados</h3>
-                    {detail.products.length === 0 ? (
-                      <div className="text-sm text-muted-foreground">Sin productos</div>
-                    ) : (
-                      <div className="rounded-md border divide-y">
-                        {detail.products.map((product) => (
-                          <div key={product.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                            <span>{product.product?.name || "Producto"}</span>
-                            <span className="text-muted-foreground">Cantidad: {product.quantity}</span>
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold">Productos solicitados</h3>
+                      {isEditing && (
+                        <Button size="sm" onClick={addEditProduct}>
+                          Agregar producto
+                        </Button>
+                      )}
+                    </div>
+                    {isEditing ? (
+                      <div className="space-y-3">
+                        {editForm.products.map((product, index) => (
+                          <div key={index} className="rounded-md border p-3 text-sm space-y-2">
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                              <div className="flex-1">
+                                <label className="text-xs text-muted-foreground">Producto</label>
+                                <Select
+                                  value={product.productId}
+                                  onValueChange={(value) => updateEditProduct(index, 'productId', value)}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Seleccionar producto" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {productsLookup.map((p) => (
+                                      <SelectItem key={p.id} value={p.id}>
+                                        {p.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="w-24">
+                                <label className="text-xs text-muted-foreground">Cantidad</label>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  value={product.quantity}
+                                  onChange={(e) => updateEditProduct(index, 'quantity', Number(e.target.value))}
+                                />
+                              </div>
+                              <div className="flex-1">
+                                <label className="text-xs text-muted-foreground">Nota</label>
+                                <Input
+                                  value={product.note || ''}
+                                  onChange={(e) => updateEditProduct(index, 'note', e.target.value)}
+                                  placeholder="Nota opcional"
+                                />
+                              </div>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => removeEditProduct(index)}
+                                className="mt-4"
+                              >
+                                Eliminar
+                              </Button>
+                            </div>
                           </div>
                         ))}
                       </div>
+                    ) : (
+                      <>
+                        {detail.products.length === 0 ? (
+                          <div className="text-sm text-muted-foreground">Sin productos</div>
+                        ) : (
+                          <div className="rounded-md border divide-y">
+                            {detail.products.map((product) => (
+                              <div key={product.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                                <span>{product.product?.name || "Producto"}</span>
+                                <span className="text-muted-foreground">Cantidad: {product.quantity}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
 
@@ -1089,29 +1270,58 @@ export default function OrdenesSuministroPage() {
 
             <DialogFooter className="px-6 py-4 border-t flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-col sm:flex-row gap-2">
-                <Button
-                  variant="destructive"
-                  onClick={handleAnnull}
-                  disabled={
-                    detailSubmitting ||
-                    detailLoading ||
-                    !detail ||
-                    !["ISSUED", "PENDING"].includes(detail.status)
-                  }
-                >
-                  {detailSubmitting ? "Anulando..." : "Anular orden"}
-                </Button>
+                {isEditing ? (
+                  <>
+                    <Button
+                      variant="muted"
+                      onClick={cancelEdit}
+                      disabled={editSubmitting}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      onClick={handleEditSubmit}
+                      disabled={editSubmitting || detailLoading}
+                    >
+                      {editSubmitting ? "Guardando..." : "Guardar cambios"}
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    variant="destructive"
+                    onClick={handleAnnull}
+                    disabled={
+                      detailSubmitting ||
+                      detailLoading ||
+                      !detail ||
+                      !["ISSUED", "PENDING"].includes(detail.status)
+                    }
+                  >
+                    {detailSubmitting ? "Anulando..." : "Anular orden"}
+                  </Button>
+                )}
               </div>
               <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
-                <Button variant="muted" onClick={closeDetail} disabled={detailSubmitting}>
+                {!isEditing && (
+                  <Button
+                    variant="outline"
+                    onClick={startEdit}
+                    disabled={detailSubmitting || detailLoading || !detail || detail.status !== "ISSUED"}
+                  >
+                    Editar
+                  </Button>
+                )}
+                <Button variant="muted" onClick={closeDetail} disabled={detailSubmitting || editSubmitting}>
                   Cerrar
                 </Button>
-                <Button
-                  onClick={handleApprove}
-                  disabled={detailSubmitting || detailLoading || !detail || detail.status !== "ISSUED"}
-                >
-                  {detailSubmitting ? "Aprobando..." : "Aprobar orden"}
-                </Button>
+                {!isEditing && (
+                  <Button
+                    onClick={handleApprove}
+                    disabled={detailSubmitting || detailLoading || !detail || detail.status !== "ISSUED"}
+                  >
+                    {detailSubmitting ? "Aprobando..." : "Aprobar orden"}
+                  </Button>
+                )}
               </div>
             </DialogFooter>
           </div>

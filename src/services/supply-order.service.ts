@@ -50,6 +50,10 @@ class SupplyOrderService {
     return response.data;
   }
 
+  async updateSupplyOrder(orderId: string, payload: { description: string; storeId: string; products: any[] }): Promise<void> {
+    await api.put(`${this.baseUrl}/${orderId}`, payload);
+  }
+
   async getSupplyOrdersLookup(): Promise<SupplyOrderLookupItem[]> {
     const response = await api.get<SupplyOrderLookupItem[]>(`${this.baseUrl}/lookup`);
     return response.data;

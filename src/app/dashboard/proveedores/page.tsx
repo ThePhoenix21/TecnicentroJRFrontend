@@ -226,8 +226,8 @@ export default function ProveedoresPage() {
       address: createForm.address?.trim() || undefined,
     };
 
-    if (!dto.ruc || !dto.name) {
-      toast.error("Complete RUC y Nombre");
+    if (!dto.name) {
+      toast.error("Complete el Nombre del proveedor");
       return;
     }
 
@@ -935,11 +935,12 @@ export default function ProveedoresPage() {
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">RUC</label>
+                <label className="text-sm font-medium">RUC (Opcional)</label>
                 <Input
-                  value={createForm.ruc}
+                  value={createForm.ruc ?? ""}
                   onChange={(e) => setCreateForm((p) => ({ ...p, ruc: e.target.value }))}
                   disabled={createSubmitting}
+                  placeholder="No requerido"
                 />
               </div>
               <div className="space-y-2">

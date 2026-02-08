@@ -3,17 +3,20 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { inventoryService } from "@/services/inventory.service";
+import { storeProductService } from "@/services/store-product.service";
 import { InventoryStats } from "@/types/inventory.types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { 
   ArrowDownLeft, 
   ArrowUpRight, 
-  AlertTriangle, 
   Package, 
   TrendingUp,
   RefreshCw,
-  ShoppingCart
+  ShoppingCart,
+  List,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -22,6 +25,28 @@ export default function InventoryReportsPage() {
   const canViewInventory = hasPermission("VIEW_INVENTORY") || hasPermission("inventory.read");
   const [stats, setStats] = useState<InventoryStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [storeProducts, setStoreProducts] = useState<any[]>([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const pageSize = 12;
+
+  const loadStoreProducts = async (page = 1) => {
+    if (!currentStore?.id) return;
+    setIsLoadingProducts(true);
+    try {
+      const response = await storeProductService.getStoreProducts(currentStore.id, page, pageSize);
+      setStoreProducts(response.data || []);
+      setTotalPages(response.totalPages || 0);
+      setTotalProducts(response.total || 0);
+      setCurrentPage(page);
+    } catch (error) {
+      console.error("Error loading store products:", error);
+    } finally {
+      setIsLoadingProducts(false);
+    }
+  };
 
   const loadStats = async () => {
     if (!currentStore?.id) return;
@@ -39,6 +64,7 @@ export default function InventoryReportsPage() {
   useEffect(() => {
     if (canViewInventory) {
       loadStats();
+      loadStoreProducts();
     }
   }, [currentStore?.id, canViewInventory]);
 
@@ -124,46 +150,84 @@ export default function InventoryReportsPage() {
         </Card>
       </div>
 
-      {/* Critical Products */}
+      {/* Listado de Productos */}
       <Card className="col-span-4">
         <CardHeader>
           <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-red-500" />
-            <CardTitle>Productos Críticos</CardTitle>
+            <List className="h-5 w-5 text-blue-500" />
+            <CardTitle>Listado de Productos</CardTitle>
           </div>
           <CardDescription>
-            Productos con stock por debajo o igual al umbral mínimo definido.
+            Todos los productos de la tienda con su stock actual.
           </CardDescription>
         </CardHeader>
         <CardContent>
-            {criticalProducts.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground flex flex-col items-center">
-                    <Package className="h-10 w-10 mb-2 opacity-20" />
-                    <p>Todo en orden. No hay productos en estado crítico.</p>
+          {isLoadingProducts ? (
+            <div className="text-center py-8 text-muted-foreground flex flex-col items-center">
+              <RefreshCw className="h-10 w-10 mb-2 animate-spin" />
+              <p>Cargando productos...</p>
+            </div>
+          ) : storeProducts.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground flex flex-col items-center">
+              <Package className="h-10 w-10 mb-2 opacity-20" />
+              <p>No hay productos en la tienda.</p>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-2">
+                {storeProducts.map((product) => (
+                  <div key={product.id} className="flex items-center justify-between border-b pb-3 last:border-0 last:pb-0">
+                    <div className="flex-1">
+                      <p className="font-medium leading-none">{product.product?.name || 'Sin nombre'}</p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <span className={`text-2xl font-bold ${product.stock === 0 ? 'text-red-600' : product.stock < 10 ? 'text-yellow-600' : 'text-green-600'}`}>
+                          {product.stock || 0}
+                        </span>
+                        <p className="text-xs text-muted-foreground">Stock Actual</p>
+                      </div>
+                      <Badge variant={product.stock === 0 ? "destructive" : product.stock < 10 ? "secondary" : "default"}>
+                        {product.stock === 0 ? 'SIN STOCK' : product.stock < 10 ? 'BAJO' : 'DISPONIBLE'}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              {/* Paginación */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-6 pt-4 border-t">
+                  <div className="text-sm text-muted-foreground">
+                    Mostrando {storeProducts.length} de {totalProducts} productos
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => loadStoreProducts(currentPage - 1)}
+                      disabled={currentPage === 1 || isLoadingProducts}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Anterior
+                    </Button>
+                    <span className="text-sm text-muted-foreground px-3">
+                      Página {currentPage} de {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => loadStoreProducts(currentPage + 1)}
+                      disabled={currentPage === totalPages || isLoadingProducts}
+                    >
+                      Siguiente
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
-            ) : (
-                <div className="space-y-4">
-                    {criticalProducts.map((product) => (
-                        <div key={product.id} className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
-                            <div className="space-y-1">
-                                <p className="font-medium leading-none">{product.name}</p>
-                                <p className="text-sm text-muted-foreground">
-                                    Umbral mínimo: {product.threshold}
-                                </p>
-                            </div>
-                            <div className="flex items-center gap-4">
-                                <div className="text-right">
-                                    <span className="text-2xl font-bold text-red-600">{product.stock}</span>
-                                    <p className="text-xs text-muted-foreground">Stock Actual</p>
-                                </div>
-                                <Badge variant={product.status === 'CRITICAL' ? "destructive" : "secondary"}>
-                                    {product.status === 'CRITICAL' ? 'CRÍTICO' : 'BAJO'}
-                                </Badge>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
     </div>
