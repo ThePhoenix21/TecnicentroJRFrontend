@@ -501,8 +501,10 @@ export default function VentasPage() {
   }, [refreshFilterLookups, loadStatusLookup, loadStoresLookup]);
 
   useEffect(() => {
-    if (currentStore?.id && !selectedStoreId) {
+    if (!currentStore?.id) return;
+    if (selectedStoreId !== currentStore.id) {
       setSelectedStoreId(currentStore.id);
+      setCurrentPage(1);
     }
   }, [currentStore?.id, selectedStoreId]);
 
