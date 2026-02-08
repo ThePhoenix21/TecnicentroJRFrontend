@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -223,6 +223,7 @@ const getSidebarItems = (
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { user, logout, currentStore, hasPermission, selectStore, isAdmin, tenantFeatures, tenantFeaturesLoaded } = useAuth();
   const userRole = (user?.role || 'USER').toUpperCase();
   const sidebarItems = getSidebarItems(userRole || 'USER', hasPermission, tenantFeatures, tenantFeaturesLoaded);
@@ -258,6 +259,7 @@ export function AppSidebar() {
                       const nextStore = user?.stores?.find((s) => s.id === storeId);
                       if (nextStore) {
                         selectStore(nextStore as AuthStore);
+                        router.refresh();
                       }
                     }}
                   >
