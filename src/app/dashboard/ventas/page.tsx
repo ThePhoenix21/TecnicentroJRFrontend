@@ -352,6 +352,69 @@ export default function VentasPage() {
     router,
   ]);
 
+  const loadClientLookup = useCallback(async () => {
+    try {
+      const clients = await clientService.getLookupName();
+      const safeClients = Array.isArray(clients)
+        ? uniqueBy(clients, (c) => c.name?.trim().toLowerCase()).map((c) => ({
+            id: c.id,
+            name: String(c.name || ''),
+          }))
+        : [];
+      setClientLookup(safeClients);
+    } catch (error) {
+      console.error('Error cargando lookup de clientes:', error);
+    }
+  }, []);
+
+  const loadSellerLookup = useCallback(async () => {
+    try {
+      const sellers = await userService.getUsersLookup();
+      const safeSellers = Array.isArray(sellers)
+        ? uniqueBy(sellers, (s) => s.name?.trim().toLowerCase())
+        : [];
+      setSellerLookup(safeSellers);
+    } catch (error) {
+      console.error('Error cargando lookup de vendedores:', error);
+    }
+  }, []);
+
+  const loadStatusLookup = useCallback(async () => {
+    try {
+      const statuses = await orderService.getOrderStatusLookup();
+      setStatusLookup(statuses || []);
+    } catch (error) {
+      console.error('Error cargando lookup de estados:', error);
+    }
+  }, []);
+
+  const loadStoresLookup = useCallback(async () => {
+    try {
+      const stores = await storeService.getStoresLookup();
+      setStoresLookup(Array.isArray(stores) ? stores : []);
+    } catch (error) {
+      console.error('Error cargando tiendas (lookup):', error);
+    }
+  }, []);
+
+  const refreshFilterLookups = useCallback(async () => {
+    await Promise.all([loadClientLookup(), loadSellerLookup()]);
+  }, [loadClientLookup, loadSellerLookup]);
+
+  const loadOrderNumberLookup = useCallback(async (search: string) => {
+    const trimmed = search.trim();
+    if (!trimmed) {
+      setOrderNumberLookup([]);
+      return;
+    }
+    try {
+      const data = await orderService.lookupOrderNumbers(trimmed);
+      setOrderNumberLookup(Array.isArray(data) ? data : []);
+    } catch (error) {
+      setOrderNumberLookup([]);
+    }
+  }, []);
+
   const handleCreateOrder = useCallback(async (orderData: SaleData) => {
     if (!canManageOrders) {
       throw new Error('No tienes permisos para crear órdenes (MANAGE_ORDERS requerido)');
@@ -400,6 +463,10 @@ export default function VentasPage() {
     const newOrder = await orderService.createOrder(payload as any);
     toast.success('Orden registrada exitosamente');
     await loadData();
+    await refreshFilterLookups();
+    if (newOrder?.orderNumber) {
+      await loadOrderNumberLookup(String(newOrder.orderNumber));
+    }
 
     return {
       success: true,
@@ -407,7 +474,7 @@ export default function VentasPage() {
       orderNumber: newOrder.orderNumber,
       orderData: newOrder,
     };
-  }, [canManageOrders, loadData]);
+  }, [canManageOrders, loadData, refreshFilterLookups, loadOrderNumberLookup]);
 
   const handleOrderUpdate = useCallback((updatedOrder: Order) => {
     if (selectedOrder?.id === updatedOrder.id) {
@@ -425,50 +492,10 @@ export default function VentasPage() {
   }, [loadData]);
 
   useEffect(() => {
-    let isMounted = true;
-
-    const loadLookups = async () => {
-      try {
-        const [clients, sellers, statuses] = await Promise.all([
-          clientService.getLookupName(),
-          userService.getUsersLookup(),
-          orderService.getOrderStatusLookup(),
-        ]);
-        if (!isMounted) return;
-        const safeClients = Array.isArray(clients)
-          ? uniqueBy(clients, (c) => c.name?.trim().toLowerCase()).map((c) => ({
-              id: c.id,
-              name: String(c.name || ''),
-            }))
-          : [];
-        const safeSellers = Array.isArray(sellers)
-          ? uniqueBy(sellers, (s) => s.name?.trim().toLowerCase())
-          : [];
-        setClientLookup(safeClients);
-        setSellerLookup(safeSellers);
-        setStatusLookup(statuses || []);
-      } catch (error) {
-        console.error('Error cargando lookups de ventas:', error);
-      }
-    };
-
-    const loadStores = async () => {
-      try {
-        const stores = await storeService.getStoresLookup();
-        if (!isMounted) return;
-        setStoresLookup(Array.isArray(stores) ? stores : []);
-      } catch (error) {
-        console.error('Error cargando tiendas (lookup):', error);
-      }
-    };
-
-    loadLookups();
-    loadStores();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+    refreshFilterLookups();
+    loadStatusLookup();
+    loadStoresLookup();
+  }, [refreshFilterLookups, loadStatusLookup, loadStoresLookup]);
 
   useEffect(() => {
     if (currentStore?.id && !selectedStoreId) {
@@ -507,29 +534,17 @@ export default function VentasPage() {
 
   useEffect(() => {
     if (!showOrderNumberSuggestions) return;
-    const search = orderNumberQuery.trim();
-    if (!search) {
-      setOrderNumberLookup([]);
-      return;
-    }
-
     let cancelled = false;
-    const timer = setTimeout(async () => {
-      try {
-        const data = await orderService.lookupOrderNumbers(search);
-        if (cancelled) return;
-        setOrderNumberLookup(Array.isArray(data) ? data : []);
-      } catch (error) {
-        if (cancelled) return;
-        setOrderNumberLookup([]);
-      }
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      loadOrderNumberLookup(orderNumberQuery);
     }, 250);
 
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [orderNumberQuery, showOrderNumberSuggestions]);
+  }, [orderNumberQuery, showOrderNumberSuggestions, loadOrderNumberLookup]);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);

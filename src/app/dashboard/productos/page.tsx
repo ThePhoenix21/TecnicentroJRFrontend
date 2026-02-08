@@ -219,22 +219,22 @@ export default function ProductsPage() {
     fetchStoreProductsRef.current?.(1);
   }, [isAuthenticated, activeStoreId]);
 
-  useEffect(() => {
-    const loadLookup = async () => {
-      try {
-        setNameLookupLoading(true);
-        const lookup = await storeProductService.getCatalogProductsLookup('');
-        setNameSuggestions(Array.isArray(lookup) ? lookup : []);
-      } catch (error) {
-        console.error('Error loading product name lookup:', error);
-        setNameSuggestions([]);
-      } finally {
-        setNameLookupLoading(false);
-      }
-    };
-
-    loadLookup();
+  const loadProductLookup = useCallback(async () => {
+    try {
+      setNameLookupLoading(true);
+      const lookup = await storeProductService.getCatalogProductsLookup('');
+      setNameSuggestions(Array.isArray(lookup) ? lookup : []);
+    } catch (error) {
+      console.error('Error loading product name lookup:', error);
+      setNameSuggestions([]);
+    } finally {
+      setNameLookupLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadProductLookup();
+  }, [loadProductLookup]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -385,6 +385,9 @@ export default function ProductsPage() {
           title: 'Producto creado',
           description: 'El producto se ha creado correctamente',
         });
+
+        // Refrescar el lookup para que el nuevo producto aparezca en las sugerencias
+        await loadProductLookup();
       }
 
       await fetchStoreProducts();
@@ -398,7 +401,7 @@ export default function ProductsPage() {
         variant: 'destructive',
       });
     }
-  }, [currentStore, isEditing, currentStoreProduct, formData, isAdmin, fetchStoreProducts, toast]);
+  }, [currentStore, isEditing, currentStoreProduct, formData, isAdmin, fetchStoreProducts, toast, loadProductLookup]);
 
   const loadProductDetail = useCallback(async (productId: string) => {
     setDetailLoading(true);
