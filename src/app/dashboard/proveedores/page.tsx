@@ -236,7 +236,24 @@ export default function ProveedoresPage() {
       await providerService.createProvider(dto);
       toast.success("Proveedor creado");
       closeCreate();
-      await loadProviders();
+      
+      // Refresh all data including providers list and lookups
+      await Promise.all([
+        loadProviders(),
+        // Reload all lookup data
+        providerService.getProvidersLookup().then(providers => {
+          const safeProviders = Array.isArray(providers)
+            ? uniqueBy(providers, (item) => item.name?.trim().toLowerCase())
+            : [];
+          setProvidersLookup(safeProviders);
+        }),
+        providerService.getProvidersRucLookup().then(rucs => {
+          const safeRucs = Array.isArray(rucs)
+            ? uniqueBy(rucs, (item) => item.ruc?.trim())
+            : [];
+          setProvidersRucLookup(safeRucs);
+        })
+      ]);
     } catch (error: any) {
       console.error(error);
       toast.error(error?.response?.data?.message || error?.message || "Error al crear proveedor");

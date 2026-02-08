@@ -425,7 +425,15 @@ export default function OrdenesSuministroPage() {
       toast.success("Orden creada");
       setCreateOpen(false);
       resetCreateForm();
-      loadOrders(1);
+      
+      // Refresh all data including lookups and orders
+      await Promise.all([
+        loadOrders(1),
+        ensureLookupsLoaded(),
+        // Reload users and orders lookup as well
+        userService.getUsersLookup().then(users => setUsersLookup(Array.isArray(users) ? users : [])),
+        supplyOrderService.getSupplyOrdersLookup().then(orders => setOrdersLookup(Array.isArray(orders) ? orders : []))
+      ]);
     } catch (error: any) {
       console.error(error);
       toast.error(error?.response?.data?.message || error?.message || "No se pudo crear la orden");
