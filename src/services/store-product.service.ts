@@ -14,12 +14,18 @@ import {
 
 class StoreProductService {
   // Obtener productos simples de la tienda para el formulario de ventas
-  async getStoreProductsSimple(storeId: string, limit = 1000): Promise<{data: StoreProduct[], total: number}> {
+  async getStoreProductsSimple(storeId: string, options: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+  } = {}): Promise<{data: StoreProduct[], total: number}> {
     try {
-      // Endpoint: GET /store/products/store/{storeId}/simple?limit=1000
-      const params = new URLSearchParams({
-        limit: limit.toString(),
-      });
+      // Endpoint: GET /store/products/store/{storeId}/simple?page=1&pageSize=20&search=text
+      const params = new URLSearchParams();
+      if (options.page) params.set('page', options.page.toString());
+      if (options.pageSize) params.set('pageSize', options.pageSize.toString());
+      if (options.search) params.set('search', options.search);
+      
       console.log('🔍 Intentando endpoint simple:', `/store/products/store/${storeId}/simple?${params}`);
       const response = await api.get(`/store/products/store/${storeId}/simple?${params}`);
       return response.data; // El backend devuelve {data: Array, total}

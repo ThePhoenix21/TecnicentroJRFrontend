@@ -135,7 +135,9 @@ export default function ProveedoresPage() {
   const filteredRucSuggestions = useMemo(() => {
     const query = rucQuery.trim().toLowerCase();
     if (!query) return providersRucLookup.slice(0, 8);
-    return providersRucLookup.filter((item) => item.ruc.toLowerCase().includes(query)).slice(0, 8);
+    return providersRucLookup
+      .filter((item) => item.ruc && item.ruc.toLowerCase().includes(query))
+      .slice(0, 8);
   }, [rucQuery, providersRucLookup]);
 
   useEffect(() => {
