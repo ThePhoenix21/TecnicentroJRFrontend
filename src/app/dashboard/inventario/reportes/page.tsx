@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { inventoryService } from "@/services/inventory.service";
 import { storeProductService } from "@/services/store-product.service";
 import { InventoryStats } from "@/types/inventory.types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ActiveFilters } from "@/components/ui/active-filters";
 import { 
   ArrowDownLeft, 
   ArrowUpRight, 
@@ -16,7 +19,9 @@ import {
   ShoppingCart,
   List,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Search,
+  X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -31,13 +36,22 @@ export default function InventoryReportsPage() {
   const [totalPages, setTotalPages] = useState(0);
   const [totalProducts, setTotalProducts] = useState(0);
   const pageSize = 12;
+  
+  // Filter states
+  const [nameFilter, setNameFilter] = useState("");
+  const [stockFilter, setStockFilter] = useState<string>("all");
+  const [showNameSuggestions, setShowNameSuggestions] = useState(false);
+  const [allStoreProducts, setAllStoreProducts] = useState<any[]>([]);
+  const [searchInput, setSearchInput] = useState("");
 
   const loadStoreProducts = async (page = 1) => {
     if (!currentStore?.id) return;
     setIsLoadingProducts(true);
     try {
-      const response = await storeProductService.getStoreProducts(currentStore.id, page, pageSize);
-      setStoreProducts(response.data || []);
+      const response = await storeProductService.getStoreProducts(currentStore.id, page, pageSize * 10); // Load more for filtering
+      const products = response.data || [];
+      setAllStoreProducts(products);
+      setStoreProducts(products);
       setTotalPages(response.totalPages || 0);
       setTotalProducts(response.total || 0);
       setCurrentPage(page);
@@ -67,6 +81,66 @@ export default function InventoryReportsPage() {
       loadStoreProducts();
     }
   }, [currentStore?.id, canViewInventory]);
+
+  // Filter products based on name and stock availability
+  const filteredProducts = useMemo(() => {
+    let filtered = allStoreProducts;
+
+    // Filter by name
+    if (nameFilter.trim()) {
+      filtered = filtered.filter(product => 
+        product.product?.name?.toLowerCase().includes(nameFilter.toLowerCase())
+      );
+    }
+
+    // Filter by stock availability
+    if (stockFilter !== "all") {
+      filtered = filtered.filter(product => {
+        if (stockFilter === "available") {
+          return product.stock > 0;
+        } else if (stockFilter === "out_of_stock") {
+          return product.stock === 0;
+        }
+        return true;
+      });
+    }
+
+    return filtered;
+  }, [allStoreProducts, nameFilter, stockFilter]);
+
+  // Get unique product names for suggestions
+  const nameSuggestions = useMemo(() => {
+    const names = new Set(allStoreProducts.map(p => p.product?.name).filter(Boolean));
+    return Array.from(names).filter(name => 
+      name.toLowerCase().includes(searchInput.toLowerCase())
+    ).slice(0, 5);
+  }, [allStoreProducts, searchInput]);
+
+  // Check if there are active filters
+  const hasActiveFilters = nameFilter.trim() !== "" || stockFilter !== "all";
+
+  // Clear all filters
+  const clearFilters = () => {
+    setNameFilter("");
+    setSearchInput("");
+    setStockFilter("all");
+    setShowNameSuggestions(false);
+  };
+
+  // Handle name selection from suggestions
+  const handleNameSelect = (name: string) => {
+    setNameFilter(name);
+    setSearchInput(name);
+    setShowNameSuggestions(false);
+  };
+
+  // Handle Enter key in name input
+  const handleNameKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      setNameFilter(searchInput);
+      setShowNameSuggestions(false);
+    }
+  };
 
   if (!canViewInventory) {
     return (
@@ -162,6 +236,71 @@ export default function InventoryReportsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Filters */}
+          <div className="space-y-4 mb-6">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por nombre..."
+                  value={searchInput}
+                  onChange={(e) => {
+                    setSearchInput(e.target.value);
+                    setShowNameSuggestions(e.target.value.length > 0);
+                  }}
+                  onFocus={() => setShowNameSuggestions(searchInput.length > 0)}
+                  onBlur={() => setTimeout(() => setShowNameSuggestions(false), 200)}
+                  onKeyDown={handleNameKeyPress}
+                  className="pl-10"
+                />
+                {searchInput && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setSearchInput("");
+                      setNameFilter("");
+                    }}
+                    className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7 p-0"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                )}
+                
+                {/* Name suggestions dropdown */}
+                {showNameSuggestions && nameSuggestions.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-background border rounded-md shadow-lg z-10 max-h-40 overflow-y-auto">
+                    {nameSuggestions.map((name, index) => (
+                      <div
+                        key={index}
+                        className="px-3 py-2 hover:bg-muted cursor-pointer text-sm"
+                        onClick={() => handleNameSelect(name)}
+                      >
+                        {name}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              <Select value={stockFilter} onValueChange={setStockFilter}>
+                <SelectTrigger className="w-full sm:w-48">
+                  <SelectValue placeholder="Stock" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="available">Disponibles</SelectItem>
+                  <SelectItem value="out_of_stock">Sin stock</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <ActiveFilters 
+              hasActiveFilters={hasActiveFilters}
+              onClearFilters={clearFilters}
+            />
+          </div>
+
           {isLoadingProducts ? (
             <div className="text-center py-8 text-muted-foreground flex flex-col items-center">
               <RefreshCw className="h-10 w-10 mb-2 animate-spin" />
@@ -175,7 +314,13 @@ export default function InventoryReportsPage() {
           ) : (
             <>
               <div className="space-y-2">
-                {storeProducts.map((product) => (
+                {filteredProducts.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground flex flex-col items-center">
+                    <Package className="h-10 w-10 mb-2 opacity-20" />
+                    <p>No se encontraron productos con los filtros aplicados.</p>
+                  </div>
+                ) : (
+                  filteredProducts.map((product) => (
                   <div key={product.id} className="flex items-center justify-between border-b pb-3 last:border-0 last:pb-0">
                     <div className="flex-1">
                       <p className="font-medium leading-none">{product.product?.name || 'Sin nombre'}</p>
@@ -192,14 +337,18 @@ export default function InventoryReportsPage() {
                       </Badge>
                     </div>
                   </div>
-                ))}
+                ))
+                )}
               </div>
               
               {/* Paginación */}
               {totalPages > 1 && (
                 <div className="flex items-center justify-between mt-6 pt-4 border-t">
-                  <div className="text-sm text-muted-foreground">
-                    Mostrando {storeProducts.length} de {totalProducts} productos
+                  <div className="flex items-center justify-between text-sm text-muted-foreground">
+                    <span>Mostrando {filteredProducts.length} de {allStoreProducts.length} productos</span>
+                    {hasActiveFilters && (
+                      <span>Filtrados</span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
