@@ -113,14 +113,6 @@ export const clientService = {
     } catch (error) {
       const axiosError = error as AxiosError<{ message?: string }>;
       
-      console.error('Error en getClientByDni:', {
-        dni,
-        error: axiosError.message,
-        response: axiosError.response?.data,
-        status: axiosError.response?.status,
-        url: axiosError.config?.url
-      });
-      
       // ✅ Manejar error de permisos específico
       if (error instanceof Error && error.message.includes('solo ADMIN')) {
         throw error;
@@ -131,6 +123,15 @@ export const clientService = {
         console.log('Cliente no encontrado con DNI:', dni);
         return null;
       }
+      
+      // Solo loguear errores que no sean 404
+      console.error('Error en getClientByDni:', {
+        dni,
+        error: axiosError.message,
+        response: axiosError.response?.data,
+        status: axiosError.response?.status,
+        url: axiosError.config?.url
+      });
       
       throw new Error(
         axiosError.response?.data?.message || 

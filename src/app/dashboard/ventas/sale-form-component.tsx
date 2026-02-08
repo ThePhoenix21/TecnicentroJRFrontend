@@ -1246,6 +1246,8 @@ export function SaleForm({
 
           if (!hasAutoPrintedRef.current) {
             hasAutoPrintedRef.current = true;
+            // Create print window only after successful sale
+            const printWindow = window.open('about:blank', '_blank');
             await printThermalLikeOrderDetailsDialog(details, printWindow);
           }
         } else {
@@ -1255,18 +1257,31 @@ export function SaleForm({
         }
       }
     } catch (error) {
-      console.error("Error al procesar la venta:", error);
-
       // Extraer mensaje de error y código si están disponibles
       let errorMessage = error instanceof Error ? error.message : "Error al registrar la venta";
       let errorCode = error && typeof error === 'object' && 'code' in error ? String(error.code) : undefined;
 
+      // Manejar específicamente el error de email duplicado con DNI diferente
+      if (errorMessage.includes('El correo electrónico ya está registrado con un DNI diferente')) {
+        errorMessage = 'Este correo electrónico ya está registrado con otro DNI. Por favor, use un correo diferente o verifique el DNI ingresado.';
+        errorCode = 'EMAIL_DNI_MISMATCH';
+      }
       // Manejar específicamente el error de DNI duplicado
-      if (errorMessage.includes('Unique constraint failed on the fields: (`dni`)') ||
+      else if (errorMessage.includes('Unique constraint failed on the fields: (`dni`)') ||
         errorMessage.includes('duplicate key') ||
         errorCode === 'DNI_ALREADY_EXISTS') {
         errorMessage = 'El DNI 00000000 esta reservado para clientes por defecto. Ingrese un DNI diferente o deje el campo vacío para generar uno automáticamente.';
         errorCode = 'DNI_ALREADY_EXISTS';
+      }
+      // Manejar errores de validación comunes
+      else if (errorMessage.includes('validation') || errorMessage.includes('required')) {
+        errorMessage = 'Por favor, complete todos los campos obligatorios correctamente.';
+        errorCode = 'VALIDATION_ERROR';
+      }
+      // Manejar errores de conexión
+      else if (errorMessage.includes('network') || errorMessage.includes('connection')) {
+        errorMessage = 'Error de conexión. Por favor, verifique su conexión a internet e intente nuevamente.';
+        errorCode = 'CONNECTION_ERROR';
       }
 
       // Guardar el error en el estado para mostrarlo en la UI
@@ -2804,8 +2819,7 @@ export function SaleForm({
               onClick={() => {
                 setOrderPaymentMethods(orderPaymentMethodsDraft);
                 setIsOrderPaymentsModalOpen(false);
-                pendingPrintWindowRef.current = window.open('about:blank', '_blank');
-                handleSubmit(orderPaymentMethodsDraft, pendingPrintWindowRef.current);
+                handleSubmit(orderPaymentMethodsDraft);
               }}
             >
               Aceptar

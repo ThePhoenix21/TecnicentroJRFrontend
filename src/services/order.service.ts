@@ -458,11 +458,9 @@ export const orderService = {
 
       return response.data;
     } catch (error) {
-      console.error("Error Creating Order");
+      // Manejo silencioso de errores para evitar mostrar en consola
 
       if (error instanceof Error) {
-        console.error("Error Details:", error.message);
-
         if ('response' in error && error.response) {
           const response = error.response as {
             status?: number;
@@ -473,9 +471,6 @@ export const orderService = {
               statusCode?: number;
             };
           };
-
-          console.error("Response Status:", response.status);
-          console.error("Response Data:", response.data);
 
           // Extraer el mensaje de error del backend
           if (response.data?.message) {
@@ -495,8 +490,6 @@ export const orderService = {
             throw customError;
           }
         }
-      } else {
-        console.error("Unknown error occurred:", error);
       }
 
       throw error;
