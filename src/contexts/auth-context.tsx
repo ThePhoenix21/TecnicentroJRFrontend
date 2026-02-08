@@ -61,6 +61,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<User | null>;
   logout: () => void;
   selectStore: (store: AuthStore) => void;
+  refreshStores: () => Promise<void>;
   isAuthenticated: boolean;
   isAdmin: boolean;
   hasPermission: (permission: string) => boolean;
@@ -234,6 +235,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('current_store', JSON.stringify(store));
     console.log('✅ Tienda guardada en localStorage y estado actualizado');
   }, []);
+
+  const refreshStores = useCallback(async () => {
+    try {
+      const realStores = await loadRealStores();
+      if (realStores.length === 0) return;
+
+      setUser((prev) => {
+        if (!prev) return prev;
+
+        const isAdminRole = prev.role?.toLowerCase() === 'admin';
+        const allowedIds = new Set((prev.stores || []).map((s) => s.id));
+
+        const nextStores = (isAdminRole ? realStores : realStores.filter((s) => allowedIds.has(s.id))).map(
+          (store) => ({
+            id: store.id,
+            name: store.name,
+          })
+        );
+
+        const nextUser = { ...prev, stores: nextStores };
+        localStorage.setItem('user', JSON.stringify(nextUser));
+        return nextUser;
+      });
+
+      setCurrentStore((prev) => {
+        if (!prev) return prev;
+        const refreshed = realStores.find((s) => s.id === prev.id);
+        if (!refreshed) return prev;
+        const next = { id: refreshed.id, name: refreshed.name };
+        localStorage.setItem('current_store', JSON.stringify(next));
+        return next;
+      });
+    } catch (error) {
+      console.error('❌ Error refrescando tiendas:', error);
+    }
+  }, [loadRealStores]);
 
   const login = async (email: string, password: string): Promise<User | null> => {
     setLoading(true);
@@ -582,6 +619,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login,
     logout,
     selectStore,
+    refreshStores,
     isAuthenticated: !!user,
     isAdmin: user?.role?.toLowerCase() === 'admin',
     hasPermission,

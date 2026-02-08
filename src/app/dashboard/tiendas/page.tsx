@@ -29,7 +29,7 @@ interface TenantTokenPayload {
 }
 
 export default function TiendasPage() {
-    const { isAdmin } = useAuth();
+    const { isAdmin, refreshStores } = useAuth();
     const [stores, setStores] = useState<Store[]>([]);
     const [loading, setLoading] = useState(true);
     const [isFormOpen, setIsFormOpen] = useState(false);
@@ -172,6 +172,7 @@ export default function TiendasPage() {
         setIsFormOpen(false);
         setEditingStore(null);
         loadStores();
+        refreshStores();
     };
 
     const filteredStores = stores.filter(store =>
