@@ -46,8 +46,32 @@ class EmployedService {
     return response.data;
   }
 
-  async createEmployed(dto: CreateEmployedDto): Promise<any> {
-    const response = await api.post('/employed', dto);
+  async createEmployed(dto: CreateEmployedDto, documents?: File[]): Promise<any> {
+    const payload = {
+      ...dto,
+      phone: dto.phone || undefined,
+      email: dto.email || undefined,
+      storeId: dto.storeId || undefined,
+      warehouseId: dto.warehouseId || undefined,
+    };
+
+    const hasDocuments = Array.isArray(documents) && documents.length > 0;
+    if (!hasDocuments) {
+      const response = await api.post('/employed', payload);
+      return response.data;
+    }
+
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify(payload));
+    for (const file of documents) {
+      formData.append('documents', file);
+    }
+
+    const response = await api.post('/employed', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
     return response.data;
   }
 

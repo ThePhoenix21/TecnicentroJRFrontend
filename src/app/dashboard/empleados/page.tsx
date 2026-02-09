@@ -112,6 +112,8 @@ export default function EmpleadosPage() {
   const [createStep, setCreateStep] = useState<"form" | "result">("form");
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createResult, setCreateResult] = useState<any>(null);
+  const [createDocuments, setCreateDocuments] = useState<File[]>([]);
+  const [createUploadedDocuments, setCreateUploadedDocuments] = useState<any[]>([]);
 
   const [isRecreateOpen, setIsRecreateOpen] = useState(false);
   const [recreateStep, setRecreateStep] = useState<"warning" | "form" | "result">("warning");
@@ -369,6 +371,8 @@ export default function EmpleadosPage() {
     setCreateStep("form");
     setCreateResult(null);
     setCreateSubmitting(false);
+    setCreateDocuments([]);
+    setCreateUploadedDocuments([]);
     setCreateAssignmentMode("STORE");
     setCreateForm({
       firstName: "",
@@ -390,6 +394,8 @@ export default function EmpleadosPage() {
     setCreateStep("form");
     setCreateSubmitting(false);
     setCreateResult(null);
+    setCreateDocuments([]);
+    setCreateUploadedDocuments([]);
   };
 
   const submitCreate = async () => {
@@ -425,8 +431,9 @@ export default function EmpleadosPage() {
 
     try {
       setCreateSubmitting(true);
-      const res = await employedService.createEmployed(dto);
-      setCreateResult(res);
+      const res = await employedService.createEmployed(dto, createDocuments);
+      setCreateResult(res?.employed ?? res);
+      setCreateUploadedDocuments(Array.isArray(res?.documents) ? res.documents : []);
       setCreateStep("result");
       toast.success("Empleado creado");
       
@@ -1956,6 +1963,24 @@ export default function EmpleadosPage() {
                     </Select>
                   </div>
                 )}
+
+                <div className="space-y-2 sm:col-span-2">
+                  <label className="text-sm font-medium">Documentos</label>
+                  <Input
+                    type="file"
+                    multiple
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || []);
+                      setCreateDocuments(files);
+                    }}
+                    disabled={createSubmitting}
+                  />
+                  {createDocuments.length > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      {createDocuments.length} archivo(s) seleccionado(s)
+                    </div>
+                  )}
+                </div>
               </div>
 
               <DialogFooter>
@@ -1996,6 +2021,29 @@ export default function EmpleadosPage() {
                     <dd className="text-sm font-semibold">{createResult?.assignmentName || "—"}</dd>
                   </div>                  
                 </dl>
+
+                {createUploadedDocuments.length > 0 && (
+                  <div className="mt-5">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Documentos subidos</p>
+                    <div className="mt-2 space-y-1 text-sm">
+                      {createUploadedDocuments.map((doc: any) => (
+                        <div key={doc.id || doc.url} className="flex items-center justify-between gap-2">
+                          <span className="truncate">{doc.originalName || doc.url || 'Documento'}</span>
+                          {doc.url && (
+                            <a
+                              href={doc.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline text-xs"
+                            >
+                              Ver
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {createResult?.createdAt && (
                   <p className="mt-4 text-xs text-muted-foreground">

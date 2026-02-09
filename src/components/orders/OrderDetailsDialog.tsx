@@ -472,6 +472,15 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
     };
   }, [order, orderDetails?.total, order?.totalAmount, displayProducts, displayServices]);
 
+  const sellerDisplayName = useMemo(() => {
+    const detailsSeller = typeof orderDetails?.vendedor === 'string' ? orderDetails.vendedor.trim() : '';
+    if (detailsSeller) return detailsSeller;
+    const userName = order?.user?.name?.trim();
+    if (userName) return userName;
+    if (order?.user?.email) return order.user.email;
+    return 'Sin vendedor asignado';
+  }, [orderDetails?.vendedor, order?.user?.name, order?.user?.email]);
+
   const totalPayment = useMemo(
     () => paymentMethods.reduce((sum, pm) => sum + (Number(pm.amount) || 0), 0),
     [paymentMethods]
@@ -742,12 +751,10 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                     <p className="font-medium">{namedServiceName || 'Sin nombre'}</p>
                   </div>
                 ) : (
-                  order.client && (
-                    <div className="space-y-1">
-                      <p className="text-muted-foreground">Cliente</p>
-                      <p className="font-medium">{order.client.name}</p>
-                    </div>
-                  )
+                  <div className="space-y-1">
+                    <p className="text-muted-foreground">Cajero</p>
+                    <p className="font-medium">{sellerDisplayName}</p>
+                  </div>
                 )}
               </div>
             </div>
