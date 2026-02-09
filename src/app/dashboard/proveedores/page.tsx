@@ -720,7 +720,7 @@ export default function ProveedoresPage() {
                       </div>
                       <div className="space-y-2">
                         <label className="text-sm font-medium">RUC</label>
-                        <Input value={detail.ruc} disabled />
+                        <Input value={detail.ruc ?? ""} disabled />
                       </div>
                       <div className="space-y-2">
                         <label className="text-sm font-medium">Teléfono</label>

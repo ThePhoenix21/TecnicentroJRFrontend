@@ -456,7 +456,6 @@ function ClientesContent() {
                         <TableHead>Documento</TableHead>
                         <TableHead>Historial</TableHead>
                         <TableHead>Registro</TableHead>
-                        <TableHead className="w-[120px] text-right">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -486,21 +485,6 @@ function ClientesContent() {
                           </TableCell>
                           <TableCell className="whitespace-nowrap">
                             {client.createdAt ? format(new Date(client.createdAt), 'dd/MM/yy') : 'N/A'}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex justify-end space-x-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEditClient(client.id);
-                                }}
-                                className="h-8 w-8 p-0"
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -534,17 +518,6 @@ function ClientesContent() {
                           <div className="text-destructive">
                             Canceladas: <span className="font-semibold">{client.cancelledCount ?? 0}</span>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEditClient(client.id);
-                            }}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
                         </div>
                       </div>
                       
