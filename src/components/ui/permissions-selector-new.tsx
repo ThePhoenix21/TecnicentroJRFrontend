@@ -135,7 +135,7 @@ export function PermissionsSelector({
         <div className={`${maxHeight} overflow-y-auto pr-1`}>
           <div className={`grid ${getGridCols()} gap-3`}>
             {availablePermissions.map((permission) => (
-              <label key={permission} className="flex items-start gap-2 text-sm">
+              <div key={permission} className="flex items-start gap-2 text-sm p-2 rounded hover:bg-accent/50">
                 <Checkbox
                   checked={selectedPermissions.includes(permission)}
                   onCheckedChange={(checked) => 
@@ -143,8 +143,16 @@ export function PermissionsSelector({
                   }
                   className="mt-1"
                 />
-                <span>{formatPermissionLabel(permission)}</span>
-              </label>
+                <span 
+                  className="select-none cursor-pointer flex-1"
+                  onClick={() => {
+                    const newValue = !selectedPermissions.includes(permission);
+                    handlePermissionChange(permission, newValue);
+                  }}
+                >
+                  {formatPermissionLabel(permission)}
+                </span>
+              </div>
             ))}
             {availablePermissions.length === 0 && (
               <div className="text-sm text-muted-foreground">No hay permisos disponibles</div>
