@@ -153,6 +153,9 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
       allowed.add('VIEW_PRODUCTS');
       allowed.add('MANAGE_PRODUCTS');
       allowed.add('MANAGE_PRICES');
+      allowed.add('VIEW_PRODUCT_PRICES');
+      allowed.add('VIEW_PRODUCT_COST');
+      allowed.add('DELETE_PRODUCTS');
     }
 
     if (hasFeature('CLIENTS')) {

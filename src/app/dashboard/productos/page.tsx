@@ -19,6 +19,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/contexts/auth-context';
 import { ProductHistory } from '@/components/inventory/ProductHistory';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { usePermissions, PERMISSIONS } from '@/hooks/usePermissions';
 import {
   Dialog,
   DialogContent,
@@ -103,10 +104,22 @@ export default function ProductsPage() {
   const { toast } = useToast();
   const { user, currentStore, isAuthenticated, isAdmin, hasPermission } = useAuth();
 
-  const canViewProducts = isAdmin || hasPermission?.("VIEW_PRODUCTS") || hasPermission?.("MANAGE_PRODUCTS");
+  const { can } = usePermissions();
+
+  const canViewProducts = can(PERMISSIONS.VIEW_PRODUCTS);
+  const canViewProductPrices = can(PERMISSIONS.VIEW_PRODUCT_PRICES);
+  const canViewProductCost = can(PERMISSIONS.VIEW_PRODUCT_COST);
+  const canManageProducts = can(PERMISSIONS.MANAGE_PRODUCTS);
+  const canManagePrices = can(PERMISSIONS.MANAGE_PRICES);
+  const canDeleteProducts = can(PERMISSIONS.DELETE_PRODUCTS);
+
   const canViewInventory = isAdmin || hasPermission?.("VIEW_INVENTORY") || hasPermission?.("MANAGE_INVENTORY") || hasPermission?.("inventory.read") || hasPermission?.("inventory.manage");
-  const canManageProducts = isAdmin || hasPermission?.("MANAGE_PRODUCTS");
-  const canManagePrices = isAdmin || hasPermission?.("MANAGE_PRICES");
+  const canManageInventory = isAdmin || hasPermission?.("MANAGE_INVENTORY") || hasPermission?.("inventory.manage");
+
+  const isForbiddenError = (error: unknown) => {
+    const anyError = error as any;
+    return anyError?.response?.status === 403;
+  };
 
   useEffect(() => {
     if (currentStore?.id && !selectedStoreId) {
@@ -135,7 +148,11 @@ export default function ProductsPage() {
       return;
     }
 
-    if (!canViewProducts || !canViewInventory) {
+    if (!canViewProducts) {
+      setStoreProducts([]);
+      return;
+    }
+    if (!canViewInventory) {
       console.log('⛔ Sin permisos suficientes para ver productos de tienda (requiere VIEW_INVENTORY), abortando fetchStoreProducts');
       setStoreProducts([]);
       return;
@@ -162,11 +179,18 @@ export default function ProductsPage() {
       setStoreProducts([]);
       setTotal(0);
       setTotalPages(1);
-      toast({
-        title: 'Error',
-        description: 'No se pudieron cargar los productos',
-        variant: 'destructive',
-      });
+      if (isForbiddenError(error)) {
+        toast({
+          title: 'Sin permisos',
+          description: 'No tienes permisos para ver productos.',
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: 'No se pudieron cargar los productos',
+          variant: 'destructive',
+        });
+      }
     } finally {
       setLoading(false);
       console.log('🏁 fetchStoreProducts finalizado');
@@ -291,6 +315,14 @@ export default function ProductsPage() {
     e.preventDefault();
     if (!currentStore) return;
 
+    if (!canManageProducts) {
+      toast({
+        title: 'Sin permisos',
+        description: 'No tienes permisos para crear o editar productos.',
+      });
+      return;
+    }
+
     // Validar que no se reduzca el stock en edición
     if (isEditing && originalStock !== null && formData.stock < originalStock) {
       toast({
@@ -307,29 +339,31 @@ export default function ProductsPage() {
       if (isEditing && currentStoreProduct) {
         // Edición: enviar solo los campos que se van a actualizar
         let updateData: any;
-        
-        if (isAdmin) {
-          // ADMIN puede editar todo
-          updateData = {
-            name: formData.name,
-            description: formData.description,
-            buyCost: formData.buyCost,
-            basePrice: formData.basePrice,
-            price: formData.price,
-            stock: formData.stock,
-            stockThreshold: formData.stockThreshold,
-          };
-        } else {
-          // USER: control fino por permisos
-          updateData = {
-            stock: formData.stock,
-            stockThreshold: formData.stockThreshold,
-          };
 
-          // Solo usuarios con MANAGE_PRICES pueden modificar el precio
-          if (canManagePrices) {
-            updateData.price = formData.price;
+        // Reglas actuales:
+        // - description nunca se envía
+        // - MANAGE_PRODUCTS: solo permite editar name
+        // - MANAGE_PRICES: permite editar price
+        // - buyCost/basePrice requieren MANAGE_PRICES + VIEW_PRODUCT_COST
+        updateData = {};
+
+        if (canManageProducts) {
+          updateData.name = formData.name;
+        }
+
+        if (canManagePrices) {
+          updateData.price = formData.price;
+
+          if (canViewProductCost) {
+            updateData.buyCost = formData.buyCost;
+            updateData.basePrice = formData.basePrice;
           }
+        }
+
+        // Stock/threshold se mantienen bajo permisos de inventario (si aplica)
+        if (canManageInventory) {
+          updateData.stock = formData.stock;
+          updateData.stockThreshold = formData.stockThreshold;
         }
 
         console.log('🔍 IDs para actualizar:', {
@@ -346,34 +380,17 @@ export default function ProductsPage() {
         });
       } else {
         // Creación: siempre crear producto nuevo
-        if (isAdmin) {
-          // ADMIN crea con todos los campos
-          productData = {
-            createNewProduct: true,
-            name: formData.name,
-            description: formData.description,
-            buyCost: formData.buyCost,
-            basePrice: formData.basePrice,
-            storeId: currentStore.id,
-            price: formData.price,
-            stock: formData.stock,
-            stockThreshold: formData.stockThreshold,
-          };
-        } else {
-          // USER crea con campos limitados; precio solo si tiene MANAGE_PRICES
-          productData = {
-            createNewProduct: true,
-            name: formData.name,
-            description: formData.description,
-            storeId: currentStore.id,
-            stock: formData.stock,
-            stockThreshold: formData.stockThreshold,
-          } as CreateStoreProductRequest;
-
-          if (canManagePrices) {
-            (productData as any).price = formData.price;
-          }
-        }
+        // Reglas actuales:
+        // - description nunca se envía
+        // - MANAGE_PRODUCTS requerido para crear
+        productData = {
+          createNewProduct: true,
+          name: formData.name,
+          storeId: currentStore.id,
+          ...(canManageInventory ? { stock: formData.stock, stockThreshold: formData.stockThreshold } : { stock: 0, stockThreshold: 1 }),
+          ...(canManagePrices ? { price: formData.price } : {}),
+          ...(canManagePrices && canViewProductCost ? { buyCost: formData.buyCost, basePrice: formData.basePrice } : {}),
+        } as CreateStoreProductRequest;
 
         const response = await storeProductService.createStoreProduct(productData);
         console.log('📦 Producto creado (respuesta backend):', response);
@@ -395,13 +412,20 @@ export default function ProductsPage() {
       setIsModalOpen(false);
     } catch (error) {
       console.error('Error al guardar producto:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudo guardar el producto',
-        variant: 'destructive',
-      });
+      if (isForbiddenError(error)) {
+        toast({
+          title: 'Sin permisos',
+          description: 'No tienes permisos para realizar esta acción.',
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: 'No se pudo guardar el producto',
+          variant: 'destructive',
+        });
+      }
     }
-  }, [currentStore, isEditing, currentStoreProduct, formData, isAdmin, fetchStoreProducts, toast, loadProductLookup]);
+  }, [currentStore, isEditing, currentStoreProduct, formData, fetchStoreProducts, toast, loadProductLookup, canManageProducts, canManagePrices, canViewProductCost, canManageInventory]);
 
   const loadProductDetail = useCallback(async (productId: string) => {
     setDetailLoading(true);
@@ -453,13 +477,24 @@ export default function ProductsPage() {
     if (!selectedProductId) return;
     setIsUpdatingDetail(true);
     try {
-      const payload: any = {
-        name: detailForm.name,
-        description: detailForm.description,
-        price: detailForm.price ? Number(detailForm.price) : 0,
-      };
-      if (detailForm.buyCost !== '') payload.buyCost = Number(detailForm.buyCost);
-      if (detailForm.basePrice !== '') payload.basePrice = Number(detailForm.basePrice);
+      if (!canManageProducts && !canManagePrices) {
+        toast({
+          title: 'Sin permisos',
+          description: 'No tienes permisos para editar este producto.',
+        });
+        return;
+      }
+
+      const payload: any = {};
+      // description nunca se envía
+      if (canManageProducts) payload.name = detailForm.name;
+      if (canManagePrices) {
+        if (detailForm.price !== '') payload.price = Number(detailForm.price);
+        if (canViewProductCost) {
+          if (detailForm.buyCost !== '') payload.buyCost = Number(detailForm.buyCost);
+          if (detailForm.basePrice !== '') payload.basePrice = Number(detailForm.basePrice);
+        }
+      }
 
       await storeProductService.updateStoreProduct(selectedProductId, payload);
 
@@ -472,11 +507,18 @@ export default function ProductsPage() {
       fetchStoreProducts(page);
     } catch (error) {
       console.error('Error updating product detail:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudo actualizar el producto.',
-        variant: 'destructive',
-      });
+      if (isForbiddenError(error)) {
+        toast({
+          title: 'Sin permisos',
+          description: 'No tienes permisos para actualizar este producto.',
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: 'No se pudo actualizar el producto.',
+          variant: 'destructive',
+        });
+      }
     } finally {
       setIsUpdatingDetail(false);
     }
@@ -484,6 +526,13 @@ export default function ProductsPage() {
 
   const handleDeleteStoreProductDetail = async () => {
     if (!selectedProductId) return;
+    if (!canDeleteProducts) {
+      toast({
+        title: 'Sin permisos',
+        description: 'No tienes permisos para eliminar productos.',
+      });
+      return;
+    }
     const shouldDelete = window.confirm(
       'Se recomienda dejar el stock en 0 antes de eliminar un producto de la tienda.\n¿Deseas continuar igualmente?'
     );
@@ -500,17 +549,31 @@ export default function ProductsPage() {
       fetchStoreProducts(page);
     } catch (error) {
       console.error('Error deleting store product:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudo eliminar el producto de la tienda.',
-        variant: 'destructive',
-      });
+      if (isForbiddenError(error)) {
+        toast({
+          title: 'Sin permisos',
+          description: 'No tienes permisos para eliminar este producto.',
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: 'No se pudo eliminar el producto de la tienda.',
+          variant: 'destructive',
+        });
+      }
     } finally {
       setIsDeletingStoreProduct(false);
     }
   };
 
   const handleDeleteCatalogProductDetail = async () => {
+    if (!canDeleteProducts) {
+      toast({
+        title: 'Sin permisos',
+        description: 'No tienes permisos para eliminar productos.',
+      });
+      return;
+    }
     const catalogProductId = productDetail?.productId ?? productDetail?.product?.id;
     if (!catalogProductId) {
       toast({
@@ -545,11 +608,18 @@ export default function ProductsPage() {
       fetchStoreProducts(1);
     } catch (error) {
       console.error('Error deleting catalog product:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudo eliminar el producto del catálogo.',
-        variant: 'destructive',
-      });
+      if (isForbiddenError(error)) {
+        toast({
+          title: 'Sin permisos',
+          description: 'No tienes permisos para eliminar este producto del catálogo.',
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: 'No se pudo eliminar el producto del catálogo.',
+          variant: 'destructive',
+        });
+      }
     } finally {
       setIsDeletingCatalogProduct(false);
     }
@@ -563,7 +633,7 @@ export default function ProductsPage() {
       description: storeProduct.product.description || '',
       buyCost: storeProduct.product.buyCost || 0,
       basePrice: storeProduct.product.basePrice || 0,
-      price: storeProduct.price,
+      price: storeProduct.price || 0,
       stock: storeProduct.stock,
       stockThreshold: storeProduct.stockThreshold,
     });
@@ -780,9 +850,11 @@ export default function ProductsPage() {
                   <CardTitle className="text-base">{storeProduct.name}</CardTitle>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xl font-bold text-primary">
-                    S/ {(storeProduct.price || 0).toFixed(2)}
-                  </p>
+                  {canViewProductPrices && typeof storeProduct.price === 'number' && (
+                    <p className="text-xl font-bold text-primary">
+                      S/ {storeProduct.price.toFixed(2)}
+                    </p>
+                  )}
                   <div className="flex items-center gap-4 text-sm">
                     <span className={`font-medium ${
                       storeProduct.stock <= 0
@@ -800,7 +872,7 @@ export default function ProductsPage() {
                 </div>
               </CardHeader>
               <CardContent className="flex-grow">                
-                {isAdmin && (storeProduct.buyCost !== undefined) && (
+                {canViewProductCost && (storeProduct.buyCost !== undefined) && (storeProduct.price !== undefined) && (
                   <div className="text-xs text-muted-foreground space-y-1">
                     <p>Costo: S/ {(storeProduct.buyCost || 0).toFixed(2)}</p>
                     <p>Ganancia: S/ {((storeProduct.price || 0) - (storeProduct.buyCost || 0)).toFixed(2)}</p>
@@ -878,7 +950,7 @@ export default function ProductsPage() {
                     value={formData.name}
                     onChange={handleInputChange}
                     required
-                    disabled={isEditing && !isAdmin} // Solo ADMIN puede editar nombre en edición
+                    disabled={!canManageProducts || isUpdatingDetail}
                   />
                 </div>
 
@@ -892,12 +964,12 @@ export default function ProductsPage() {
                     onChange={handleInputChange}
                     className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     rows={3}
-                    disabled={isEditing && !isAdmin} // Solo ADMIN puede editar descripción en edición
+                    disabled
                   />
                 </div>
 
-                {/* Campos solo para ADMIN */}
-                {isAdmin && (
+                {/* Campos de costo: requieren VIEW_PRODUCT_COST y MANAGE_PRICES para editar */}
+                {canViewProductCost && (
                   <>
                     <div>
                       <label className="block text-sm font-medium mb-2">
@@ -910,8 +982,8 @@ export default function ProductsPage() {
                         onChange={handleInputChange}
                         min="0"
                         step="0.01"
-                        required
-                        disabled={isEditing && !isAdmin} // Solo ADMIN puede editar costo
+                        required={canManagePrices}
+                        disabled={!canManagePrices}
                       />
                     </div>
 
@@ -926,8 +998,8 @@ export default function ProductsPage() {
                         onChange={handleInputChange}
                         min="0"
                         step="0.01"
-                        required
-                        disabled={isEditing && !isAdmin} // Solo ADMIN puede editar precio base
+                        required={canManagePrices}
+                        disabled={!canManagePrices}
                       />
                     </div>
                   </>
@@ -938,20 +1010,26 @@ export default function ProductsPage() {
                   <label className="block text-sm font-medium mb-2">
                     Precio de venta <span className="text-destructive">*</span>
                   </label>
-                  <Input
-                    type="number"
-                    name="price"
-                    value={formData.price}
-                    onChange={handleInputChange}
-                    min="0"
-                    step="0.01"
-                    required={canManagePrices}
-                    disabled={!canManagePrices}
-                  />
-                  {!canManagePrices && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      No tienes permisos para modificar precios.
-                    </p>
+                  {canViewProductPrices ? (
+                    <>
+                      <Input
+                        type="number"
+                        name="price"
+                        value={formData.price}
+                        onChange={handleInputChange}
+                        min="0"
+                        step="0.01"
+                        required={canManagePrices}
+                        disabled={!canManagePrices}
+                      />
+                      {!canManagePrices && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          No tienes permisos para modificar precios.
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No disponible</p>
                   )}
                 </div>
 
@@ -967,6 +1045,7 @@ export default function ProductsPage() {
                     min={isEditing && originalStock !== null ? originalStock : 0}
                     placeholder="0"
                     required
+                    disabled={!canManageInventory}
                   />
                   {isEditing && originalStock !== null && (
                     <p className="text-xs text-muted-foreground mt-1">
@@ -987,6 +1066,7 @@ export default function ProductsPage() {
                     min="1"
                     placeholder="1"
                     required
+                    disabled={!canManageInventory}
                   />
                 </div>
               </div>
@@ -1032,35 +1112,47 @@ export default function ProductsPage() {
                   <Input
                     value={detailForm.name}
                     onChange={(e) => handleDetailFormChange('name', e.target.value)}
-                    disabled={isUpdatingDetail}
+                    disabled={isUpdatingDetail || !canManageProducts}
                   />
                 </div>
                 <div>
                   <Label>Precio (venta)</Label>
-                  <Input
-                    type="number"
-                    value={detailForm.price}
-                    onChange={(e) => handleDetailFormChange('price', e.target.value)}
-                    disabled={isUpdatingDetail}
-                  />
+                  {canViewProductPrices ? (
+                    <Input
+                      type="number"
+                      value={detailForm.price}
+                      onChange={(e) => handleDetailFormChange('price', e.target.value)}
+                      disabled={isUpdatingDetail || !canManagePrices}
+                    />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No disponible</p>
+                  )}
                 </div>
                 <div>
                   <Label>Costo</Label>
-                  <Input
-                    type="number"
-                    value={detailForm.buyCost}
-                    onChange={(e) => handleDetailFormChange('buyCost', e.target.value)}
-                    disabled={isUpdatingDetail}
-                  />
+                  {canViewProductCost ? (
+                    <Input
+                      type="number"
+                      value={detailForm.buyCost}
+                      onChange={(e) => handleDetailFormChange('buyCost', e.target.value)}
+                      disabled={isUpdatingDetail || !canManagePrices}
+                    />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No disponible</p>
+                  )}
                 </div>
                 <div>
                   <Label>Precio base</Label>
-                  <Input
-                    type="number"
-                    value={detailForm.basePrice}
-                    onChange={(e) => handleDetailFormChange('basePrice', e.target.value)}
-                    disabled={isUpdatingDetail}
-                  />
+                  {canViewProductCost ? (
+                    <Input
+                      type="number"
+                      value={detailForm.basePrice}
+                      onChange={(e) => handleDetailFormChange('basePrice', e.target.value)}
+                      disabled={isUpdatingDetail || !canManagePrices}
+                    />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No disponible</p>
+                  )}
                 </div>
                 <div className="md:col-span-2">
                   <Label>Descripción</Label>
@@ -1068,7 +1160,7 @@ export default function ProductsPage() {
                     value={detailForm.description}
                     onChange={(e) => handleDetailFormChange('description', e.target.value)}
                     className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    disabled={isUpdatingDetail}
+                    disabled
                   />
                 </div>
               </div>
@@ -1088,21 +1180,23 @@ export default function ProductsPage() {
                     variant="outline"
                     className="w-full"
                     onClick={handleUpdateDetail}
-                    disabled={isUpdatingDetail}
+                    disabled={isUpdatingDetail || (!canManageProducts && !canManagePrices)}
                   >
                     {isUpdatingDetail ? 'Guardando...' : 'Guardar cambios'}
                   </Button>
-                  <Button
-                    variant="destructive"
-                    className="w-full"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteStoreProductDetail();
-                    }}
-                    disabled={isDeletingStoreProduct}
-                  >
-                    {isDeletingStoreProduct ? 'Eliminando...' : 'Eliminar de esta tienda'}
-                  </Button>
+                  {canDeleteProducts && (
+                    <Button
+                      variant="destructive"
+                      className="w-full"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteStoreProductDetail();
+                      }}
+                      disabled={isDeletingStoreProduct}
+                    >
+                      {isDeletingStoreProduct ? 'Eliminando...' : 'Eliminar de esta tienda'}
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -1114,7 +1208,7 @@ export default function ProductsPage() {
                       Esta acción eliminará el producto de todas las tiendas. Se recomienda dejar el stock en 0 antes de continuar.
                     </p>
                   </div>
-                  {!showCatalogDeleteForm && (
+                  {!showCatalogDeleteForm && canDeleteProducts && (
                     <Button
                       variant="destructive"
                       size="sm"

@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 
 // Definición de permisos del backend
@@ -76,100 +77,128 @@ export const PERMISSIONS = {
   MANAGE_SUPPORT: 'MANAGE_SUPPORT',
 } as const;
 
+export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+
 export const usePermissions = () => {
-  const { user } = useAuth();
-  
-  const hasPermission = (permission: string): boolean => {
-    return user?.permissions?.includes(permission) ?? false;
-  };
-  
-  const hasAnyPermission = (permissions: string[]): boolean => {
-    return permissions.some(permission => hasPermission(permission));
-  };
-  
-  const hasAllPermissions = (permissions: string[]): boolean => {
-    return permissions.every(permission => hasPermission(permission));
-  };
+  const { user, isAdmin, hasPermission: contextHasPermission } = useAuth();
+
+  const resolvePermission = useMemo(() => {
+    return (permission: string): boolean => {
+      if (isAdmin) return true;
+      if (typeof contextHasPermission === 'function') {
+        return contextHasPermission(permission);
+      }
+      return user?.permissions?.includes(permission) ?? false;
+    };
+  }, [contextHasPermission, isAdmin, user?.permissions]);
+
+  const hasPermission = useMemo(() => {
+    return (permission: string) => resolvePermission(permission);
+  }, [resolvePermission]);
+
+  const hasAnyPermission = useMemo(() => {
+    return (permissions: string[]): boolean => permissions.some((p) => resolvePermission(p));
+  }, [resolvePermission]);
+
+  const hasAllPermissions = useMemo(() => {
+    return (permissions: string[]): boolean => permissions.every((p) => resolvePermission(p));
+  }, [resolvePermission]);
+
+  // API heredada: can/canAny/canAll para permisos tipados (útil para UI/guards)
+  const can = useMemo(() => {
+    return (permission: Permission) => resolvePermission(permission);
+  }, [resolvePermission]);
+
+  const canAny = useMemo(() => {
+    return (permissions: Permission[]) => permissions.some((p) => can(p));
+  }, [can]);
+
+  const canAll = useMemo(() => {
+    return (permissions: Permission[]) => permissions.every((p) => can(p));
+  }, [can]);
   
   // Métodos de conveniencia por módulo
   
   // Dashboard
-  const canViewDashboard = () => hasPermission(PERMISSIONS.VIEW_DASHBOARD);
+  const canViewDashboard = () => resolvePermission(PERMISSIONS.VIEW_DASHBOARD);
   
   // Tiendas
-  const canViewStores = () => hasPermission(PERMISSIONS.VIEW_STORES);
-  const canManageStores = () => hasPermission(PERMISSIONS.MANAGE_STORES);
-  const canChangeStoreLogo = () => hasPermission(PERMISSIONS.CHANGE_STORE_LOGO);
+  const canViewStores = () => resolvePermission(PERMISSIONS.VIEW_STORES);
+  const canManageStores = () => resolvePermission(PERMISSIONS.MANAGE_STORES);
+  const canChangeStoreLogo = () => resolvePermission(PERMISSIONS.CHANGE_STORE_LOGO);
   
   // Caja
-  const canViewCash = () => hasPermission(PERMISSIONS.VIEW_CASH);
-  const canManageCash = () => hasPermission(PERMISSIONS.MANAGE_CASH);
-  const canViewAllCashHistory = () => hasPermission(PERMISSIONS.VIEW_ALL_CASH_HISTORY);
-  const canViewOwnCashHistory = () => hasPermission(PERMISSIONS.VIEW_OWN_CASH_HISTORY);
-  const canPrintCashClosure = () => hasPermission(PERMISSIONS.PRINT_CASH_CLOSURE);
+  const canViewCash = () => resolvePermission(PERMISSIONS.VIEW_CASH);
+  const canManageCash = () => resolvePermission(PERMISSIONS.MANAGE_CASH);
+  const canViewAllCashHistory = () => resolvePermission(PERMISSIONS.VIEW_ALL_CASH_HISTORY);
+  const canViewOwnCashHistory = () => resolvePermission(PERMISSIONS.VIEW_OWN_CASH_HISTORY);
+  const canPrintCashClosure = () => resolvePermission(PERMISSIONS.PRINT_CASH_CLOSURE);
   
   // Ventas
-  const canViewOrders = () => hasPermission(PERMISSIONS.VIEW_ORDERS);
-  const canManageOrders = () => hasPermission(PERMISSIONS.MANAGE_ORDERS);
-  const canViewAllOrdersHistory = () => hasPermission(PERMISSIONS.VIEW_ALL_ORDERS_HISTORY);
-  const canViewOwnOrdersHistory = () => hasPermission(PERMISSIONS.VIEW_OWN_ORDERS_HISTORY);
+  const canViewOrders = () => resolvePermission(PERMISSIONS.VIEW_ORDERS);
+  const canManageOrders = () => resolvePermission(PERMISSIONS.MANAGE_ORDERS);
+  const canViewAllOrdersHistory = () => resolvePermission(PERMISSIONS.VIEW_ALL_ORDERS_HISTORY);
+  const canViewOwnOrdersHistory = () => resolvePermission(PERMISSIONS.VIEW_OWN_ORDERS_HISTORY);
   
   // Servicios
-  const canViewServices = () => hasPermission(PERMISSIONS.VIEW_SERVICES);
-  const canManageServices = () => hasPermission(PERMISSIONS.MANAGE_SERVICES);
+  const canViewServices = () => resolvePermission(PERMISSIONS.VIEW_SERVICES);
+  const canManageServices = () => resolvePermission(PERMISSIONS.MANAGE_SERVICES);
   
   // Productos
-  const canViewProducts = () => hasPermission(PERMISSIONS.VIEW_PRODUCTS);
-  const canManageProducts = () => hasPermission(PERMISSIONS.MANAGE_PRODUCTS);
-  const canManagePrices = () => hasPermission(PERMISSIONS.MANAGE_PRICES);
-  const canViewProductCost = () => hasPermission(PERMISSIONS.VIEW_PRODUCT_COST);
-  const canViewProductPrices = () => hasPermission(PERMISSIONS.VIEW_PRODUCT_PRICES);
-  const canDeleteProducts = () => hasPermission(PERMISSIONS.DELETE_PRODUCTS);
+  const canViewProducts = () => resolvePermission(PERMISSIONS.VIEW_PRODUCTS);
+  const canManageProducts = () => resolvePermission(PERMISSIONS.MANAGE_PRODUCTS);
+  const canManagePrices = () => resolvePermission(PERMISSIONS.MANAGE_PRICES);
+  const canViewProductCost = () => resolvePermission(PERMISSIONS.VIEW_PRODUCT_COST);
+  const canViewProductPrices = () => resolvePermission(PERMISSIONS.VIEW_PRODUCT_PRICES);
+  const canDeleteProducts = () => resolvePermission(PERMISSIONS.DELETE_PRODUCTS);
   
   // Inventario
-  const canViewInventory = () => hasPermission(PERMISSIONS.VIEW_INVENTORY);
-  const canManageInventory = () => hasPermission(PERMISSIONS.MANAGE_INVENTORY);
-  const canStartPhysicalInventory = () => hasPermission(PERMISSIONS.START_PHYSICAL_INVENTORY);
+  const canViewInventory = () => resolvePermission(PERMISSIONS.VIEW_INVENTORY);
+  const canManageInventory = () => resolvePermission(PERMISSIONS.MANAGE_INVENTORY);
+  const canStartPhysicalInventory = () => resolvePermission(PERMISSIONS.START_PHYSICAL_INVENTORY);
   
   // Almacenes
-  const canViewWarehouses = () => hasPermission(PERMISSIONS.VIEW_WAREHOUSES);
-  const canManageWarehouses = () => hasPermission(PERMISSIONS.MANAGE_WAREHOUSES);
+  const canViewWarehouses = () => resolvePermission(PERMISSIONS.VIEW_WAREHOUSES);
+  const canManageWarehouses = () => resolvePermission(PERMISSIONS.MANAGE_WAREHOUSES);
   
   // Clientes
-  const canViewClients = () => hasPermission(PERMISSIONS.VIEW_CLIENTS);
-  const canManageClients = () => hasPermission(PERMISSIONS.MANAGE_CLIENTS);
+  const canViewClients = () => resolvePermission(PERMISSIONS.VIEW_CLIENTS);
+  const canManageClients = () => resolvePermission(PERMISSIONS.MANAGE_CLIENTS);
   
   // Empleados
-  const canViewEmployees = () => hasPermission(PERMISSIONS.VIEW_EMPLOYEES);
-  const canManageEmployees = () => hasPermission(PERMISSIONS.MANAGE_EMPLOYEES);
-  const canConvertEmployeeToUser = () => hasPermission(PERMISSIONS.CONVERT_EMPLOYEE_TO_USER);
+  const canViewEmployees = () => resolvePermission(PERMISSIONS.VIEW_EMPLOYEES);
+  const canManageEmployees = () => resolvePermission(PERMISSIONS.MANAGE_EMPLOYEES);
+  const canConvertEmployeeToUser = () => resolvePermission(PERMISSIONS.CONVERT_EMPLOYEE_TO_USER);
   
   // Proveedores
-  const canViewSuppliers = () => hasPermission(PERMISSIONS.VIEW_SUPPLIERS);
-  const canManageSuppliers = () => hasPermission(PERMISSIONS.MANAGE_SUPPLIERS);
-  const canDeleteSuppliers = () => hasPermission(PERMISSIONS.DELETE_SUPPLIERS);
+  const canViewSuppliers = () => resolvePermission(PERMISSIONS.VIEW_SUPPLIERS);
+  const canManageSuppliers = () => resolvePermission(PERMISSIONS.MANAGE_SUPPLIERS);
+  const canDeleteSuppliers = () => resolvePermission(PERMISSIONS.DELETE_SUPPLIERS);
   
   // Órdenes de suministro
-  const canViewSupplyOrders = () => hasPermission(PERMISSIONS.VIEW_SUPPLY_ORDERS);
-  const canCreateSupplyOrder = () => hasPermission(PERMISSIONS.CREATE_SUPPLY_ORDER);
-  const canEditEmittedSupplyOrder = () => hasPermission(PERMISSIONS.EDIT_EMITTED_SUPPLY_ORDER);
-  const canApproveSupplyOrder = () => hasPermission(PERMISSIONS.APPROVE_SUPPLY_ORDER);
-  const canReceiveSupplyOrder = () => hasPermission(PERMISSIONS.RECEIVE_SUPPLY_ORDER);
-  const canCancelSupplyOrder = () => hasPermission(PERMISSIONS.CANCEL_SUPPLY_ORDER);
+  const canViewSupplyOrders = () => resolvePermission(PERMISSIONS.VIEW_SUPPLY_ORDERS);
+  const canCreateSupplyOrder = () => resolvePermission(PERMISSIONS.CREATE_SUPPLY_ORDER);
+  const canEditEmittedSupplyOrder = () => resolvePermission(PERMISSIONS.EDIT_EMITTED_SUPPLY_ORDER);
+  const canApproveSupplyOrder = () => resolvePermission(PERMISSIONS.APPROVE_SUPPLY_ORDER);
+  const canReceiveSupplyOrder = () => resolvePermission(PERMISSIONS.RECEIVE_SUPPLY_ORDER);
+  const canCancelSupplyOrder = () => resolvePermission(PERMISSIONS.CANCEL_SUPPLY_ORDER);
   
   // Usuarios y accesos
-  const canViewUsers = () => hasPermission(PERMISSIONS.VIEW_USERS);
-  const canManageUsers = () => hasPermission(PERMISSIONS.MANAGE_USERS);
-  const canDeleteUsers = () => hasPermission(PERMISSIONS.DELETE_USERS);
+  const canViewUsers = () => resolvePermission(PERMISSIONS.VIEW_USERS);
+  const canManageUsers = () => resolvePermission(PERMISSIONS.MANAGE_USERS);
+  const canDeleteUsers = () => resolvePermission(PERMISSIONS.DELETE_USERS);
   
   // Soporte técnico
-  const canViewSupport = () => hasPermission(PERMISSIONS.VIEW_SUPPORT);
-  const canManageSupport = () => hasPermission(PERMISSIONS.MANAGE_SUPPORT);
+  const canViewSupport = () => resolvePermission(PERMISSIONS.VIEW_SUPPORT);
+  const canManageSupport = () => resolvePermission(PERMISSIONS.MANAGE_SUPPORT);
   
   return {
     hasPermission,
     hasAnyPermission,
     hasAllPermissions,
+    can,
+    canAny,
+    canAll,
     // Exportar constantes para uso en componentes
     PERMISSIONS,
     // Métodos de conveniencia por módulo
