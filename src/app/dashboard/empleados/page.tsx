@@ -1,17 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
-import { Search, Users, Trash2, Edit2, Save, RotateCcw, Plus, CheckCircle2 } from "lucide-react";
-import { ActiveFilters } from "@/components/ui/active-filters";
-import { PermissionsSelector } from "@/components/ui/permissions-selector-new";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 
 import { employedService } from "@/services/employed.service";
+import { userService, type UserLookupItem } from "@/services/user.service";
 import { storeService } from "@/services/store.service";
 import { warehouseService } from "@/services/warehouse.service";
 import { authService } from "@/services/auth";
-import { userService } from "@/services/user.service";
+import { toast } from "sonner";
+import { useAuth } from "@/contexts/auth-context";
+import { formatCurrency } from "@/lib/utils";
 import { uniqueBy } from "@/utils/array";
+import { usePermissions } from '@/hooks/usePermissions';
+import { AccessDeniedView } from '@/components/auth/access-denied-view';
+import { ProtectedButton } from '@/components/auth/protected-button';
+import { PermissionGuard } from '@/components/auth/permission-guard';
 import type {
   EmployedDetail,
   EmployedListItem,
@@ -27,6 +30,10 @@ import type {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ActiveFilters } from "@/components/ui/active-filters";
 import {
   Dialog,
   DialogContent,
@@ -49,6 +56,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { PermissionsSelector } from '@/components/ui/permissions-selector-new';
+import { 
+  Plus, 
+  Search, 
+  Trash2, 
+  RotateCcw, 
+  Edit2, 
+  Save, 
+  CheckCircle2,
+  Users 
+} from "lucide-react";
 
 type AssignmentMode = "STORE" | "WAREHOUSE";
 
@@ -69,6 +87,13 @@ const statusLabel: Record<EmployedStatus, string> = {
 };
 
 export default function EmpleadosPage() {
+  const { canViewEmployees, canManageEmployees } = usePermissions();
+  
+  // Verificar permisos de acceso a la vista
+  if (!canViewEmployees()) {
+    return <AccessDeniedView />;
+  }
+  
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<EmployedListItem[]>([]);
 
@@ -818,15 +843,17 @@ export default function EmpleadosPage() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                <Button
+                <ProtectedButton
+                  permissions="MANAGE_EMPLOYEES"
                   onClick={openCreate}
                   className="w-full sm:w-auto bg-primary hover:bg-primary/90 transition-colors"
                   size="sm"
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Agregar empleado
-                </Button>
-                <Button
+                </ProtectedButton>
+                <ProtectedButton
+                  permissions="MANAGE_EMPLOYEES"
                   onClick={openDeleted}
                   className="w-full sm:w-auto"
                   size="sm"
@@ -834,7 +861,7 @@ export default function EmpleadosPage() {
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
                   Ver eliminados
-                </Button>
+                </ProtectedButton>
               </div>
             </div>
 
@@ -1437,14 +1464,16 @@ export default function EmpleadosPage() {
                 </Button>
 
                 <DialogFooter className="gap-2 sm:gap-2">
-                  <Button
+                  <ProtectedButton
+                    permissions="MANAGE_EMPLOYEES"
                     variant="outline"
                     onClick={openConvert}
                     disabled={detailLoading || editSubmitting || !!detail?.userId}
                   >
                     {detail?.userId ? "Ya es usuario" : "Convertir a usuario"}
-                  </Button>
-                  <Button
+                  </ProtectedButton>
+                  <ProtectedButton
+                    permissions="MANAGE_EMPLOYEES"
                     variant="outline"
                     onClick={() => {
                       if (!detail) return;
@@ -1462,13 +1491,17 @@ export default function EmpleadosPage() {
                   >
                     <Edit2 className="h-4 w-4 mr-2" />
                     {isEditing ? "Cancelar edición" : "Editar"}
-                  </Button>
+                  </ProtectedButton>
 
                   {isEditing && (
-                    <Button onClick={handleSaveEdit} disabled={editSubmitting}>
+                    <ProtectedButton 
+                      permissions="MANAGE_EMPLOYEES"
+                      onClick={handleSaveEdit} 
+                      disabled={editSubmitting}
+                    >
                       <Save className="h-4 w-4 mr-2" />
                       Guardar
-                    </Button>
+                    </ProtectedButton>
                   )}
                 </DialogFooter>
               </div>
