@@ -113,7 +113,6 @@ export default function ProductsPage() {
   const canManagePrices = can(PERMISSIONS.MANAGE_PRICES);
   const canDeleteProducts = can(PERMISSIONS.DELETE_PRODUCTS);
 
-  const canViewInventory = isAdmin || hasPermission?.("VIEW_INVENTORY") || hasPermission?.("MANAGE_INVENTORY") || hasPermission?.("inventory.read") || hasPermission?.("inventory.manage");
   const canManageInventory = isAdmin || hasPermission?.("MANAGE_INVENTORY") || hasPermission?.("inventory.manage");
 
   const isForbiddenError = (error: unknown) => {
@@ -152,12 +151,6 @@ export default function ProductsPage() {
       setStoreProducts([]);
       return;
     }
-    if (!canViewInventory) {
-      console.log('⛔ Sin permisos suficientes para ver productos de tienda (requiere VIEW_INVENTORY), abortando fetchStoreProducts');
-      setStoreProducts([]);
-      return;
-    }
-    
     console.log('🚀 Iniciando fetchStoreProducts para tienda:', storeId);
     
     try {
@@ -195,7 +188,7 @@ export default function ProductsPage() {
       setLoading(false);
       console.log('🏁 fetchStoreProducts finalizado');
     }
-  }, [selectedStoreId, currentStore?.id, nameFilter, hideOutOfStock, toast, canViewProducts, canViewInventory]);
+  }, [selectedStoreId, currentStore?.id, nameFilter, hideOutOfStock, toast, canViewProducts]);
 
   const fetchStoreProductsRef = useRef(fetchStoreProducts);
 
