@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Search, Users, Trash2, Edit2, Save, RotateCcw, Plus, CheckCircle2 } from "lucide-react";
 import { ActiveFilters } from "@/components/ui/active-filters";
+import { PermissionsSelector } from "@/components/ui/permissions-selector-new";
 
 import { employedService } from "@/services/employed.service";
 import { storeService } from "@/services/store.service";
@@ -1514,43 +1515,17 @@ export default function EmpleadosPage() {
               </div>
             </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold">Permisos</h3>
-                  <p className="text-xs text-muted-foreground">Selecciona los permisos para el usuario</p>
-                </div>
-              </div>
-
-              {permissionsLoading ? (
-                <div className="text-sm text-muted-foreground">Cargando permisos...</div>
-              ) : (
-                <div className="max-h-56 overflow-y-auto pr-1">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {availablePermissions.map((permission) => (
-                      <label key={permission} className="flex items-start gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={convertPermissions.includes(permission)}
-                          onChange={(e) => {
-                            setConvertPermissions((prev) =>
-                              e.target.checked
-                                ? [...prev, permission]
-                                : prev.filter((p) => p !== permission)
-                            );
-                          }}
-                          className="mt-1"
-                        />
-                        <span>{formatPermissionLabel(permission)}</span>
-                      </label>
-                    ))}
-                    {availablePermissions.length === 0 && (
-                      <div className="text-sm text-muted-foreground">No hay permisos disponibles</div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+            <PermissionsSelector
+              selectedPermissions={convertPermissions}
+              availablePermissions={availablePermissions}
+              isLoading={permissionsLoading}
+              onPermissionChange={setConvertPermissions}
+              title="Permisos"
+              description="Selecciona los permisos para el usuario"
+              columns={2}
+              maxHeight="max-h-56"
+              className="space-y-3"
+            />
 
             <DialogFooter className="gap-2 sm:gap-2">
               <Button variant="outline" onClick={closeConvert} disabled={convertSubmitting}>

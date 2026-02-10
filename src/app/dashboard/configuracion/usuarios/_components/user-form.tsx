@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/select';
 import { authService } from '@/services/auth';
 import { Checkbox } from '@/components/ui/checkbox';
+import { PermissionsSelectorForm } from '@/components/ui/permissions-selector-new';
 import { userService, type CreateUserRegularDto, type UpdateUserDto } from '@/services/user.service';
 import { adminRegisterService, type CreateAdminData } from '@/services/admin-register';
 import { useAuth } from '@/contexts/auth-context';
@@ -639,67 +640,16 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
 
           {/* Sección de Permisos */}
           {form.watch('role') === 'USER' && (
-            <div className="md:col-span-2 space-y-4 border rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-medium">Permisos</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Selecciona los permisos que tendrá este usuario
-                  </p>
-                </div>
-              </div>
-              
-              {isLoadingPermissions ? (
-                <div className="text-sm text-muted-foreground">Cargando permisos...</div>
-              ) : (
-                <FormField
-                  control={form.control as UserFormControl}
-                  name="permissions"
-                  render={() => (
-                    <FormItem>
-                      <div className="max-h-64 overflow-y-auto pr-1">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {filteredAvailablePermissions.map((permission) => (
-                          <FormField
-                            key={permission}
-                            control={form.control as UserFormControl}
-                            name="permissions"
-                            render={({ field }) => {
-                              return (
-                                <FormItem
-                                  key={permission}
-                                  className="flex flex-row items-start space-x-3 space-y-0"
-                                >
-                                  <FormControl>
-                                    <Checkbox
-                                      checked={field.value?.includes(permission)}
-                                      onCheckedChange={(checked) => {
-                                        return checked
-                                          ? field.onChange([...field.value, permission])
-                                          : field.onChange(
-                                              field.value?.filter(
-                                                (value) => value !== permission
-                                              )
-                                            )
-                                      }}
-                                    />
-                                  </FormControl>
-                                  <FormLabel className="font-normal text-sm cursor-pointer">
-                                    {formatPermissionLabel(permission)}
-                                  </FormLabel>
-                                </FormItem>
-                              )
-                            }}
-                          />
-                        ))}
-                        </div>
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
-            </div>
+            <PermissionsSelectorForm
+                name="permissions"
+                availablePermissions={availablePermissions}
+                isLoading={isLoadingPermissions}
+                title="Permisos"
+                description="Selecciona los permisos que tendrá este usuario"
+                columns={3}
+                maxHeight="max-h-64"
+                className="md:col-span-2 space-y-4 border rounded-lg p-4"
+              />
           )}
 
           {/* Campos de contraseña solo visibles en creación */}

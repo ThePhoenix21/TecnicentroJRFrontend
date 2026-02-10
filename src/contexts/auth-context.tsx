@@ -178,9 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const hasPermission = useCallback((permission: string): boolean => {
     if (!user) return false;
-    // Admins always have all permissions, but we can also check the array if strictly needed.
-    // However, per requirements, admin implies full access.
-    if (user.role?.toLowerCase() === 'admin') return true;
+    // Solo verificar permisos, no usar role para acceso
     return user.permissions?.includes(permission) || false;
   }, [user]);
 

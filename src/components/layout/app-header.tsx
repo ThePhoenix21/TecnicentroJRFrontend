@@ -38,12 +38,6 @@ const getMobileNavItems = (userRole: string) => {
       icon: Users,
       roles: ['ADMIN', 'USER']
     },
-    { 
-      name: 'Configuración', 
-      href: '/dashboard/configuracion', 
-      icon: Settings,
-      roles: ['ADMIN']
-    },
   ];
 
   return baseItems.filter(item => item.roles.includes(userRole));
