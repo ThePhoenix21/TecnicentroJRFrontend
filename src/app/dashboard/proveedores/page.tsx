@@ -364,6 +364,9 @@ export default function ProveedoresPage() {
       toast.success("Proveedor actualizado");
       setIsEditing(false);
       await loadProviders();
+      
+      // Cerrar el modal después de guardar exitosamente
+      closeDetail();
     } catch (error: any) {
       console.error(error);
       

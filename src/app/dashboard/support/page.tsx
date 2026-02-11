@@ -33,6 +33,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 
+// Importaciones de permisos
+import { usePermissions } from '@/hooks/usePermissions';
+import { AccessDeniedView } from '@/components/auth/access-denied-view';
+
 const normalize = (v: unknown) => String(v ?? '').trim().toLowerCase();
 
 const statusLabel: Record<TicketStatus, string> = {
@@ -64,6 +68,15 @@ const getPriorityClasses = (priority: TicketPriority) => {
 export default function SupportPage() {
   const router = useRouter();
 
+  // Permisos - Control exclusivo por permisos, sin roles
+  // MANAGE_SUPPORT NO implica automáticamente VIEW_SUPPORT
+  const { canViewSupport, canManageSupport } = usePermissions();
+
+  // Si no tiene permiso para ver soporte, mostrar acceso denegado
+  if (!canViewSupport()) {
+    return <AccessDeniedView />;
+  }
+
   const [loading, setLoading] = useState(true);
   const [tickets, setTickets] = useState<SupportTicketListItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -85,6 +98,7 @@ export default function SupportPage() {
   const loadTickets = useCallback(async () => {
     try {
       setLoading(true);
+      // Vista normal: tickets del usuario autenticado
       const data = await supportTicketService.getTickets();
       setTickets(Array.isArray(data) ? data : []);
     } catch (error: any) {
@@ -93,8 +107,10 @@ export default function SupportPage() {
         router.push('/login');
         return;
       }
+      
+      // Manejo específico de errores 403 (permisos)
       if (status === 403) {
-        toast.error('Acceso no permitido');
+        toast.error('No tienes permisos para ver tickets de soporte');
         setTickets([]);
         return;
       }
@@ -157,10 +173,13 @@ export default function SupportPage() {
         router.push('/login');
         return;
       }
+      
+      // Manejo específico de errores 403 (permisos)
       if (status === 403) {
-        toast.error('Acceso no permitido');
+        toast.error('No tienes permisos para crear tickets de soporte');
         return;
       }
+      
       if (status === 429) {
         toast.error('Demasiadas solicitudes. Inténtelo de nuevo en unos segundos.');
         return;
@@ -200,11 +219,14 @@ export default function SupportPage() {
         router.push('/login');
         return;
       }
+      
+      // Manejo específico de errores 403 (permisos)
       if (status === 403 || status === 404) {
-        toast.error('No tienes acceso a este ticket');
+        toast.error('No tienes permisos para ver este ticket');
         setDetail(null);
         return;
       }
+      
       toast.error(error?.response?.data?.message || error?.message || 'No se pudo cargar el ticket');
       setDetail(null);
     } finally {
@@ -232,10 +254,13 @@ export default function SupportPage() {
         router.push('/login');
         return;
       }
+      
+      // Manejo específico de errores 403 (permisos)
       if (status === 403) {
-        toast.error('Acceso no permitido');
+        toast.error('No tienes permisos para cancelar tickets de soporte');
         return;
       }
+      
       if (status === 404) {
         toast.error('No tienes acceso a este ticket');
         return;
@@ -267,14 +292,17 @@ export default function SupportPage() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                <Button
-                  onClick={openCreate}
-                  className="w-full sm:w-auto bg-primary hover:bg-primary/90 transition-colors"
-                  size="sm"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Nuevo Ticket
-                </Button>
+                {/* Botón Crear Ticket - Solo si tiene permiso MANAGE_SUPPORT */}
+                {canManageSupport() && (
+                  <Button
+                    onClick={openCreate}
+                    className="w-full sm:w-auto bg-primary hover:bg-primary/90 transition-colors"
+                    size="sm"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Nuevo Ticket
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -447,14 +475,17 @@ export default function SupportPage() {
               <Button type="button" variant="outline" onClick={closeDetail}>
                 Cerrar
               </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={handleCancelTicket}
-                disabled={cancelSubmitting || detailLoading || !detail || detail.status !== 'OPEN'}
-              >
-                {cancelSubmitting ? 'Cancelando...' : 'Cancelar Ticket'}
-              </Button>
+              {/* Botón Cancelar Ticket - Solo si tiene permiso MANAGE_SUPPORT */}
+              {canManageSupport() && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={handleCancelTicket}
+                  disabled={cancelSubmitting || detailLoading || !detail || detail.status !== 'OPEN'}
+                >
+                  {cancelSubmitting ? 'Cancelando...' : 'Cancelar Ticket'}
+                </Button>
+              )}
             </div>
           </div>
         </DialogContent>
