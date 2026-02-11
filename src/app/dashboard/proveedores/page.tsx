@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Search, X, Users, Pencil, Trash2, Save, Plus } from "lucide-react";
 import { ActiveFilters } from "@/components/ui/active-filters";
+import { usePermissions } from "@/hooks/usePermissions";
+import { AccessDeniedView } from "@/components/auth/access-denied-view";
 
 import { providerService } from "@/services/provider.service";
 import type {
@@ -52,6 +54,14 @@ const toUtcRange = (from: string, to: string) => {
 };
 
 export default function ProveedoresPage() {
+  // Permisos - Control exclusivo por permisos, sin roles
+  const { canViewSuppliers, canManageSuppliers, canDeleteSuppliers } = usePermissions();
+
+  // Si no tiene permiso para ver proveedores, mostrar acceso denegado
+  if (!canViewSuppliers()) {
+    return <AccessDeniedView />;
+  }
+
   const [loading, setLoading] = useState(true);
   const [providers, setProviders] = useState<ProviderListItem[]>([]);
   const [providerFilter, setProviderFilter] = useState("");
@@ -117,7 +127,14 @@ export default function ProveedoresPage() {
       setPage(response.page || targetPage);
     } catch (error: any) {
       console.error(error);
-      toast.error(error?.response?.data?.message || error?.message || "Error al cargar proveedores");
+      
+      // Manejo específico de errores 403 (permisos)
+      if (error?.response?.status === 403) {
+        toast.error("No tienes permisos para ver proveedores");
+      } else {
+        toast.error(error?.response?.data?.message || error?.message || "Error al cargar proveedores");
+      }
+      
       setProviders([]);
       setTotal(0);
       setTotalPages(1);
@@ -258,7 +275,13 @@ export default function ProveedoresPage() {
       ]);
     } catch (error: any) {
       console.error(error);
-      toast.error(error?.response?.data?.message || error?.message || "Error al crear proveedor");
+      
+      // Manejo específico de errores 403 (permisos)
+      if (error?.response?.status === 403) {
+        toast.error("No tienes permisos para crear proveedores");
+      } else {
+        toast.error(error?.response?.data?.message || error?.message || "Error al crear proveedor");
+      }
     } finally {
       setCreateSubmitting(false);
     }
@@ -343,7 +366,13 @@ export default function ProveedoresPage() {
       await loadProviders();
     } catch (error: any) {
       console.error(error);
-      toast.error(error?.response?.data?.message || error?.message || "Error al actualizar proveedor");
+      
+      // Manejo específico de errores 403 (permisos)
+      if (error?.response?.status === 403) {
+        toast.error("No tienes permisos para actualizar proveedores");
+      } else {
+        toast.error(error?.response?.data?.message || error?.message || "Error al actualizar proveedor");
+      }
     } finally {
       setEditSubmitting(false);
     }
@@ -362,7 +391,13 @@ export default function ProveedoresPage() {
       await loadProviders();
     } catch (error: any) {
       console.error(error);
-      toast.error(error?.response?.data?.message || error?.message || "Error al eliminar proveedor");
+      
+      // Manejo específico de errores 403 (permisos)
+      if (error?.response?.status === 403) {
+        toast.error("No tienes permisos para eliminar proveedores");
+      } else {
+        toast.error(error?.response?.data?.message || error?.message || "Error al eliminar proveedor");
+      }
     }
   };
 
@@ -417,7 +452,13 @@ export default function ProveedoresPage() {
       setIsEditingProducts(false);
     } catch (error: any) {
       console.error(error);
-      toast.error(error?.response?.data?.message || error?.message || "Error al guardar productos");
+      
+      // Manejo específico de errores 403 (permisos)
+      if (error?.response?.status === 403) {
+        toast.error("No tienes permisos para gestionar productos de proveedores");
+      } else {
+        toast.error(error?.response?.data?.message || error?.message || "Error al guardar productos");
+      }
     } finally {
       setProductsSubmitting(false);
     }
@@ -435,14 +476,17 @@ export default function ProveedoresPage() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                <Button
-                  onClick={openCreate}
-                  className="w-full sm:w-auto bg-primary hover:bg-primary/90 transition-colors"
-                  size="sm"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Nuevo proveedor
-                </Button>
+                {/* Botón Crear - Solo si tiene permiso MANAGE_SUPPLIERS */}
+                {canManageSuppliers() && (
+                  <Button
+                    onClick={openCreate}
+                    className="w-full sm:w-auto bg-primary hover:bg-primary/90 transition-colors"
+                    size="sm"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Nuevo proveedor
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -795,46 +839,54 @@ export default function ProveedoresPage() {
                       </div>
                       <div className="flex flex-col sm:flex-row gap-2">
                         {!isEditingProducts ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={async () => {
-                              setIsEditingProducts(true);
-                              await ensureLookupLoaded();
-                            }}
-                          >
-                            Editar productos
-                          </Button>
+                          // Botón Editar Productos - Solo si tiene permiso MANAGE_SUPPLIERS
+                          canManageSuppliers() ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                setIsEditingProducts(true);
+                                await ensureLookupLoaded();
+                              }}
+                            >
+                              Editar productos
+                            </Button>
+                          ) : null
                         ) : (
                           <>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={handleSaveProducts}
-                              disabled={productsSubmitting}
-                              className="bg-emerald-600 text-white hover:bg-emerald-700"
-                            >
-                              {productsSubmitting ? "Guardando..." : "Guardar cambios"}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                if (!detail) return;
-                                setLocalProviderProducts(Array.isArray(detail.providerProducts) ? detail.providerProducts : []);
-                                setSelectedProductId("");
-                                setIsEditingProducts(false);
-                              }}
-                              disabled={productsSubmitting}
-                            >
-                              Cancelar
-                            </Button>
+                            {/* Botón Guardar Cambios - Solo si tiene permiso MANAGE_SUPPLIERS */}
+                            {canManageSuppliers() && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={handleSaveProducts}
+                                  disabled={productsSubmitting}
+                                  className="bg-emerald-600 text-white hover:bg-emerald-700"
+                                >
+                                  {productsSubmitting ? "Guardando..." : "Guardar cambios"}
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    if (!detail) return;
+                                    setLocalProviderProducts(Array.isArray(detail.providerProducts) ? detail.providerProducts : []);
+                                    setSelectedProductId("");
+                                    setIsEditingProducts(false);
+                                  }}
+                                  disabled={productsSubmitting}
+                                >
+                                  Cancelar
+                                </Button>
+                              </>
+                            )}
                           </>
                         )}
                       </div>
                     </div>
 
-                    {isEditingProducts && (
+                    {isEditingProducts && canManageSuppliers() && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="space-y-2">
                           <label className="text-sm font-medium">Agregar producto</label>
@@ -877,7 +929,7 @@ export default function ProveedoresPage() {
                               <div className="min-w-0">
                                 <div className="text-sm font-medium truncate">{pp.product.name}</div>
                               </div>
-                              {isEditingProducts && (
+                              {isEditingProducts && canManageSuppliers() && (
                                 <Button
                                   variant="destructive"
                                   size="sm"
@@ -899,36 +951,42 @@ export default function ProveedoresPage() {
 
             <div className="border-t bg-background px-6 py-4">
               <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
-                <Button
-                  variant="destructive"
-                  onClick={handleDeleteProvider}
-                  disabled={detailLoading || editSubmitting}
-                  className="sm:mr-auto"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Eliminar
-                </Button>
+                {/* Botón Eliminar - Solo si tiene permiso DELETE_SUPPLIERS */}
+                {canDeleteSuppliers() && (
+                  <Button
+                    variant="destructive"
+                    onClick={handleDeleteProvider}
+                    disabled={detailLoading || editSubmitting}
+                    className="sm:mr-auto"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Eliminar
+                  </Button>
+                )}
 
                 <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:justify-end">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      if (!detail) return;
-                      setIsEditing((v) => !v);
-                      setEditForm({
-                        name: detail.name ?? "",
-                        phone: detail.phone ?? "",
-                        email: detail.email ?? "",
-                        address: detail.address ?? "",
-                      });
-                    }}
-                    disabled={detailLoading || editSubmitting}
-                  >
-                    <Pencil className="h-4 w-4 mr-2" />
-                    {isEditing ? "Cancelar edición" : "Editar"}
-                  </Button>
+                  {/* Botón Editar - Solo si tiene permiso MANAGE_SUPPLIERS */}
+                  {canManageSuppliers() && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (!detail) return;
+                        setIsEditing((v) => !v);
+                        setEditForm({
+                          name: detail.name ?? "",
+                          phone: detail.phone ?? "",
+                          email: detail.email ?? "",
+                          address: detail.address ?? "",
+                        });
+                      }}
+                      disabled={detailLoading || editSubmitting}
+                    >
+                      <Pencil className="h-4 w-4 mr-2" />
+                      {isEditing ? "Cancelar edición" : "Editar"}
+                    </Button>
+                  )}
 
-                  {isEditing && (
+                  {isEditing && canManageSuppliers() && (
                     <Button onClick={handleSaveEdit} disabled={editSubmitting} className="bg-emerald-600 text-white hover:bg-emerald-700">
                       <Save className="h-4 w-4 mr-2" />
                       Guardar
