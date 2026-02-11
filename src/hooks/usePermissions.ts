@@ -140,6 +140,10 @@ export const usePermissions = () => {
   const canViewAllOrdersHistory = () => resolvePermission(PERMISSIONS.VIEW_ALL_ORDERS_HISTORY);
   const canViewOwnOrdersHistory = () => resolvePermission(PERMISSIONS.VIEW_OWN_ORDERS_HISTORY);
   
+  // Helper combinado para historial (regla: VIEW_ORDERS + (ALL u OWN))
+  const canViewOrdersHistory = () => 
+    canViewOrders() && (canViewAllOrdersHistory() || canViewOwnOrdersHistory());
+  
   // Servicios
   const canViewServices = () => resolvePermission(PERMISSIONS.VIEW_SERVICES);
   const canManageServices = () => resolvePermission(PERMISSIONS.MANAGE_SERVICES);
@@ -221,6 +225,7 @@ export const usePermissions = () => {
     canManageOrders,
     canViewAllOrdersHistory,
     canViewOwnOrdersHistory,
+    canViewOrdersHistory,
     
     // Servicios
     canViewServices,

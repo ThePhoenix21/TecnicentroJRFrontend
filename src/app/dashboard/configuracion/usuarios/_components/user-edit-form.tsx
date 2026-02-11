@@ -150,10 +150,16 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
       allowed.add('START_PHYSICAL_INVENTORY');
     }
 
+    if (hasFeature('SALES')) {
+      allowed.add('VIEW_ORDERS');
+      allowed.add('MANAGE_ORDERS');
+      allowed.add('VIEW_ALL_ORDERS_HISTORY');
+      allowed.add('VIEW_OWN_ORDERS_HISTORY');
+    }
+
     if (hasFeature('PRODUCTS')) {
       allowed.add('VIEW_PRODUCTS');
       allowed.add('MANAGE_PRODUCTS');
-      allowed.add('MANAGE_PRICES');
       allowed.add('VIEW_PRODUCT_PRICES');
       allowed.add('VIEW_PRODUCT_COST');
       allowed.add('DELETE_PRODUCTS');

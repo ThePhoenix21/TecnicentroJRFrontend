@@ -9,6 +9,8 @@ import { type Product } from "@/types/product.types";
 import { SaleForm } from "./sale-form-component";
 import type { SaleData } from '@/types/sale.types';
 import { useAuth } from "@/contexts/auth-context";
+import { usePermissions } from "@/hooks/usePermissions";
+import { AccessDeniedView } from "@/components/auth/access-denied-view";
 import { formatCurrency } from "@/lib/utils";
 import { clientService } from "@/services/client.service";
 import { userService, type UserLookupItem } from "@/services/user.service";
@@ -55,6 +57,13 @@ import {
 
 export default function VentasPage() {
   const router = useRouter();
+  const { canViewOrdersHistory, canViewAllOrdersHistory } = usePermissions();
+
+  // Guard de acceso - Regla: VIEW_ORDERS + (ALL u OWN)
+  if (!canViewOrdersHistory()) {
+    return <AccessDeniedView />;
+  }
+
   const [orders, setOrders] = useState<OrderListItem[]>([]);
   const [products, setProducts] = useState<StoreProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -761,7 +770,10 @@ export default function VentasPage() {
                     </div>
                   )}
                 </div>
+              </div>
 
+              {/* Filtro de Vendedor - SOLO para usuarios con VIEW_ALL_ORDERS_HISTORY */}
+              {canViewAllOrdersHistory() && (
                 <div ref={sellerDropdownRef} className="relative">
                   <Label className="text-xs text-muted-foreground">Vendedor</Label>
                   <Input
@@ -807,47 +819,47 @@ export default function VentasPage() {
                     </div>
                   )}
                 </div>
+              )}
 
-                <div>
-                  <Label className="text-xs text-muted-foreground">Estado</Label>
-                  <Select
-                    value={selectedStatus}
-                    onValueChange={(value) => {
-                      setSelectedStatus(value === '__ALL__' ? '' : value);
+              <div>
+                <Label className="text-xs text-muted-foreground">Estado</Label>
+                <Select
+                  value={selectedStatus}
+                  onValueChange={(value) => {
+                    setSelectedStatus(value === '__ALL__' ? '' : value);
+                    setCurrentPage(1);
+                  }}
+                >
+                  <SelectTrigger className="w-full lg:max-w-[200px]">
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__ALL__">Todos</SelectItem>
+                    {statusOptions.map((s) => (
+                      <SelectItem key={s.value} value={s.value}>
+                        {s.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-end">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground h-10">
+                  <Checkbox
+                    id="current-cash-orders"
+                    checked={onlyCurrentCash}
+                    onCheckedChange={(checked) => {
+                      setOnlyCurrentCash(Boolean(checked));
                       setCurrentPage(1);
                     }}
+                  />
+                  <label
+                    htmlFor="current-cash-orders"
+                    className="cursor-pointer select-none"
                   >
-                    <SelectTrigger className="w-full lg:max-w-[200px]">
-                      <SelectValue placeholder="Todos" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__ALL__">Todos</SelectItem>
-                      {statusOptions.map((s) => (
-                        <SelectItem key={s.value} value={s.value}>
-                          {s.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-end">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground h-10">
-                    <Checkbox
-                      id="current-cash-orders"
-                      checked={onlyCurrentCash}
-                      onCheckedChange={(checked) => {
-                        setOnlyCurrentCash(Boolean(checked));
-                        setCurrentPage(1);
-                      }}
-                    />
-                    <label
-                      htmlFor="current-cash-orders"
-                      className="cursor-pointer select-none"
-                    >
-                      Caja actual
-                    </label>
-                  </div>
+                    Caja actual
+                  </label>
                 </div>
               </div>
 

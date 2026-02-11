@@ -15,6 +15,7 @@ import { storeProductService } from '@/services/store-product.service';
 import { orderService } from '@/services/order.service';
 import { SaleData } from '@/types/sale.types';
 import { useAuth } from '@/contexts/auth-context';
+import { usePermissions } from '@/hooks/usePermissions';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -128,6 +129,8 @@ interface PaymentEntry {
 
 const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenChange, order, onOrderUpdate }) => {
   const { user, currentStore, canIssuePdf, tenantFeatures, hasPermission, isAdmin: isAdminFromContext } = useAuth();
+  const { canManageOrders: canManageOrdersFn } = usePermissions();
+  const canManageOrders = canManageOrdersFn();
   const [showPDF, setShowPDF] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
@@ -277,8 +280,8 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
   const handleCompleteOrder = async () => {
     if (!order?.id) return;
 
-    if (!canManageServices) {
-      toast.error('No tienes permisos para completar órdenes (MANAGE_SERVICES requerido)');
+    if (!canManageOrders) {
+      toast.error('No tienes permisos para completar órdenes (MANAGE_ORDERS requerido)');
       return;
     }
 
@@ -575,8 +578,8 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
   const executeServicePayment = async (completeAfterPayment?: boolean) => {
     if (!order?.id) return;
 
-    if (!canManageServices) {
-      toast.error('No tienes permisos para registrar pagos de servicios (MANAGE_SERVICES requerido)');
+    if (!canManageOrders) {
+      toast.error('No tienes permisos para registrar pagos de órdenes (MANAGE_ORDERS requerido)');
       return;
     }
 
@@ -682,8 +685,8 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
   const handleRegisterPayment = () => {
     if (!order?.id) return;
 
-    if (!canManageServices) {
-      toast.error('No tienes permisos para registrar pagos de servicios (MANAGE_SERVICES requerido)');
+    if (!canManageOrders) {
+      toast.error('No tienes permisos para registrar pagos de órdenes (MANAGE_ORDERS requerido)');
       return;
     }
 
@@ -1011,11 +1014,11 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                     variant="default"
                     className="w-full h-14 text-base font-semibold bg-black text-white hover:bg-black/90"
                     onClick={handleCompleteOrder}
-                    disabled={!canManageServices || isCompletingOrder || order.status === 'CANCELLED'}
+                    disabled={!canManageOrders || isCompletingOrder || order.status === 'CANCELLED'}
                   >
                     {isCompletingOrder ? 'Completando...' : 'Completar'}
                   </Button>
-                  {!canManageServices && (
+                  {!canManageOrders && (
                     <p className="text-xs text-muted-foreground">
                       No tienes permisos para completar órdenes.
                     </p>
@@ -1027,7 +1030,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                 <Button
                   variant="default"
                   onClick={() => setIsPaymentModalOpen(true)}
-                  disabled={!canManageServices || (selectedService ? selectedService.status === ServiceStatus.ANNULLATED : true)}
+                  disabled={!canManageOrders || (selectedService ? selectedService.status === ServiceStatus.ANNULLATED : true)}
                   className="w-full"
                 >
                   Adelantar pago
@@ -1046,7 +1049,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                 </Button>
               )}
 
-              {isAdmin && order.status !== 'CANCELLED' && (
+              {(isAdmin || canManageOrders) && order.status !== 'CANCELLED' && (
                 <Button
                   variant="destructive"
                   onClick={() => setShowCancelDialog(true)}

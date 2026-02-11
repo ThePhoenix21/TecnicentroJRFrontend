@@ -117,9 +117,13 @@ export function CancelOrderDialog({
           }
           return prev;
         });
-      } catch (err) {
+      } catch (err: any) {
         console.error("Error al cargar métodos de pago de la orden", err);
-        setPaymentInfoError("No se pudo cargar la información de pagos. Intente nuevamente.");
+        if (err?.response?.status === 403) {
+          setPaymentInfoError("No tienes permiso para ver los métodos de pago de esta orden. Solo puedes acceder a tus propias órdenes.");
+        } else {
+          setPaymentInfoError("No se pudo cargar la información de pagos. Intente nuevamente.");
+        }
       } finally {
         setIsLoadingPaymentInfo(false);
       }
