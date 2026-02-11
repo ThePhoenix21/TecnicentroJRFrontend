@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { inventoryService } from "@/services/inventory.service";
 import { storeProductService } from "@/services/store-product.service";
-import { InventoryStats } from "@/types/inventory.types";
+import { InventorySummaryResponse } from "@/types/inventory.types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -21,14 +21,15 @@ import {
   ChevronLeft,
   ChevronRight,
   Search,
-  X
+  X,
+  AlertCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function InventoryReportsPage() {
   const { currentStore, hasPermission } = useAuth();
   const canViewInventory = hasPermission("VIEW_INVENTORY") || hasPermission("inventory.read");
-  const [stats, setStats] = useState<InventoryStats | null>(null);
+  const [summary, setSummary] = useState<InventorySummaryResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [storeProducts, setStoreProducts] = useState<any[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
@@ -36,6 +37,20 @@ export default function InventoryReportsPage() {
   const [totalPages, setTotalPages] = useState(0);
   const [totalProducts, setTotalProducts] = useState(0);
   const pageSize = 12;
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const getStartOfCurrentMonth = () => {
+    const date = new Date();
+    date.setDate(1);
+    date.setHours(0, 0, 0, 0);
+    return date.toISOString();
+  };
+  const getEndOfToday = () => {
+    const date = new Date();
+    date.setHours(23, 59, 59, 999);
+    return date.toISOString();
+  };
+  const [fromDate, setFromDate] = useState<string>(getStartOfCurrentMonth);
+  const [toDate, setToDate] = useState<string>(getEndOfToday);
   
   // Filter states
   const [nameFilter, setNameFilter] = useState("");
@@ -62,14 +77,22 @@ export default function InventoryReportsPage() {
     }
   };
 
-  const loadStats = async () => {
+  const loadSummary = async () => {
     if (!currentStore?.id) return;
     setIsLoading(true);
+    setSummaryError(null);
     try {
-      const data = await inventoryService.getDashboardStats(currentStore.id);
-      setStats(data);
+      const data = await inventoryService.getMovementsSummary({
+        storeId: currentStore.id,
+        fromDate,
+        toDate,
+      });
+      setSummary(data);
     } catch (error) {
-      console.error("Error loading stats:", error);
+      const message = (error as Error)?.message || "No se pudieron cargar las estadísticas del inventario.";
+      setSummary(null);
+      setSummaryError(message);
+      console.error("Error loading summary:", error);
     } finally {
       setIsLoading(false);
     }
@@ -77,10 +100,60 @@ export default function InventoryReportsPage() {
 
   useEffect(() => {
     if (canViewInventory) {
-      loadStats();
+      loadSummary();
+    }
+  }, [currentStore?.id, canViewInventory, fromDate, toDate]);
+
+  useEffect(() => {
+    if (canViewInventory) {
       loadStoreProducts();
     }
   }, [currentStore?.id, canViewInventory]);
+
+  const formatDateForInput = (isoString: string) => {
+    if (!isoString) return "";
+    const date = new Date(isoString);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const toStartOfDayISO = (dateString: string) => {
+    const [year, month, day] = dateString.split("-").map(Number);
+    const date = new Date(year, (month || 1) - 1, day || 1, 0, 0, 0, 0);
+    return date.toISOString();
+  };
+
+  const toEndOfDayISO = (dateString: string) => {
+    const [year, month, day] = dateString.split("-").map(Number);
+    const date = new Date(year, (month || 1) - 1, day || 1, 23, 59, 59, 999);
+    return date.toISOString();
+  };
+
+  const handleFromDateChange = (value: string) => {
+    if (!value) return;
+    const newFromDate = toStartOfDayISO(value);
+    setFromDate(newFromDate);
+    const currentToDate = new Date(toDate);
+    if (new Date(newFromDate) > currentToDate) {
+      setToDate(toEndOfDayISO(value));
+    }
+  };
+
+  const handleToDateChange = (value: string) => {
+    if (!value) return;
+    const newToDate = toEndOfDayISO(value);
+    if (new Date(newToDate) < new Date(fromDate)) {
+      setFromDate(toStartOfDayISO(value));
+    }
+    setToDate(newToDate);
+  };
+
+  const resetDateRange = () => {
+    setFromDate(getStartOfCurrentMonth());
+    setToDate(getEndOfToday());
+  };
 
   // Filter products based on name and stock availability
   const filteredProducts = useMemo(() => {
@@ -153,13 +226,12 @@ export default function InventoryReportsPage() {
     );
   }
 
-  if (!stats && isLoading) {
+  if (!summary && isLoading) {
     return <div className="p-6 text-center">Cargando estadísticas...</div>;
   }
 
-  // Valores por defecto si falla la carga o es null
-  const s = stats?.stats || { incoming: 0, outgoing: 0, sales: 0, adjustments: 0 };
-  const criticalProducts = stats?.criticalProducts || [];
+  // Totales por defecto si falla la carga
+  const totals = summary?.totals || { incoming: 0, outgoing: 0, sales: 0, adjustmentsNet: 0 };
 
   return (
     <div className="space-y-6 p-6">
@@ -167,15 +239,61 @@ export default function InventoryReportsPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Reportes de Inventario</h1>
           <p className="text-muted-foreground">
-            Resumen del periodo: {stats?.period ? (
-                `${new Date(stats.period.start).toLocaleDateString()} - ${new Date(stats.period.end).toLocaleDateString()}`
-            ) : 'Actual'}
+            Resumen del periodo: {summary?.period ? (
+                `${new Date(summary.period.from).toLocaleDateString()} - ${new Date(summary.period.to).toLocaleDateString()}`
+            ) : 'Mes en curso'}
           </p>
         </div>
-        <Button variant="outline" size="icon" onClick={loadStats} disabled={isLoading}>
+        <Button variant="outline" size="icon" onClick={loadSummary} disabled={isLoading}>
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
         </Button>
       </div>
+
+      <Card className="bg-muted/40">
+        <CardContent className="pt-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end">
+            <div className="flex-1">
+              <p className="text-xs font-medium text-muted-foreground mb-1">Desde</p>
+              <Input
+                type="date"
+                value={formatDateForInput(fromDate)}
+                max={formatDateForInput(toDate)}
+                onChange={(e) => handleFromDateChange(e.target.value)}
+              />
+            </div>
+            <div className="flex-1">
+              <p className="text-xs font-medium text-muted-foreground mb-1">Hasta</p>
+              <Input
+                type="date"
+                value={formatDateForInput(toDate)}
+                min={formatDateForInput(fromDate)}
+                onChange={(e) => handleToDateChange(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={resetDateRange} disabled={isLoading}>
+                Restablecer rango
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {summaryError && (
+        <Card className="border-yellow-300 bg-yellow-50">
+          <CardContent className="flex items-start gap-3 py-4">
+            <AlertCircle className="h-5 w-5 text-yellow-700 mt-0.5" />
+            <div>
+              <p className="text-sm text-yellow-800">{summaryError}</p>
+              {!summary && (
+                <p className="text-xs text-yellow-700 mt-1">
+                  Aún puedes consultar la lista de productos y sus existencias individuales.
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -185,7 +303,7 @@ export default function InventoryReportsPage() {
             <ArrowDownLeft className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">+{s.incoming}</div>
+            <div className="text-2xl font-bold text-green-600">+{totals.incoming}</div>
             <p className="text-xs text-muted-foreground">Productos ingresados</p>
           </CardContent>
         </Card>
@@ -196,7 +314,7 @@ export default function InventoryReportsPage() {
             <ArrowUpRight className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">-{s.outgoing}</div>
+            <div className="text-2xl font-bold text-red-600">-{totals.outgoing}</div>
             <p className="text-xs text-muted-foreground">Salidas manuales</p>
           </CardContent>
         </Card>
@@ -207,7 +325,7 @@ export default function InventoryReportsPage() {
             <ShoppingCart className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">-{s.sales}</div>
+            <div className="text-2xl font-bold text-blue-600">-{totals.sales}</div>
             <p className="text-xs text-muted-foreground">Salidas por venta</p>
           </CardContent>
         </Card>
@@ -218,7 +336,7 @@ export default function InventoryReportsPage() {
             <TrendingUp className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{s.adjustments > 0 ? '+' : ''}{s.adjustments}</div>
+            <div className="text-2xl font-bold text-yellow-600">{totals.adjustmentsNet > 0 ? '+' : ''}{totals.adjustmentsNet}</div>
             <p className="text-xs text-muted-foreground">Correcciones de inventario</p>
           </CardContent>
         </Card>

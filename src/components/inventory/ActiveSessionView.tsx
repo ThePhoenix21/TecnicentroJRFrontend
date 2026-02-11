@@ -30,15 +30,23 @@ import { PDFViewer } from "@react-pdf/renderer";
 import InventoryReportPDF from "./InventoryReportPDF";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2, Save, AlertTriangle, CheckCircle, XCircle, Search, RefreshCw, FileText } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface ActiveSessionViewProps {
   session: InventoryCountSession;
   onSessionClosed: () => void;
   onBack: () => void;
+  canManageSession?: boolean;
 }
 
-export function ActiveSessionView({ session, onSessionClosed, onBack }: ActiveSessionViewProps) {
-  const { user, isAdmin, canIssuePdf } = useAuth(); // Usar isAdmin
+export function ActiveSessionView({
+  session,
+  onSessionClosed,
+  onBack,
+  canManageSession = false,
+}: ActiveSessionViewProps) {
+  const { isAdmin, canIssuePdf } = useAuth();
+  const canManage = isAdmin || canManageSession;
   const { toast } = useToast();
   
   // Calcular si la sesión está abierta basado en finalizedAt (si es null, está abierta)
@@ -110,13 +118,25 @@ export function ActiveSessionView({ session, onSessionClosed, onBack }: ActiveSe
 
   // Manejar cambio en input de conteo (solo estado local)
   const handleInputChange = (storeProductId: string, value: string) => {
+    if (!canManage || !isOpen) return;
     setInputValues(prev => ({
       ...prev,
       [storeProductId]: value
     }));
   };
 
+  const handleInputBlur = (storeProductId: string, countItem?: InventoryCountItem) => {
+    if (!canManage || !isOpen) return;
+    const currentVal = inputValues[storeProductId];
+    if (currentVal === undefined || currentVal === '') return;
+
+    if (!countItem || parseInt(currentVal) !== countItem.physicalStock) {
+      saveCount(storeProductId);
+    }
+  };
+
   const saveCount = async (storeProductId: string) => {
+    if (!canManage || !isOpen) return;
     const valueStr = inputValues[storeProductId];
     if (!valueStr || valueStr === '') return;
     
@@ -163,6 +183,7 @@ export function ActiveSessionView({ session, onSessionClosed, onBack }: ActiveSe
   };
 
   const handleCloseSession = async () => {
+    if (!canManage || !isOpen) return;
     // Validar que todos los productos tengan un valor válido en los inputs
     // Un producto está pendiente si su valor en inputValues es undefined o cadena vacía
     const pendingProducts = products.filter(p => {
@@ -216,6 +237,7 @@ export function ActiveSessionView({ session, onSessionClosed, onBack }: ActiveSe
   };
 
   const reconcileAndCloseSession = async () => {
+    if (!canManage || !isOpen) return;
     if (!confirm("¿Confirmas que deseas cuadrar el inventario teórico con el físico? Se generarán movimientos automáticamente.")) return;
 
     setIsReconciling(true);
@@ -312,7 +334,7 @@ export function ActiveSessionView({ session, onSessionClosed, onBack }: ActiveSe
             Actualizar
           </Button>
           <Button variant="outline" onClick={onBack}>Volver</Button>
-          {isOpen && isAdmin && (
+          {isOpen && canManage && (
             <Button onClick={handleCloseSession} disabled={isClosing || isReconciling}>
               {isClosing || isReconciling ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
               Finalizar Inventario
@@ -398,40 +420,6 @@ export function ActiveSessionView({ session, onSessionClosed, onBack }: ActiveSe
                                         <TableCell className="text-center text-muted-foreground">
                                             {product.stock}
                                         </TableCell>
-                                        <TableCell>
-                                            <div className="relative flex items-center justify-center">
-                                                <Input 
-                                                    type="number" 
-                                                    min="0"
-                                                    className={`text-center font-bold ${
-                                                        !hasValidInput ? 'border-destructive ring-1 ring-destructive' : 
-                                                        countItem ? 'border-primary' : ''
-                                                    }`}
-                                                    value={inputValues[product.id] ?? ''}
-                                                    onChange={(e) => handleInputChange(product.id, e.target.value)}
-                                                    onBlur={() => {
-                                                        const currentVal = inputValues[product.id];
-                                                        // Guardar solo si no está vacío
-                                                        if (currentVal !== undefined && currentVal !== '') {
-                                                            // Verificar contra valor guardado si existe
-                                                            if (!countItem || parseInt(currentVal) !== countItem.physicalStock) {
-                                                                saveCount(product.id);
-                                                            }
-                                                        }
-                                                    }}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter') {
-                                                            e.currentTarget.blur();
-                                                        }
-                                                    }}
-                                                    disabled={!isOpen}
-                                                    placeholder="-"
-                                                />
-                                                {isSaving && (
-                                                    <Loader2 className="absolute right-2 h-3 w-3 animate-spin text-primary" />
-                                                )}
-                                            </div>
-                                        </TableCell>
                                         <TableCell className="text-center">
                                             {hasValidInput && countItem ? (
                                                 <span className={`font-bold ${
@@ -443,6 +431,34 @@ export function ActiveSessionView({ session, onSessionClosed, onBack }: ActiveSe
                                             ) : (
                                                 <span className="text-muted-foreground">-</span>
                                             )}
+                                        </TableCell>
+                                        <TableCell className="text-center">
+                                            <div className="relative flex items-center justify-center">
+                                              <Input
+                                                type="number"
+                                                min="0"
+                                                placeholder="-"
+                                                className={cn(
+                                                  "text-center font-bold",
+                                                  (!hasValidInput && canManage) && "border-destructive ring-1 ring-destructive",
+                                                  countItem && canManage && "border-primary",
+                                                  (!canManage || !isOpen) && "bg-muted text-muted-foreground cursor-not-allowed"
+                                                )}
+                                                value={inputValues[product.id] ?? ''}
+                                                onChange={(e) => handleInputChange(product.id, e.target.value)}
+                                                onBlur={() => handleInputBlur(product.id, countItem)}
+                                                onKeyDown={(e) => {
+                                                  if (!canManage) return;
+                                                  if (e.key === 'Enter') {
+                                                    e.currentTarget.blur();
+                                                  }
+                                                }}
+                                                disabled={!canManage || !isOpen}
+                                              />
+                                              {isSaving && canManage && (
+                                                <Loader2 className="absolute right-2 h-3 w-3 animate-spin text-primary" />
+                                              )}
+                                            </div>
                                         </TableCell>
                                         <TableCell className="text-right">
                                             {hasValidInput && countItem ? (
@@ -495,7 +511,7 @@ export function ActiveSessionView({ session, onSessionClosed, onBack }: ActiveSe
       </Dialog>
 
       <Dialog open={showCloseConfirm} onOpenChange={(open) => {
-        if (isClosing || isReconciling) return;
+        if (!canManage || isClosing || isReconciling) return;
         setShowCloseConfirm(open);
       }}>
         <DialogContent>

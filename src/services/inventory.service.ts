@@ -12,7 +12,8 @@ import {
   InventoryCountItem,
   InventorySessionReport,
   ProductLookupItem,
-  UserLookupItem
+  UserLookupItem,
+  InventorySummaryResponse
 } from '@/types/inventory.types';
 
 export const inventoryService = {
@@ -27,6 +28,28 @@ export const inventoryService = {
     } catch (error) {
       console.error('Error fetching inventory movements:', error);
       throw new Error('No se pudieron cargar los movimientos de inventario.');
+    }
+  },
+
+  async getMovementsSummary(params: { storeId: string; fromDate?: string; toDate?: string }): Promise<InventorySummaryResponse> {
+    const { storeId, fromDate, toDate } = params;
+    if (!storeId) {
+      throw new Error('storeId es requerido para obtener el resumen de inventario.');
+    }
+
+    try {
+      const response = await api.get<InventorySummaryResponse>('/inventory-movements/summary', {
+        params: {
+          storeId,
+          fromDate,
+          toDate,
+        },
+      });
+      return response.data;
+    } catch (error) {
+      const axiosError = error as AxiosError<{ message?: string }>;
+      const message = axiosError.response?.data?.message || 'No se pudo obtener el resumen de movimientos.';
+      throw new Error(message);
     }
   },
 
@@ -108,8 +131,13 @@ export const inventoryService = {
       });
       return response.data;
     } catch (error) {
-      console.error('Error fetching inventory dashboard stats:', error);
-      throw new Error('No se pudieron cargar las estadísticas del inventario.');
+      const axiosError = error as AxiosError<{ message?: string }>;
+      const status = axiosError.response?.status;
+      const message = axiosError.response?.data?.message || 'No se pudieron cargar las estadísticas del inventario.';
+      const mappedError = new Error(message) as Error & { status?: number };
+      mappedError.status = status;
+      console.error('Error fetching inventory dashboard stats:', axiosError);
+      throw mappedError;
     }
   },
 

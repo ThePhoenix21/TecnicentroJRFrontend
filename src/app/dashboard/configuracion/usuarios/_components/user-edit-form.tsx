@@ -147,6 +147,7 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
     if (hasFeature('INVENTORY')) {
       allowed.add('VIEW_INVENTORY');
       allowed.add('MANAGE_INVENTORY');
+      allowed.add('START_PHYSICAL_INVENTORY');
     }
 
     if (hasFeature('PRODUCTS')) {

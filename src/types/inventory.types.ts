@@ -102,6 +102,24 @@ export interface InventoryStats {
   }>;
 }
 
+export interface InventorySummaryPeriod {
+  from: string;
+  to: string;
+}
+
+export interface InventorySummaryTotals {
+  incoming: number;
+  outgoing: number;
+  sales: number;
+  adjustmentsNet: number;
+}
+
+export interface InventorySummaryResponse {
+  period: InventorySummaryPeriod;
+  storeId: string;
+  totals: InventorySummaryTotals;
+}
+
 // Interfaces para Inventario Físico
 export interface InventoryCountSession {
   id: string;

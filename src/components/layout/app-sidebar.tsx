@@ -104,7 +104,7 @@ const getSidebarItems = (
       href: "/dashboard/warehouses",
       icon: Warehouse,
       requiredTenantFeatures: ["INVENTORY"],
-      requiredPermissions: ["VIEW_INVENTORY"],
+      requiredPermissions: ["VIEW_WAREHOUSES"],
     },
     {
       name: "Clientes",
@@ -130,7 +130,7 @@ const getSidebarItems = (
       href: "/dashboard/ordenes-suministro",
       icon: ClipboardCheck,
       requiredTenantFeatures: ["INVENTORY"],
-      requiredPermissions: ["VIEW_INVENTORY"],
+      requiredPermissions: ["VIEW_SUPPLY_ORDERS"],
     },
     {
       name: "Usuarios",

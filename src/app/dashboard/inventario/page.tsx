@@ -24,7 +24,7 @@ export default function InventoryDashboard() {
   const [activeTab, setActiveTab] = useState("movimientos");
 
   const canViewInventory = hasPermission("VIEW_INVENTORY") || hasPermission("inventory.read");
-  const canManageInventory = hasPermission("MANAGE_INVENTORY") || hasPermission("inventory.manage");
+  const canStartPhysicalInventory = hasPermission("START_PHYSICAL_INVENTORY");
 
   const availableTabs = useMemo(() => {
     const tabs = [
@@ -52,7 +52,7 @@ export default function InventoryDashboard() {
     ];
 
     return tabs;
-  }, [canManageInventory]);
+  }, [canStartPhysicalInventory]);
 
   if (!canViewInventory) {
     return (

@@ -10,7 +10,8 @@ import { ActiveSessionView } from "@/components/inventory/ActiveSessionView";
 
 export default function InventoryCountPage() {
   const { currentStore, hasPermission } = useAuth();
-  const canManageInventory = hasPermission("MANAGE_INVENTORY") || hasPermission("inventory.manage");
+  const canViewInventory = hasPermission("VIEW_INVENTORY") || hasPermission("inventory.read");
+  const canStartPhysicalInventory = hasPermission("START_PHYSICAL_INVENTORY");
   const [sessions, setSessions] = useState<InventoryCountSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedSession, setSelectedSession] = useState<InventoryCountSession | null>(null);
@@ -32,31 +33,28 @@ export default function InventoryCountPage() {
     loadSessions();
   }, [loadSessions]);
 
-  if (selectedSession) {
-    if (!canManageInventory) {
-      return (
-        <div className="p-6">
-          <h1 className="text-2xl font-bold mb-2">Inventario Físico</h1>
-          <p className="text-muted-foreground text-sm">
-            No tienes permisos para gestionar sesiones de inventario físico.
-          </p>
-        </div>
-      );
-    }
+  if (!canViewInventory) {
     return (
-      <div className="space-y-6 p-6">
-        <ActiveSessionView 
-            session={selectedSession} 
-            onSessionClosed={() => {
-                loadSessions();
-                setSelectedSession(null); // Volver a la lista al cerrar
-            }}
-            onBack={() => {
-                setSelectedSession(null);
-                loadSessions();
-            }}
-        />
+      <div className="p-6">
+        <h1 className="text-2xl font-bold mb-2">Inventario Físico</h1>
+        <p className="text-muted-foreground text-sm">
+          No tienes permisos para ver el inventario.
+        </p>
       </div>
+    );
+  }
+
+  if (selectedSession) {
+    return (
+      <ActiveSessionView
+        session={selectedSession}
+        canManageSession={canStartPhysicalInventory}
+        onSessionClosed={() => {
+          setSelectedSession(null);
+          loadSessions();
+        }}
+        onBack={() => setSelectedSession(null)}
+      />
     );
   }
 
@@ -66,19 +64,18 @@ export default function InventoryCountPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Inventario Físico</h1>
           <p className="text-muted-foreground">
-            {canManageInventory
+            {canStartPhysicalInventory
               ? "Gestiona las sesiones de conteo mensual."
               : "Puedes consultar el historial de sesiones, pero no crear ni modificar sesiones."}
           </p>
         </div>
-        {canManageInventory && <CreateSessionDialog onSessionCreated={loadSessions} />}
+        {canStartPhysicalInventory && <CreateSessionDialog onSessionCreated={loadSessions} />}
       </div>
 
       <InventoryCountSessionList
         sessions={sessions}
         isLoading={isLoading}
         onSelectSession={(session) => {
-          if (!canManageInventory) return;
           setSelectedSession(session);
         }}
       />

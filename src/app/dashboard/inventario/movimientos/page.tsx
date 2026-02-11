@@ -9,12 +9,24 @@ export default function InventoryMovementsPage() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const { hasPermission } = useAuth();
 
+  const canViewInventory = hasPermission("VIEW_INVENTORY") || hasPermission("inventory.read");
   const canManageInventory = hasPermission("MANAGE_INVENTORY") || hasPermission("inventory.manage");
 
   const handleMovementCreated = () => {
     // Incrementamos el trigger para recargar la tabla
     setRefreshTrigger((prev) => prev + 1);
   };
+
+  if (!canViewInventory) {
+    return (
+      <div className="p-6">
+        <h1 className="text-2xl font-bold mb-2">Movimientos de Inventario</h1>
+        <p className="text-muted-foreground text-sm">
+          No tienes permisos para ver el inventario.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 p-6">
