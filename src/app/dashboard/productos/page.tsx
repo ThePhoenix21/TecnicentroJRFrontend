@@ -80,6 +80,7 @@ export default function ProductsPage() {
     price: '',
     buyCost: '',
     basePrice: '',
+    stockThreshold: '',
   });
   const [isUpdatingDetail, setIsUpdatingDetail] = useState(false);
   const [isDeletingStoreProduct, setIsDeletingStoreProduct] = useState(false);
@@ -112,6 +113,8 @@ export default function ProductsPage() {
   const canManageProducts = can(PERMISSIONS.MANAGE_PRODUCTS);
   const canManagePrices = can(PERMISSIONS.MANAGE_PRICES);
   const canDeleteProducts = can(PERMISSIONS.DELETE_PRODUCTS);
+
+  const canCreateProducts = canViewProducts && canManageProducts;
 
   const canManageInventory = isAdmin || hasPermission?.("MANAGE_INVENTORY") || hasPermission?.("inventory.manage");
 
@@ -308,12 +311,22 @@ export default function ProductsPage() {
     e.preventDefault();
     if (!currentStore) return;
 
-    if (!canManageProducts) {
-      toast({
-        title: 'Sin permisos',
-        description: 'No tienes permisos para crear o editar productos.',
-      });
-      return;
+    if (!isEditing) {
+      if (!canCreateProducts) {
+        toast({
+          title: 'Sin permisos',
+          description: 'No tienes permisos para crear productos.',
+        });
+        return;
+      }
+    } else {
+      if (!canManageProducts && !canManagePrices) {
+        toast({
+          title: 'Sin permisos',
+          description: 'No tienes permisos para editar productos.',
+        });
+        return;
+      }
     }
 
     // Validar que no se reduzca el stock en edición
@@ -342,21 +355,23 @@ export default function ProductsPage() {
 
         if (canManageProducts) {
           updateData.name = formData.name;
+          updateData.description = formData.description;
+          updateData.stockThreshold = formData.stockThreshold;
         }
 
         if (canManagePrices) {
           updateData.price = formData.price;
 
+          updateData.basePrice = formData.basePrice;
+
           if (canViewProductCost) {
             updateData.buyCost = formData.buyCost;
-            updateData.basePrice = formData.basePrice;
           }
         }
 
         // Stock/threshold se mantienen bajo permisos de inventario (si aplica)
         if (canManageInventory) {
           updateData.stock = formData.stock;
-          updateData.stockThreshold = formData.stockThreshold;
         }
 
         console.log('🔍 IDs para actualizar:', {
@@ -374,15 +389,26 @@ export default function ProductsPage() {
       } else {
         // Creación: siempre crear producto nuevo
         // Reglas actuales:
-        // - description nunca se envía
-        // - MANAGE_PRODUCTS requerido para crear
+        // - VIEW_PRODUCTS + MANAGE_PRODUCTS para crear y setear datos básicos
+        // - MANAGE_PRICES para setear price/basePrice
+        // - MANAGE_PRICES + VIEW_PRODUCT_COST para setear buyCost
+        if (!canCreateProducts) {
+          toast({
+            title: 'Sin permisos',
+            description: 'No tienes permisos para crear productos.',
+          });
+          return;
+        }
         productData = {
           createNewProduct: true,
           name: formData.name,
+          description: formData.description,
           storeId: currentStore.id,
-          ...(canManageInventory ? { stock: formData.stock, stockThreshold: formData.stockThreshold } : { stock: 0, stockThreshold: 1 }),
+          stockThreshold: formData.stockThreshold,
+          stock: formData.stock,
           ...(canManagePrices ? { price: formData.price } : {}),
-          ...(canManagePrices && canViewProductCost ? { buyCost: formData.buyCost, basePrice: formData.basePrice } : {}),
+          ...(canManagePrices ? { basePrice: formData.basePrice } : {}),
+          ...(canManagePrices && canViewProductCost ? { buyCost: formData.buyCost } : {}),
         } as CreateStoreProductRequest;
 
         const response = await storeProductService.createStoreProduct(productData);
@@ -418,24 +444,34 @@ export default function ProductsPage() {
         });
       }
     }
-  }, [currentStore, isEditing, currentStoreProduct, formData, fetchStoreProducts, toast, loadProductLookup, canManageProducts, canManagePrices, canViewProductCost, canManageInventory]);
+  }, [currentStore, isEditing, currentStoreProduct, formData, fetchStoreProducts, toast, loadProductLookup, canCreateProducts, canManageProducts, canManagePrices, canViewProductCost, canManageInventory]);
 
   const loadProductDetail = useCallback(async (productId: string) => {
     setDetailLoading(true);
     setDetailError(null);
     try {
+      const formatValue = (value: unknown) => {
+        if (value === null || value === undefined) return '';
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? numeric.toString() : String(value);
+      };
       const detail = await storeProductService.getStoreProductDetail(productId);
+      const resolvedStockThreshold = typeof detail.stockThreshold === 'number'
+        ? detail.stockThreshold
+        : undefined;
       const normalizedDetail: StoreProductDetail = {
         ...detail,
+        stockThreshold: resolvedStockThreshold,
         productId: detail.productId ?? detail.product?.id,
       };
       setProductDetail(normalizedDetail);
       setDetailForm({
         name: detail.product?.name || '',
         description: detail.product?.description || '',
-        price: typeof detail.price === 'number' ? detail.price.toString() : '',
-        buyCost: typeof detail.product?.buyCost === 'number' ? detail.product.buyCost.toString() : '',
-        basePrice: typeof detail.product?.basePrice === 'number' ? detail.product.basePrice.toString() : '',
+        price: formatValue(detail.price),
+        buyCost: formatValue(detail.product?.buyCost),
+        basePrice: formatValue(detail.product?.basePrice),
+        stockThreshold: formatValue(resolvedStockThreshold),
       });
     } catch (error) {
       console.error('Error loading product detail:', error);
@@ -456,7 +492,7 @@ export default function ProductsPage() {
     setDetailModalOpen(false);
     setSelectedProductId(null);
     setProductDetail(null);
-    setDetailForm({ name: '', description: '', price: '', buyCost: '', basePrice: '' });
+    setDetailForm({ name: '', description: '', price: '', buyCost: '', basePrice: '', stockThreshold: '' });
     setDetailError(null);
     setCatalogDeleteCredentials({ email: '', password: '' });
     setShowCatalogDeleteForm(false);
@@ -464,6 +500,10 @@ export default function ProductsPage() {
 
   const handleDetailFormChange = (field: keyof typeof detailForm, value: string) => {
     setDetailForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const isValidNumberInputValue = (value: string) => {
+    return value === '' || /^-?\d*(\.\d*)?$/.test(value);
   };
 
   const handleUpdateDetail = async () => {
@@ -479,16 +519,20 @@ export default function ProductsPage() {
       }
 
       const payload: any = {};
-      // description nunca se envía
-      if (canManageProducts) payload.name = detailForm.name;
-      if (canManagePrices) {
-        if (detailForm.price !== '') payload.price = Number(detailForm.price);
-        if (canViewProductCost) {
-          if (detailForm.buyCost !== '') payload.buyCost = Number(detailForm.buyCost);
-          if (detailForm.basePrice !== '') payload.basePrice = Number(detailForm.basePrice);
+      if (canManageProducts) {
+        payload.name = detailForm.name;
+        payload.description = detailForm.description;
+        if (detailForm.stockThreshold !== '') {
+          payload.stockThreshold = Number(detailForm.stockThreshold);
         }
       }
-
+      if (canManagePrices) {
+        if (detailForm.price !== '') payload.price = Number(detailForm.price);
+        if (detailForm.basePrice !== '') payload.basePrice = Number(detailForm.basePrice);
+        if (canViewProductCost) {
+          if (detailForm.buyCost !== '') payload.buyCost = Number(detailForm.buyCost);
+        }
+      }
       await storeProductService.updateStoreProduct(selectedProductId, payload);
 
       toast({
@@ -687,7 +731,7 @@ export default function ProductsPage() {
           <h1 className="text-3xl font-bold">Productos</h1>
           <p className="text-muted-foreground">{currentStore.name}</p>
         </div>
-        {canManageProducts && (
+        {canCreateProducts && (
           <Button onClick={openNewProductModal}>
             <Plus className="mr-2 h-4 w-4" />
             Nuevo Producto
@@ -843,7 +887,7 @@ export default function ProductsPage() {
                   <CardTitle className="text-base">{storeProduct.name}</CardTitle>
                 </div>
                 <div className="space-y-1">
-                  {canViewProductPrices && typeof storeProduct.price === 'number' && (
+                  {(canViewProductPrices || canManagePrices) && typeof storeProduct.price === 'number' && (
                     <p className="text-xl font-bold text-primary">
                       S/ {storeProduct.price.toFixed(2)}
                     </p>
@@ -943,7 +987,7 @@ export default function ProductsPage() {
                     value={formData.name}
                     onChange={handleInputChange}
                     required
-                    disabled={!canManageProducts || isUpdatingDetail}
+                    disabled={!canCreateProducts}
                   />
                 </div>
 
@@ -957,74 +1001,66 @@ export default function ProductsPage() {
                     onChange={handleInputChange}
                     className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     rows={3}
-                    disabled
+                    disabled={!canCreateProducts}
                   />
                 </div>
 
-                {/* Campos de costo: requieren VIEW_PRODUCT_COST y MANAGE_PRICES para editar */}
-                {canViewProductCost && (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">
-                        Costo de compra <span className="text-destructive">*</span>
-                      </label>
-                      <Input
-                        type="number"
-                        name="buyCost"
-                        value={formData.buyCost}
-                        onChange={handleInputChange}
-                        min="0"
-                        step="0.01"
-                        required={canManagePrices}
-                        disabled={!canManagePrices}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium mb-2">
-                        Precio base <span className="text-destructive">*</span>
-                      </label>
-                      <Input
-                        type="number"
-                        name="basePrice"
-                        value={formData.basePrice}
-                        onChange={handleInputChange}
-                        min="0"
-                        step="0.01"
-                        required={canManagePrices}
-                        disabled={!canManagePrices}
-                      />
-                    </div>
-                  </>
-                )}
-
-                {/* Campos visibles para todos */}
+                {/* Campos de precios: solo editables con MANAGE_PRICES. VIEW_PRODUCT_PRICES NO es requerido para crear/editar precios aqu. */}
                 <div>
                   <label className="block text-sm font-medium mb-2">
                     Precio de venta <span className="text-destructive">*</span>
                   </label>
-                  {canViewProductPrices ? (
-                    <>
-                      <Input
-                        type="number"
-                        name="price"
-                        value={formData.price}
-                        onChange={handleInputChange}
-                        min="0"
-                        step="0.01"
-                        required={canManagePrices}
-                        disabled={!canManagePrices}
-                      />
-                      {!canManagePrices && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          No tienes permisos para modificar precios.
-                        </p>
-                      )}
-                    </>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No disponible</p>
-                  )}
+                  <>
+                    <Input
+                      type="number"
+                      name="price"
+                      value={formData.price}
+                      onChange={handleInputChange}
+                      min="0"
+                      step="0.01"
+                      required={canManagePrices}
+                      disabled={!canManagePrices}
+                    />
+                    {!canManagePrices && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        No tienes permisos para establecer precios.
+                      </p>
+                    )}
+                  </>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Precio base
+                  </label>
+                  <Input
+                    type="number"
+                    name="basePrice"
+                    value={formData.basePrice}
+                    onChange={handleInputChange}
+                    min="0"
+                    step="0.01"
+                    disabled={!canManagePrices}
+                  />
+                </div>
+
+                {/* Costo: solo si puede verlo y adems tiene MANAGE_PRICES */}
+                {canViewProductCost && (
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Costo de compra
+                    </label>
+                    <Input
+                      type="number"
+                      name="buyCost"
+                      value={formData.buyCost}
+                      onChange={handleInputChange}
+                      min="0"
+                      step="0.01"
+                      disabled={!canManagePrices}
+                    />
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium mb-2">
@@ -1038,11 +1074,11 @@ export default function ProductsPage() {
                     min={isEditing && originalStock !== null ? originalStock : 0}
                     placeholder="0"
                     required
-                    disabled={!canManageInventory}
+                    disabled={isEditing ? !canManageInventory : !canCreateProducts}
                   />
                   {isEditing && originalStock !== null && (
                     <p className="text-xs text-muted-foreground mt-1">
-                      Solo se permite aumentar el stock. Para reducirlo, use la sección de Inventario.
+                      Solo se permite aumentar el stock. Para reducirlo, use la seccin de Inventario.
                     </p>
                   )}
                 </div>
@@ -1059,7 +1095,7 @@ export default function ProductsPage() {
                     min="1"
                     placeholder="1"
                     required
-                    disabled={!canManageInventory}
+                    disabled={!canCreateProducts}
                   />
                 </div>
               </div>
@@ -1109,16 +1145,20 @@ export default function ProductsPage() {
                   />
                 </div>
                 <div>
-                  <Label>Precio (venta)</Label>
+                  <Label>Precio (venta)</Label>                  
                   {canViewProductPrices ? (
                     <Input
                       type="number"
                       value={detailForm.price}
-                      onChange={(e) => handleDetailFormChange('price', e.target.value)}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        if (!isValidNumberInputValue(next)) return;
+                        handleDetailFormChange('price', next);
+                      }}
                       disabled={isUpdatingDetail || !canManagePrices}
                     />
                   ) : (
-                    <p className="text-sm text-muted-foreground">No disponible</p>
+                    <p className="text-sm text-muted-foreground">-</p>
                   )}
                 </div>
                 <div>
@@ -1131,20 +1171,24 @@ export default function ProductsPage() {
                       disabled={isUpdatingDetail || !canManagePrices}
                     />
                   ) : (
-                    <p className="text-sm text-muted-foreground">No disponible</p>
+                    <p className="text-sm text-muted-foreground">-</p>
                   )}
                 </div>
                 <div>
                   <Label>Precio base</Label>
-                  {canViewProductCost ? (
+                  {canViewProductPrices ? (
                     <Input
                       type="number"
                       value={detailForm.basePrice}
-                      onChange={(e) => handleDetailFormChange('basePrice', e.target.value)}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        if (!isValidNumberInputValue(next)) return;
+                        handleDetailFormChange('basePrice', next);
+                      }}
                       disabled={isUpdatingDetail || !canManagePrices}
                     />
                   ) : (
-                    <p className="text-sm text-muted-foreground">No disponible</p>
+                    <p className="text-sm text-muted-foreground">-</p>
                   )}
                 </div>
                 <div className="md:col-span-2">
@@ -1153,13 +1197,23 @@ export default function ProductsPage() {
                     value={detailForm.description}
                     onChange={(e) => handleDetailFormChange('description', e.target.value)}
                     className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    disabled
+                    disabled={isUpdatingDetail || !canManageProducts}
+                  />
+                </div>
+                <div>
+                  <Label>Alerta de stock</Label>
+                  <Input
+                    type="number"
+                    value={detailForm.stockThreshold}
+                    onChange={(e) => handleDetailFormChange('stockThreshold', e.target.value)}
+                    disabled={isUpdatingDetail || !canManageProducts}
+                    min="1"
                   />
                 </div>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-md border p-4 text-sm">
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="rounded-md border p-4 text-sm md:col-span-2">
                   <p className="font-semibold mb-1">Información en tienda</p>
                   <p>Tienda: {productDetail.store?.name ?? '—'}</p>
                   <p>Dirección: {productDetail.store?.address ?? '—'}</p>
@@ -1167,7 +1221,7 @@ export default function ProductsPage() {
                   <p>Stock actual: {productDetail.stock}</p>
                   <p>Responsable: {productDetail.user?.name ?? '—'}</p>
                 </div>
-                <div className="rounded-md border p-4 text-sm space-y-2">
+                <div className="rounded-md border p-4 text-sm space-y-3 flex flex-col h-full">
                   <p className="font-semibold">Acciones</p>
                   <Button
                     variant="outline"

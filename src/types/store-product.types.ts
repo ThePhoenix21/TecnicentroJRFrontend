@@ -91,6 +91,7 @@ export interface StoreProductDetail {
   productId?: string;
   price: number;
   stock: number;
+  stockThreshold?: number;
   product: {
     id?: string;
     name: string;
