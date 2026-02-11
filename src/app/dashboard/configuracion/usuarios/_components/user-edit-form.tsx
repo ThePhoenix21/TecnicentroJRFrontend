@@ -135,6 +135,9 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
   const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
   const hasFeature = (feature: string) => !tenantFeaturesLoaded || normalizedTenantFeatures.includes(feature);
 
+  console.log('🔍 Features del tenant:', tenantFeatures);
+  console.log('🔍 Features normalizados:', normalizedTenantFeatures);
+
   const allowedPermissionsSet = (() => {
     if (!tenantFeaturesLoaded) return null;
 
@@ -160,6 +163,7 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
     if (hasFeature('PRODUCTS')) {
       allowed.add('VIEW_PRODUCTS');
       allowed.add('MANAGE_PRODUCTS');
+      allowed.add('MANAGE_PRICES');
       allowed.add('VIEW_PRODUCT_PRICES');
       allowed.add('VIEW_PRODUCT_COST');
       allowed.add('DELETE_PRODUCTS');
@@ -168,6 +172,18 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
     if (hasFeature('CLIENTS')) {
       allowed.add('VIEW_CLIENTS');
       allowed.add('MANAGE_CLIENTS');
+    }
+
+    if (hasFeature('USERS')) {
+      allowed.add('VIEW_USERS');
+      allowed.add('MANAGE_USERS');
+      allowed.add('DELETE_USERS');
+    }
+
+    if (hasFeature('STORES')) {
+      allowed.add('VIEW_STORES');
+      allowed.add('MANAGE_STORES');
+      allowed.add('CHANGE_STORE_LOGO');
     }
 
     if (hasFeature('SERVICES')) {
@@ -193,6 +209,40 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
     if (hasFeature('CASH')) {
       allowed.add('VIEW_CASH');
       allowed.add('MANAGE_CASH');
+      allowed.add('VIEW_ALL_CASH_HISTORY');
+      allowed.add('VIEW_OWN_CASH_HISTORY');
+      allowed.add('PRINT_CASH_CLOSURE');
+    }
+
+    if (hasFeature('EMPLOYEES')) {
+      allowed.add('VIEW_EMPLOYEES');
+      allowed.add('MANAGE_EMPLOYEES');
+      allowed.add('CONVERT_EMPLOYEE_TO_USER');
+    }
+
+    if (hasFeature('WAREHOUSES')) {
+      allowed.add('VIEW_WAREHOUSES');
+      allowed.add('MANAGE_WAREHOUSES');
+    }
+
+    if (hasFeature('SUPPLIERS')) {
+      allowed.add('VIEW_SUPPLIERS');
+      allowed.add('MANAGE_SUPPLIERS');
+      allowed.add('DELETE_SUPPLIERS');
+    }
+
+    if (hasFeature('SUPPLY_ORDERS')) {
+      allowed.add('VIEW_SUPPLY_ORDERS');
+      allowed.add('CREATE_SUPPLY_ORDER');
+      allowed.add('EDIT_EMITTED_SUPPLY_ORDER');
+      allowed.add('APPROVE_SUPPLY_ORDER');
+      allowed.add('RECEIVE_SUPPLY_ORDER');
+      allowed.add('CANCEL_SUPPLY_ORDER');
+    }
+
+    if (hasFeature('SUPPORT')) {
+      allowed.add('VIEW_SUPPORT');
+      allowed.add('MANAGE_SUPPORT');
     }
 
     return allowed;
@@ -301,10 +351,15 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
     if (!allowedPermissionsSet) return;
 
     const current = form.getValues('permissions') || [];
-    const next = current.filter((p: string) => allowedPermissionsSet.has(p));
-
-    if (next.length !== current.length) {
-      form.setValue('permissions', next);
+    
+    console.log('🔍 Permisos actuales del usuario:', current);
+    console.log('🔍 Permisos permitidos por tenant:', Array.from(allowedPermissionsSet));
+    
+    // NO filtrar los permisos existentes del usuario
+    // Solo mostrar advertencia si hay permisos no permitidos
+    const nonAllowedPermissions = current.filter((p: string) => !allowedPermissionsSet.has(p));
+    if (nonAllowedPermissions.length > 0) {
+      console.log('⚠️ Permisos no permitidos por tenant:', nonAllowedPermissions);
     }
   }, [allowedPermissionsSet, form]);
 

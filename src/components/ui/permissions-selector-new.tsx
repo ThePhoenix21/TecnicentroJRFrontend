@@ -14,6 +14,49 @@ const formatPermissionLabel = (permission: string): string => {
   if (!permission) return "";
   if (permission === "VIEW_ORDERS") return "Ver ventas";
   if (permission === "MANAGE_ORDERS") return "Gestionar ventas";
+  if (permission === "VIEW_STORES") return "Ver tiendas";
+  if (permission === "MANAGE_STORES") return "Gestionar tiendas";
+  if (permission === "CHANGE_STORE_LOGO") return "Cambiar logo de tienda";
+  if (permission === "VIEW_ALL_CASH_HISTORY") return "Ver todo el historial de caja";
+  if (permission === "VIEW_OWN_CASH_HISTORY") return "Ver mi historial de caja";
+  if (permission === "PRINT_CASH_CLOSURE") return "Imprimir cierre de caja";
+  if (permission === "VIEW_EMPLOYEES") return "Ver empleados";
+  if (permission === "MANAGE_EMPLOYEES") return "Gestionar empleados";
+  if (permission === "CONVERT_EMPLOYEE_TO_USER") return "Convertir empleado en usuario";
+  if (permission === "VIEW_SUPPLIERS") return "Ver proveedores";
+  if (permission === "MANAGE_SUPPLIERS") return "Gestionar proveedores";
+  if (permission === "DELETE_SUPPLIERS") return "Eliminar proveedores";
+  if (permission === "VIEW_SUPPLY_ORDERS") return "Ver órdenes de suministro";
+  if (permission === "CREATE_SUPPLY_ORDER") return "Crear orden de suministro";
+  if (permission === "EDIT_EMITTED_SUPPLY_ORDER") return "Editar orden emitida";
+  if (permission === "APPROVE_SUPPLY_ORDER") return "Aprobar orden de suministro";
+  if (permission === "RECEIVE_SUPPLY_ORDER") return "Recibir orden de suministro";
+  if (permission === "CANCEL_SUPPLY_ORDER") return "Anular orden de suministro";
+  if (permission === "VIEW_SUPPORT") return "Ver soporte técnico";
+  if (permission === "MANAGE_SUPPORT") return "Gestionar soporte técnico";
+  if (permission === "VIEW_USERS") return "Ver usuarios";
+  if (permission === "MANAGE_USERS") return "Gestionar usuarios";
+  if (permission === "DELETE_USERS") return "Eliminar usuarios";
+  if (permission === "VIEW_ALL_ORDERS_HISTORY") return "Ver todo el historial de ventas";
+  if (permission === "VIEW_OWN_ORDERS_HISTORY") return "Ver mi historial de ventas";
+  if (permission === "VIEW_WAREHOUSES") return "Ver almacenes";
+  if (permission === "MANAGE_WAREHOUSES") return "Gestionar almacenes";
+  if (permission === "VIEW_DASHBOARD") return "Ver panel de control";
+  if (permission === "VIEW_CASH") return "Ver caja";
+  if (permission === "MANAGE_CASH") return "Gestionar caja";
+  if (permission === "VIEW_SERVICES") return "Ver servicios";
+  if (permission === "MANAGE_SERVICES") return "Gestionar servicios";
+  if (permission === "VIEW_PRODUCTS") return "Ver productos";
+  if (permission === "MANAGE_PRODUCTS") return "Gestionar productos";
+  if (permission === "MANAGE_PRICES") return "Gestionar precios";
+  if (permission === "VIEW_PRODUCT_COST") return "Ver costo de productos";
+  if (permission === "VIEW_PRODUCT_PRICES") return "Ver precios de productos";
+  if (permission === "DELETE_PRODUCTS") return "Eliminar productos";
+  if (permission === "VIEW_INVENTORY") return "Ver inventario";
+  if (permission === "MANAGE_INVENTORY") return "Gestionar inventario";
+  if (permission === "START_PHYSICAL_INVENTORY") return "Iniciar inventario físico";
+  if (permission === "VIEW_CLIENTS") return "Ver clientes";
+  if (permission === "MANAGE_CLIENTS") return "Gestionar clientes";
 
   const tokens = permission
     .toLowerCase()
@@ -47,6 +90,14 @@ const formatPermissionLabel = (permission: string): string => {
     price: "Precio",
     cash: "Caja",
     caja: "Caja",
+    employees: "Empleados",
+    employee: "Empleado",
+    suppliers: "Proveedores",
+    supplier: "Proveedor",
+    supply: "Suministro",
+    support: "Soporte",
+    warehouses: "Almacenes",
+    warehouse: "Almacén",
     read: "Ver",
     view: "Ver",
     list: "Listar",
