@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { storeProductService } from "@/services/store-product.service";
 import { inventoryService } from "@/services/inventory.service";
-import { StoreProductStockItem } from "@/types/store-product.types";
 import { InventoryMovementType } from "@/types/inventory.types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -18,11 +17,16 @@ interface InventoryMovementFormProps {
   onSuccess?: () => void;
 }
 
+type StoreProductLookupItem = {
+  id: string;
+  name: string;
+};
+
 export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps) {
   const { currentStore, user, isAdmin } = useAuth();
   const { toast } = useToast();
   
-  const [products, setProducts] = useState<StoreProductStockItem[]>([]);
+  const [products, setProducts] = useState<StoreProductLookupItem[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -44,12 +48,8 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
   const loadProducts = async (storeId: string) => {
     setIsLoadingProducts(true);
     try {
-      const response = await storeProductService.getStoreProductsStock(storeId);
-      const normalized = (response || []).map((item) => ({
-        ...item,
-        storeProductId: item.id,
-      }));
-      setProducts(normalized);
+      const response = await storeProductService.getStoreProductsLookup({ storeId });
+      setProducts(Array.isArray(response) ? response : []);
     } catch (error) {
       console.error("Error loading products:", error);
       toast({
@@ -140,7 +140,7 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
     }
   };
 
-  const selectedProduct = products.find((p) => p.storeProductId === selectedProductId);
+  const selectedProduct = products.find((p) => p.id === selectedProductId);
 
   const filteredProducts = products.filter((product) =>
     product.name.toLowerCase().includes(productQuery.trim().toLowerCase())
@@ -235,10 +235,10 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
                     ) : (
                       filteredProducts.map((product) => (
                         <button
-                          key={product.storeProductId || product.id}
+                          key={product.id}
                           type="button"
                           onClick={() => {
-                            const productId = product.storeProductId || product.id;
+                            const productId = product.id;
                             if (!productId) return;
                             setSelectedProductId(productId);
                             setProductQuery(product.name);
@@ -247,7 +247,6 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
                           className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted"
                         >
                           <span>{product.name}</span>
-                          <span className="text-xs text-muted-foreground">Stock: {product.stock}</span>
                         </button>
                       ))
                     )}
@@ -255,11 +254,6 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
                 </div>
               )}
             </div>
-            {selectedProduct && (
-              <p className="text-xs text-muted-foreground">
-                Stock actual: <span className="font-medium">{selectedProduct.stock}</span>
-              </p>
-            )}
           </div>
 
           <div className="space-y-2">

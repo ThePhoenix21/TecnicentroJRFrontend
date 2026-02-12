@@ -34,6 +34,22 @@ class StoreProductService {
       console.error('[StoreProductService.getStoreProductsSimple] Error:', anyError);
       throw error;
     }
+
+  }
+
+  async getStoreProductsLookup(params?: { storeId?: string; search?: string }): Promise<Array<{ id: string; name: string }>> {
+    try {
+      const searchParams = new URLSearchParams();
+      if (params?.storeId) searchParams.set('storeId', params.storeId);
+      if (params?.search) searchParams.set('search', params.search);
+      const qs = searchParams.toString();
+      const url = qs ? `/store/products/lookup?${qs}` : '/store/products/lookup';
+      const response = await api.get(url);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error('[StoreProductService.getStoreProductsLookup] Error:', error);
+      throw error;
+    }
   }
 
   async getStoreProductsStock(storeId: string): Promise<StoreProductStockItem[]> {
