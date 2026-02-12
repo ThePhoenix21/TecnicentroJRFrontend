@@ -171,6 +171,8 @@ export function AppSidebar() {
   const { hasPermission: hasPermissionHook, canManageUsers } = usePermissions();
   const sidebarItems = getSidebarItems(hasPermissionHook, tenantFeatures, tenantFeaturesLoaded);
 
+  const canSelectStore = (user?.stores?.length || 0) > 1;
+
   console.log('🔍 Sidebar Debug:', {
     user,
     sidebarItems,
@@ -194,7 +196,7 @@ export function AppSidebar() {
               <Building className="h-5 w-5 text-primary" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Tienda</p>
-                {canManageUsers() ? (
+                {canSelectStore ? (
                   <Select
                     value={currentStore.id}
                     onValueChange={(storeId) => {
