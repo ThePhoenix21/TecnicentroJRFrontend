@@ -9,6 +9,7 @@ import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/auth-context";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
     Table,
@@ -30,6 +31,9 @@ interface TenantTokenPayload {
 
 export default function TiendasPage() {
     const { isAdmin, refreshStores } = useAuth();
+    const { canManageStores, canChangeStoreLogo } = usePermissions();
+    const canManage = isAdmin || canManageStores();
+    const canManageLogo = isAdmin || canChangeStoreLogo();
     const [stores, setStores] = useState<Store[]>([]);
     const [loading, setLoading] = useState(true);
     const [isFormOpen, setIsFormOpen] = useState(false);
@@ -159,11 +163,13 @@ export default function TiendasPage() {
     };
 
     const handleCreateStore = () => {
+        if (!canManage) return;
         setEditingStore(null);
         setIsFormOpen(true);
     };
 
     const handleEditStore = (store: Store) => {
+        if (!canManage) return;
         setEditingStore(store);
         setIsFormOpen(true);
     };
@@ -191,10 +197,10 @@ export default function TiendasPage() {
               <div className="space-y-1">
                 <div
                   role="button"
-                  aria-disabled={!isAdmin}
-                  onClick={isAdmin ? () => setIsLogoModalOpen(true) : undefined}
+                  aria-disabled={!canManageLogo}
+                  onClick={canManageLogo ? () => setIsLogoModalOpen(true) : undefined}
                   className={`mb-2 inline-flex h-40 w-40 items-center justify-center rounded-md border bg-muted/30 p-2 ${
-                    isAdmin ? 'cursor-pointer hover:border-primary/50 hover:bg-muted/50' : 'cursor-default opacity-90'
+                    canManageLogo ? 'cursor-pointer hover:border-primary/50 hover:bg-muted/50' : 'cursor-default opacity-90'
                   }`}
                 >
                   {tokenLogoUrl ? (
@@ -210,14 +216,16 @@ export default function TiendasPage() {
               </div>
               
               <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                <Button 
-                  onClick={handleCreateStore}
-                  className="w-full sm:w-auto bg-primary hover:bg-primary/90 transition-colors"
-                  size="sm"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  <span className="font-medium">Nueva Tienda</span>
-                </Button>
+                {canManage && (
+                  <Button 
+                    onClick={handleCreateStore}
+                    className="w-full sm:w-auto bg-primary hover:bg-primary/90 transition-colors"
+                    size="sm"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    <span className="font-medium">Nueva Tienda</span>
+                  </Button>
+                )}
               </div>
             </div>
             
@@ -238,7 +246,7 @@ export default function TiendasPage() {
         </CardHeader>
         
         <CardContent className="p-4 sm:p-6">
-          {isAdmin && (
+          {canManageLogo && (
             <Dialog open={isLogoModalOpen} onOpenChange={setIsLogoModalOpen}>
               <DialogContent>
                 <DialogHeader>
@@ -249,7 +257,7 @@ export default function TiendasPage() {
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="space-y-1">
                       <p className="text-sm text-muted-foreground">
-                        Este logo se usa en PDFs y comprobantes. Solo Admin puede actualizarlo.
+                        Este logo se usa en PDFs y comprobantes.
                       </p>
                     </div>
                   </div>
@@ -307,7 +315,7 @@ export default function TiendasPage() {
               <p className="text-gray-500">
                 {searchTerm ? "No se encontraron tiendas que coincidan con la búsqueda" : "No hay tiendas registradas"}
               </p>
-              {!searchTerm && (
+              {!searchTerm && canManage && (
                 <Button onClick={handleCreateStore} className="mt-4">
                   Crear primera tienda
                 </Button>
@@ -324,7 +332,7 @@ export default function TiendasPage() {
                       <TableHead>Teléfono</TableHead>
                       <TableHead>Creado por</TableHead>
                       <TableHead>Fecha de creación</TableHead>
-                      <TableHead className="text-right">Acciones</TableHead>
+                      {canManage && <TableHead className="text-right">Acciones</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -367,17 +375,19 @@ export default function TiendasPage() {
                         <TableCell>
                           {format(new Date(store.createdAt), "dd/MM/yyyy HH:mm")}
                         </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEditStore(store)}
-                            className="flex items-center gap-1"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                            Editar
-                          </Button>
-                        </TableCell>
+                        {canManage && (
+                          <TableCell className="text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEditStore(store)}
+                              className="flex items-center gap-1"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                              Editar
+                            </Button>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                   </TableBody>
@@ -388,15 +398,17 @@ export default function TiendasPage() {
         </CardContent>
       </Card>
 
-      <StoreForm
-        isOpen={isFormOpen}
-        onClose={() => {
-          setIsFormOpen(false);
-          setEditingStore(null);
-        }}
-        onStoreSaved={handleStoreSaved}
-        editingStore={editingStore}
-      />
+      {canManage && (
+        <StoreForm
+          isOpen={isFormOpen}
+          onClose={() => {
+            setIsFormOpen(false);
+            setEditingStore(null);
+          }}
+          onStoreSaved={handleStoreSaved}
+          editingStore={editingStore}
+        />
+      )}
     </div>
   );
 }

@@ -6,7 +6,7 @@ class StoreService {
 
     async getAllStores(): Promise<Store[]> {
         try {
-            const response = await api.get<Store[]>(this.baseUrl);
+            const response = await api.get<Store[]>(`${this.baseUrl}/tenant-info`);
             return response.data;
         } catch (error) {
             this.handleError(error);
