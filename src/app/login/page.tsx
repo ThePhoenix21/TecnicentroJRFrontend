@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Mail, Lock } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
+import { getFirstAccessibleRouteFromPermissions } from '@/lib/permission-routes';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -63,23 +64,8 @@ export default function LoginPage() {
         }
 
         // Si hay una sola tienda, redirigir directo a la mejor ruta según permisos (sin parpadeo)
-        const perms = success.permissions || [];
-        const has = (p: string) => perms.includes(p);
-
-        let target = '/dashboard';
-        if (has('VIEW_DASHBOARD')) {
-          target = '/dashboard';
-        } else if (has('VIEW_ORDERS') || has('MANAGE_ORDERS')) {
-          target = '/dashboard/ventas';
-        } else if (has('VIEW_CASH') || has('MANAGE_CASH')) {
-          target = '/dashboard/caja';
-        } else if (has('VIEW_INVENTORY') || has('MANAGE_INVENTORY')) {
-          target = '/dashboard/inventario';
-        } else if (has('VIEW_PRODUCTS') || has('MANAGE_PRODUCTS')) {
-          target = '/dashboard/productos';
-        } else if (has('VIEW_CLIENTS') || has('MANAGE_CLIENTS')) {
-          target = '/dashboard/clientes';
-        }
+        const targetFromPermissions = getFirstAccessibleRouteFromPermissions(success.permissions);
+        const target = targetFromPermissions || '/dashboard';
 
         console.log('Usuario con una sola tienda, redirigiendo a:', target);
         window.location.href = target;

@@ -3,6 +3,7 @@
 import { AppHeader } from "./app-header";
 import { AppSidebar } from "./app-sidebar";
 import { useAuth } from "@/contexts/auth-context";
+import { getFirstAccessibleRouteFromPermissions } from "@/lib/permission-routes";
 
 import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -110,7 +111,13 @@ export function MainLayout({ children }: MainLayoutProps) {
 
         // Helper: ruta por defecto según permisos (solo para USER)
         const getDefaultUserRoute = () => {
-          if (hasPermission("VIEW_DASHBOARD") && isRouteAllowedByTenant('/dashboard')) return "/dashboard";
+          const routeFromPermissions = getFirstAccessibleRouteFromPermissions(user?.permissions, {
+            isRouteAllowed: isRouteAllowedByTenant,
+          });
+          if (routeFromPermissions) {
+            return routeFromPermissions;
+          }
+
           if ((hasPermission("VIEW_ORDERS") || hasPermission("MANAGE_ORDERS")) && isRouteAllowedByTenant('/dashboard/ventas')) return "/dashboard/ventas";
           if ((hasPermission("VIEW_CASH") || hasPermission("MANAGE_CASH")) && isRouteAllowedByTenant('/dashboard/caja')) return "/dashboard/caja";
           if ((hasPermission("VIEW_INVENTORY") || hasPermission("MANAGE_INVENTORY")) && isRouteAllowedByTenant('/dashboard/inventario')) return "/dashboard/inventario";
