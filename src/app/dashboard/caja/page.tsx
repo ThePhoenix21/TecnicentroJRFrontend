@@ -67,8 +67,16 @@ const resolveTenantInfoFromToken = (): TenantInfoFromToken => {
 export default function CajaPage() {
   const { user, currentStore, hasPermission, isAdmin, canIssuePdf } = useAuth();
 
-  const canViewCash = isAdmin || hasPermission?.("VIEW_CASH") || hasPermission?.("MANAGE_CASH");
+  const canViewCash = isAdmin || hasPermission?.("VIEW_CASH");
   const canManageCash = isAdmin || hasPermission?.("MANAGE_CASH");
+  
+  // Permisos para historial
+  const canViewAllCashHistory = isAdmin || hasPermission?.("VIEW_ALL_CASH_HISTORY");
+  const canViewOwnCashHistory = hasPermission?.("VIEW_OWN_CASH_HISTORY");
+  const canViewHistory = canViewAllCashHistory || canViewOwnCashHistory;
+  
+  // Permiso para impresión
+  const canPrintCashClosure = isAdmin || hasPermission?.("PRINT_CASH_CLOSURE");
 
   const [currentSession, setCurrentSession] = useState<CashSession | null>(null);
   const [balance, setBalance] = useState<CashBalance | null>(null);
@@ -186,7 +194,7 @@ export default function CajaPage() {
   }, [currentSession?.id, currentSession?.id, canViewCash, movementsPageSize, paymentFilter, operationFilter, clientNameFilter]);
 
   const loadSelectedSessionMovements = useCallback(async (sessionId: string, targetPage: number = 1) => {
-    if (!canViewCash) return;
+    if (!canViewHistory) return;
 
     setSelectedMovementsLoading(true);
     try {
@@ -209,7 +217,7 @@ export default function CajaPage() {
     } finally {
       setSelectedMovementsLoading(false);
     }
-  }, [canViewCash, closedSessionMovementsPageSize]);
+  }, [canViewHistory, closedSessionMovementsPageSize]);
 
   const loadMovementsRef = useRef(loadMovements);
 
@@ -309,13 +317,18 @@ export default function CajaPage() {
   }, [loadCurrentSession]);
 
   const loadClosedSessions = useCallback(async () => {
-    if (!canViewCash) return;
+    if (!canViewHistory) return;
     if (!currentStore?.id) return;
 
     const from = closedFromDate ? new Date(`${closedFromDate}T00:00:00.000Z`).toISOString() : undefined;
     const to = closedToDate ? new Date(`${closedToDate}T23:59:59.999Z`).toISOString() : undefined;
-    const openedByName = closedOpenedByName.trim() || undefined;
+    let openedByName = closedOpenedByName.trim() || undefined;
     const storeId = isAdmin ? (currentStore?.id || undefined) : undefined;
+
+    // Si solo tiene permiso para ver su propio historial, forzar filtro por su nombre
+    if (!canViewAllCashHistory && canViewOwnCashHistory) {
+      openedByName = user?.name;
+    }
 
     setClosedSessionsLoading(true);
     try {
@@ -333,7 +346,7 @@ export default function CajaPage() {
     } finally {
       setClosedSessionsLoading(false);
     }
-  }, [canViewCash, closedFromDate, closedOpenedByName, closedToDate, currentStore?.id, isAdmin]);
+  }, [canViewHistory, canViewAllCashHistory, canViewOwnCashHistory, closedFromDate, closedOpenedByName, closedToDate, currentStore?.id, isAdmin, user?.name]);
 
   const handleSelectClosedSessionDetail = useCallback((session: CashSession) => {
     setSelectedClosedSession(session);
@@ -401,7 +414,7 @@ export default function CajaPage() {
       setCloseData({ email: '', password: '', declaredAmount: '' });
       await loadCurrentSession();
 
-      if (canIssuePdf) {
+      if (canPrintCashClosure) {
         // Generar e imprimir reporte PDF automáticamente
         try {
           const { tenantLogoUrl, tenantName } = resolveTenantInfoFromToken();
@@ -487,7 +500,7 @@ export default function CajaPage() {
       return;
     }
 
-    if (!canIssuePdf) {
+    if (!canPrintCashClosure) {
       toast.error('No tienes permisos para imprimir PDFs');
       return;
     }
@@ -532,17 +545,17 @@ export default function CajaPage() {
 
   if (loading) {
     if (!canViewCash) {
-    return (
-      <div className="space-y-6 p-6">
-        <h1 className="text-3xl font-bold">Gestión de Caja</h1>
-        <p className="text-muted-foreground">
-          No tienes permisos para ver esta sección.
-        </p>
-      </div>
-    );
-  }
+      return (
+        <div className="space-y-6 p-6">
+          <h1 className="text-3xl font-bold">Gestión de Caja</h1>
+          <p className="text-muted-foreground">
+            No tienes permisos para ver esta sección.
+          </p>
+        </div>
+      );
+    }
 
-  return (
+    return (
       <div className="space-y-6 p-6">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold">Gestión de Caja</h1>
@@ -564,6 +577,17 @@ export default function CajaPage() {
     );
   }
 
+  if (!canViewCash) {
+    return (
+      <div className="space-y-6 p-6">
+        <h1 className="text-3xl font-bold">Gestión de Caja</h1>
+        <p className="text-muted-foreground">
+          No tienes permisos para ver esta sección.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
@@ -578,7 +602,7 @@ export default function CajaPage() {
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'open' | 'history')}>
         <TabsList>
           <TabsTrigger value="open">Caja abierta</TabsTrigger>
-          <TabsTrigger value="history">Historial de cajas</TabsTrigger>
+          {canViewHistory && <TabsTrigger value="history">Historial de cajas</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="open">
@@ -868,7 +892,7 @@ export default function CajaPage() {
       </Dialog>
 
       {/* Formulario para abrir caja */}
-      {!currentSession && canManageCash && (
+      {!currentSession && canManageCash && canViewCash && (
         <Card>
           <CardHeader>
             <CardTitle>Abrir Caja</CardTitle>
@@ -902,7 +926,7 @@ export default function CajaPage() {
       )}
 
       {/* Formulario de movimiento manual */}
-      {showMovementForm && currentSession && (
+      {showMovementForm && currentSession && canManageCash && (
         <Card>
           <CardHeader>
             <CardTitle>Agregar Movimiento Manual</CardTitle>
@@ -983,7 +1007,7 @@ export default function CajaPage() {
       )}
 
       {/* Formulario de cierre de caja */}
-      {showCloseForm && currentSession && (
+      {showCloseForm && currentSession && canManageCash && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-red-600">
@@ -1050,7 +1074,7 @@ export default function CajaPage() {
       )}
 
       {/* Movimientos de Caja (nuevo listado) */}
-      {currentSession?.id && (
+      {currentSession?.id && canViewCash && (
         <Card>
           <CardHeader>
             <CardTitle>Movimientos de Caja</CardTitle>
@@ -1273,7 +1297,7 @@ export default function CajaPage() {
                 <Button variant="outline" onClick={handleBackToClosedSessions} className="w-full md:w-auto">
                   Volver al historial
                 </Button>
-                {canIssuePdf && (
+                {canPrintCashClosure && (
                   <Button
                     variant="outline"
                     onClick={() => {
@@ -1512,7 +1536,7 @@ export default function CajaPage() {
                               {s.closedAt ? new Date(s.closedAt).toLocaleString() : 'Cerrada'}
                             </p>
                           </div>
-                          {canIssuePdf && (
+                          {canPrintCashClosure && (
                             <Button
                               variant="outline"
                               size="sm"
