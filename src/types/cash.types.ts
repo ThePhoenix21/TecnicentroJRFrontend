@@ -7,8 +7,11 @@ export interface CashSession {
   status: 'OPEN' | 'CLOSED';
   openingAmount: number;
   closingAmount: number;
+  declaredAmount?: number;
   StoreId: string;
   UserId: string;
+  openedByName?: string;
+  closedByName?: string;
   Store?: {
     id: string;
     name: string;

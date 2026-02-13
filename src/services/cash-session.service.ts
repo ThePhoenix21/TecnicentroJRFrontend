@@ -17,6 +17,16 @@ export interface GetClosedCashSessionsRequest {
   from?: string;
   to?: string;
   openedByName?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface GetClosedCashSessionsResponse {
+  data: CashSession[];
+  total: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
 }
 
 export class CashSessionService {
@@ -37,11 +47,21 @@ export class CashSessionService {
     }
   }
 
-  // ✅ Obtener sesiones de caja cerradas por tienda (con filtros)
-  async getClosedCashSessionsByStore(payload: GetClosedCashSessionsRequest): Promise<CashSession[]> {
+  // ✅ Obtener sesiones de caja cerradas por tienda (con filtros y paginación)
+  async getClosedCashSessionsByStore(payload: GetClosedCashSessionsRequest): Promise<GetClosedCashSessionsResponse> {
     try {
       const token = localStorage.getItem("auth_token");
-      const response = await api.post('/cash-session/store/closed', payload, {
+      
+      // Construir query params para GET
+      const queryParams = new URLSearchParams();
+      if (payload.storeId) queryParams.set('storeId', payload.storeId);
+      if (payload.from) queryParams.set('from', payload.from);
+      if (payload.to) queryParams.set('to', payload.to);
+      if (payload.openedByName) queryParams.set('openedByName', payload.openedByName);
+      if (payload.page) queryParams.set('page', payload.page.toString());
+      if (payload.pageSize) queryParams.set('pageSize', payload.pageSize.toString());
+      
+      const response = await api.get(`/cash-session/store/closed?${queryParams.toString()}`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`

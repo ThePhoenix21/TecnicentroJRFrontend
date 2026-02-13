@@ -114,9 +114,24 @@ export default function CajaPage() {
 
   const [activeTab, setActiveTab] = useState<'open' | 'history'>('open');
 
-  const [closedFromDate, setClosedFromDate] = useState('');
-  const [closedToDate, setClosedToDate] = useState('');
-  const [closedOpenedByName, setClosedOpenedByName] = useState('');
+  // Estado para filtros y paginación del historial
+  const defaultFromDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]; // Primer día del mes actual
+  const defaultToDate = new Date().toISOString().split('T')[0]; // Fecha actual
+  
+  const [historyFilters, setHistoryFilters] = useState({
+    from: defaultFromDate,
+    to: defaultToDate,
+    openedByName: '',
+    page: 1,
+    pageSize: 12
+  });
+  const [historyPagination, setHistoryPagination] = useState({
+    total: 0,
+    totalPages: 1,
+    page: 1,
+    pageSize: 12
+  });
+  const [hasSearched, setHasSearched] = useState(false);
 
   const [closedSessions, setClosedSessions] = useState<CashSession[]>([]);
   const [closedSessionsLoading, setClosedSessionsLoading] = useState(false);
@@ -320,9 +335,9 @@ export default function CajaPage() {
     if (!canViewHistory) return;
     if (!currentStore?.id) return;
 
-    const from = closedFromDate ? new Date(`${closedFromDate}T00:00:00.000Z`).toISOString() : undefined;
-    const to = closedToDate ? new Date(`${closedToDate}T23:59:59.999Z`).toISOString() : undefined;
-    let openedByName = closedOpenedByName.trim() || undefined;
+    const from = historyFilters.from ? new Date(`${historyFilters.from}T00:00:00.000Z`).toISOString() : undefined;
+    const to = historyFilters.to ? new Date(`${historyFilters.to}T23:59:59.999Z`).toISOString() : undefined;
+    let openedByName = historyFilters.openedByName.trim() || undefined;
     const storeId = isAdmin ? (currentStore?.id || undefined) : undefined;
 
     // Si solo tiene permiso para ver su propio historial, forzar filtro por su nombre
@@ -332,21 +347,31 @@ export default function CajaPage() {
 
     setClosedSessionsLoading(true);
     try {
-      const data = await cashSessionService.getClosedCashSessionsByStore({
+      const response = await cashSessionService.getClosedCashSessionsByStore({
         ...(storeId ? { storeId } : {}),
         ...(from ? { from } : {}),
         ...(to ? { to } : {}),
         ...(openedByName ? { openedByName } : {}),
+        page: historyFilters.page,
+        pageSize: historyFilters.pageSize
       });
-      setClosedSessions(Array.isArray(data) ? data : []);
+      
+      setClosedSessions(response.data || []);
+      setHistoryPagination({
+        total: response.total || 0,
+        totalPages: response.totalPages || 1,
+        page: response.page || 1,
+        pageSize: response.pageSize || 12
+      });
     } catch (error: any) {
       console.error('Error al cargar historial de cajas:', error);
       setClosedSessions([]);
+      setHistoryPagination({ total: 0, totalPages: 1, page: 1, pageSize: 12 });
       toast.error(error.response?.data?.message || 'Error al cargar historial de cajas');
     } finally {
       setClosedSessionsLoading(false);
     }
-  }, [canViewHistory, canViewAllCashHistory, canViewOwnCashHistory, closedFromDate, closedOpenedByName, closedToDate, currentStore?.id, isAdmin, user?.name]);
+  }, [canViewHistory, canViewAllCashHistory, canViewOwnCashHistory, historyFilters, currentStore?.id, isAdmin, user?.name]);
 
   const handleSelectClosedSessionDetail = useCallback((session: CashSession) => {
     setSelectedClosedSession(session);
@@ -357,6 +382,46 @@ export default function CajaPage() {
     loadSelectedSessionMovements(session.id, 1);
   }, [loadSelectedSessionMovements]);
 
+  const handleHistoryFilterChange = useCallback((newFilters: Partial<typeof historyFilters>) => {
+    setHistoryFilters(prev => ({
+      ...prev,
+      ...newFilters,
+      page: 1 // Resetear a página 1 cuando cambian los filtros
+    }));
+  }, []);
+
+  const handleHistoryPageChange = useCallback((newPage: number) => {
+    setHistoryFilters(prev => ({
+      ...prev,
+      page: newPage
+    }));
+  }, []);
+
+  const handleHistoryPageSizeChange = useCallback((newPageSize: number) => {
+    setHistoryFilters(prev => ({
+      ...prev,
+      pageSize: newPageSize,
+      page: 1 // Resetear a página 1 cuando cambia el tamaño
+    }));
+  }, []);
+
+  const clearHistoryFilters = useCallback(() => {
+    setHistoryFilters({
+      from: defaultFromDate,
+      to: defaultToDate,
+      openedByName: '',
+      page: 1,
+      pageSize: 12
+    });
+    setHasSearched(false);
+  }, [defaultFromDate, defaultToDate]);
+
+  const hasActiveHistoryFilters = !!(
+  (historyFilters.from && historyFilters.from !== defaultFromDate) || 
+  (historyFilters.to && historyFilters.to !== defaultToDate) || 
+  historyFilters.openedByName
+);
+
   const handleBackToClosedSessions = useCallback(() => {
     setSelectedClosedSession(null);
     setSelectedMovements([]);
@@ -364,6 +429,11 @@ export default function CajaPage() {
     setSelectedMovementsTotal(0);
     setSelectedMovementsTotalPages(1);
   }, []);
+
+  useEffect(() => {
+    // No cargar automáticamente al cambiar a la pestaña history
+    // Solo cargar cuando el usuario haga clic en "Buscar"
+  }, [activeTab, canViewHistory]);
 
   const handleOpenCashSession = async () => {
     if (!canManageCash) {
@@ -1291,6 +1361,75 @@ export default function CajaPage() {
         </TabsContent>
 
         <TabsContent value="history">
+          {/* Filtros del historial */}
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Search className="h-5 w-5" />
+                Filtros de Historial
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-4">
+                <div>
+                  <label className="text-sm font-medium">Desde</label>
+                  <Input
+                    type="date"
+                    value={historyFilters.from}
+                    onChange={(e) => handleHistoryFilterChange({ from: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Hasta</label>
+                  <Input
+                    type="date"
+                    value={historyFilters.to}
+                    onChange={(e) => handleHistoryFilterChange({ to: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                <div className={canViewAllCashHistory ? "" : "invisible"}>
+                  <label className="text-sm font-medium">Abierto por</label>
+                  <Input
+                    type="text"
+                    placeholder="Buscar por nombre..."
+                    value={historyFilters.openedByName}
+                    onChange={(e) => handleHistoryFilterChange({ openedByName: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        loadClosedSessions();
+                      }
+                    }}
+                    className="mt-1"
+                    disabled={!canViewAllCashHistory}
+                  />
+                </div>
+                <div className="flex items-center justify-end pt-6">
+                  <Button
+                    onClick={loadClosedSessions}
+                    disabled={closedSessionsLoading}
+                    className="flex items-center gap-2"
+                    size="sm"
+                  >
+                    <Search className="h-4 w-4" />
+                    {closedSessionsLoading ? 'Buscando...' : 'Buscar'}
+                  </Button>
+                </div>
+              </div>
+              
+              {/* Filtros activos */}
+              {hasActiveHistoryFilters && (
+                <ActiveFilters
+                  hasActiveFilters={hasActiveHistoryFilters}
+                  onClearFilters={clearHistoryFilters}
+                  className="mt-4"
+                />
+              )}
+            </CardContent>
+          </Card>
+
           {selectedClosedSession ? (
             <div className="space-y-4">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -1452,139 +1591,141 @@ export default function CajaPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Filtros</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Desde</label>
-                      <Input
-                        type="date"
-                        value={closedFromDate}
-                        onChange={(e) => setClosedFromDate(e.target.value)}
-                      />
-                    </div>
 
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Hasta</label>
-                      <Input
-                        type="date"
-                        value={closedToDate}
-                        onChange={(e) => setClosedToDate(e.target.value)}
-                      />
-                    </div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-sm text-muted-foreground">
+                Mostrando {((historyPagination.page - 1) * historyPagination.pageSize) + 1} - {Math.min(historyPagination.page * historyPagination.pageSize, historyPagination.total)} de {historyPagination.total} resultados
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleHistoryPageChange(historyPagination.page - 1)}
+                  disabled={historyPagination.page <= 1 || closedSessionsLoading}
+                >
+                  Anterior
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Página {historyPagination.page} de {historyPagination.totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleHistoryPageChange(historyPagination.page + 1)}
+                  disabled={historyPagination.page >= historyPagination.totalPages || closedSessionsLoading}
+                >
+                  Siguiente
+                </Button>
+              </div>
+            </div>
 
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Abierta por</label>
-                      <Input
-                        value={closedOpenedByName}
-                        onChange={(e) => setClosedOpenedByName(e.target.value)}
-                        placeholder="Ej: juan"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-end gap-2 mt-4">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setClosedFromDate('');
-                        setClosedToDate('');
-                        setClosedOpenedByName('');
-                        setClosedSessions([]);
-                      }}
-                      disabled={closedSessionsLoading}
-                    >
-                      Limpiar
-                    </Button>
-                    <Button onClick={loadClosedSessions} disabled={closedSessionsLoading}>
-                      {closedSessionsLoading ? 'Buscando...' : 'Buscar'}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <div className="space-y-3">
-                {closedSessionsLoading ? (
-                  <div className="py-10 text-center text-sm text-muted-foreground">Cargando historial...</div>
-                ) : closedSessions.length === 0 ? (
-                  <div className="py-10 text-center text-sm text-muted-foreground">
-                    No hay cajas cerradas para los filtros seleccionados.
-                  </div>
-                ) : (
-                  closedSessions.map((s) => (
-                    <Card
-                      key={s.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => handleSelectClosedSessionDetail(s)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          handleSelectClosedSessionDetail(s);
-                        }
-                      }}
-                      className="cursor-pointer transition-all duration-200 border border-border/60 hover:border-primary/40 hover:bg-muted/60 hover:shadow-md"
-                    >
-                      <CardHeader className="pb-2">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <CardTitle className="text-base">Caja cerrada</CardTitle>
-                            <p className="text-xs text-muted-foreground">
-                              {s.closedAt ? new Date(s.closedAt).toLocaleString() : 'Cerrada'}
-                            </p>
-                          </div>
-                          {canPrintCashClosure && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setHistoricalSessionToPrint(s);
-                                setHistoricalCashId(s.id);
-                                setShowPrintHistoricalDialog(true);
-                              }}
-                            >
-                              <Printer className="h-4 w-4 mr-2" />
-                              Imprimir
-                            </Button>
-                          )}
+            <div className="space-y-3">
+              {closedSessionsLoading ? (
+                <div className="py-10 text-center text-sm text-muted-foreground">Cargando historial...</div>
+              ) : closedSessions.length === 0 ? (
+                <div className="py-10 text-center text-sm text-muted-foreground">
+                  No hay cajas cerradas para los filtros seleccionados.
+                </div>
+              ) : (
+                closedSessions.map((s) => (
+                  <Card
+                    key={s.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleSelectClosedSessionDetail(s)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleSelectClosedSessionDetail(s);
+                      }
+                    }}
+                    className="cursor-pointer transition-all duration-200 border border-border/60 hover:border-primary/40 hover:bg-muted/60 hover:shadow-md"
+                  >
+                    <CardHeader className="pb-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <CardTitle className="text-base">Caja cerrada</CardTitle>
+                          <p className="text-xs text-muted-foreground">
+                            {s.closedAt ? new Date(s.closedAt).toLocaleString() : 'Cerrada'}
+                          </p>
                         </div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid gap-3 md:grid-cols-3">
-                          <div>
-                            <p className="text-xs text-muted-foreground">Abierta</p>
-                            <p className="text-sm font-medium">{new Date(s.openedAt).toLocaleString()}</p>
-                            <p className="text-xs text-muted-foreground">{s.User?.name || ''}</p>
-                          </div>
-
-                          <div>
-                            <p className="text-xs text-muted-foreground">Cerrada</p>
-                            <p className="text-sm font-medium">{s.closedAt ? new Date(s.closedAt).toLocaleString() : '-'}</p>
-                          </div>
-
-                          <div>
-                            <p className="text-xs text-muted-foreground">Montos</p>
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <p className="text-xs text-muted-foreground">Inicial</p>
-                                <p className="text-sm font-medium">{formatCurrency(s.openingAmount || 0)}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs text-muted-foreground">Cierre</p>
-                                <p className="text-sm font-medium">{formatCurrency(s.closingAmount || 0)}</p>
-                              </div>
+                        {canPrintCashClosure && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setHistoricalSessionToPrint(s);
+                              setHistoricalCashId(s.id);
+                              setShowPrintHistoricalDialog(true);
+                            }}
+                          >
+                            <Printer className="h-4 w-4 mr-2" />
+                            Imprimir
+                          </Button>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Abierta</p>
+                          <p className="text-sm font-medium">{new Date(s.openedAt).toLocaleString()}</p>
+                          <p className="text-xs text-muted-foreground">{s.openedByName || s.User?.name || ''}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Cerrada</p>
+                          <p className="text-sm font-medium">{s.closedAt ? new Date(s.closedAt).toLocaleString() : '-'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Montos</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <p className="text-xs text-muted-foreground">Inicial</p>
+                              <p className="text-sm font-medium">{formatCurrency(s.openingAmount || 0)}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">Cierre</p>
+                              <p className="text-sm font-medium">{formatCurrency(s.closingAmount || 0)}</p>
                             </div>
                           </div>
                         </div>
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
+
+            {/* Paginación */}
+            {historyPagination.totalPages > 1 && (
+              <div className="flex items-center justify-between mt-6">
+                <div className="text-sm text-muted-foreground">
+                  Mostrando {((historyPagination.page - 1) * historyPagination.pageSize) + 1} - {Math.min(historyPagination.page * historyPagination.pageSize, historyPagination.total)} de {historyPagination.total} resultados
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleHistoryPageChange(historyPagination.page - 1)}
+                    disabled={historyPagination.page <= 1 || closedSessionsLoading}
+                  >
+                    Anterior
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Página {historyPagination.page} de {historyPagination.totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleHistoryPageChange(historyPagination.page + 1)}
+                    disabled={historyPagination.page >= historyPagination.totalPages || closedSessionsLoading}
+                  >
+                    Siguiente
+                  </Button>
+                </div>
               </div>
+            )}
             </div>
           )}
         </TabsContent>
