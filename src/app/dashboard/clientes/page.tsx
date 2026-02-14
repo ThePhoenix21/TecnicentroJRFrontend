@@ -23,6 +23,7 @@ import { ClientDetailsModal } from '@/components/modals/ClientDetailsModal';
 import { EditClientModal } from '@/components/modals/EditClientModal';
 import { Skeleton } from '@/components/ui/skeleton';
 import { uniqueBy } from '@/utils/array';
+import { useAuth } from '@/contexts/auth-context';
 
 import type {
   ClientFilters,
@@ -39,6 +40,10 @@ const toUtcRange = (from: string, to: string) => {
 };
 
 function ClientesContent() {
+  const { isAdmin, hasPermission } = useAuth();
+  const canManageClients = isAdmin || hasPermission?.('MANAGE_CLIENTS');
+  const canViewClients = canManageClients || isAdmin || hasPermission?.('VIEW_CLIENTS');
+
   const [clients, setClients] = useState<ClientListItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -75,23 +80,9 @@ function ClientesContent() {
   const clientsRequestInFlightRef = useRef<Promise<void> | null>(null);
 
   const openDetails = (clientId: string) => {
+    if (!canManageClients) return;
     setSelectedClientId(clientId);
     setIsDetailsOpen(true);
-  };
-
-  const handleEditClient = async (clientId: string) => {
-    try {
-      const full = await clientService.getClientById(clientId);
-      setEditingClient(full);
-      setIsEditModalOpen(true);
-    } catch (error) {
-      console.error('Error loading client detail:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudo cargar el detalle del cliente.',
-        variant: 'destructive',
-      });
-    }
   };
 
   const handleClientUpdated = (updatedClient: Client) => {
@@ -425,7 +416,11 @@ function ClientesContent() {
         </CardHeader>
         
         <CardContent className="p-0 sm:p-4">
-          {loading ? (
+          {!canViewClients ? (
+            <div className="text-center py-12 text-muted-foreground">
+              No tienes permisos para ver esta sección.
+            </div>
+          ) : loading ? (
             <div className="flex justify-center items-center h-64">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
@@ -462,8 +457,8 @@ function ClientesContent() {
                       {clients.map((client) => (
                         <TableRow
                           key={client.id}
-                          className="hover:bg-accent/50 cursor-pointer"
-                          onClick={() => openDetails(client.id)}
+                          className={canManageClients ? 'hover:bg-accent/50 cursor-pointer' : undefined}
+                          onClick={canManageClients ? () => openDetails(client.id) : undefined}
                         >
                           <TableCell className="font-medium">{client.name}</TableCell>
                           <TableCell>
@@ -498,8 +493,8 @@ function ClientesContent() {
                 {clients.map((client) => (
                   <Card 
                     key={client.id} 
-                    className="overflow-hidden hover:shadow-md transition-shadow"
-                    onClick={() => openDetails(client.id)}
+                    className={canManageClients ? 'overflow-hidden hover:shadow-md transition-shadow cursor-pointer' : 'overflow-hidden'}
+                    onClick={canManageClients ? () => openDetails(client.id) : undefined}
                   >
                     <div className="p-4">
                       <div className="flex justify-between items-start">
@@ -608,6 +603,7 @@ function ClientesContent() {
         isOpen={isDetailsOpen}
         onClose={() => setIsDetailsOpen(false)}
         clientId={selectedClientId}
+        canManageClients={canManageClients}
         onEdit={(client) => {
           setEditingClient(client);
           setIsEditModalOpen(true);

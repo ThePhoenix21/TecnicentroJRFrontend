@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
+import { toast } from '@/components/ui/use-toast';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,11 +23,19 @@ interface ClientDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
   clientId: string | null;
+  canManageClients?: boolean;
   onEdit: (client: Client) => void;
   onDeleted?: () => void;
 }
 
-export function ClientDetailsModal({ isOpen, onClose, clientId, onEdit, onDeleted }: ClientDetailsModalProps) {
+export function ClientDetailsModal({
+  isOpen,
+  onClose,
+  clientId,
+  canManageClients = false,
+  onEdit,
+  onDeleted,
+}: ClientDetailsModalProps) {
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<ClientFull | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -51,13 +60,39 @@ export function ClientDetailsModal({ isOpen, onClose, clientId, onEdit, onDelete
   }, [clientId, isOpen]);
 
   const handleEdit = async () => {
-    if (!clientId) return;
-    const fullClient = await clientService.getClientById(clientId);
-    onEdit(fullClient);
+    if (!clientId || !canManageClients) return;
+
+    if (detail) {
+      onEdit({
+        id: detail.id,
+        name: detail.name,
+        email: detail.email,
+        phone: detail.phone,
+        address: detail.address,
+        ruc: null,
+        dni: detail.dni ?? '',
+        userId: '',
+        createdAt: detail.createdAt,
+        updatedAt: detail.createdAt,
+      });
+      return;
+    }
+
+    try {
+      const fullClient = await clientService.getClientById(clientId);
+      onEdit(fullClient);
+    } catch (error) {
+      console.error('Error loading client for edit:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo abrir la edición del cliente.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleDelete = async () => {
-    if (!clientId) return;
+    if (!clientId || !canManageClients) return;
     const ok = confirm('¿Está seguro de borrar este cliente?');
     if (!ok) return;
 
@@ -261,16 +296,22 @@ export function ClientDetailsModal({ isOpen, onClose, clientId, onEdit, onDelete
 
         <DialogFooter>
           <div className="w-full flex items-center justify-between gap-2">
-            <Button variant="destructive" onClick={handleDelete} disabled={!clientId || deleting || loading}>
-              {deleting ? 'Borrando...' : 'Borrar cliente'}
-            </Button>
+            {canManageClients ? (
+              <Button variant="destructive" onClick={handleDelete} disabled={!clientId || deleting || loading}>
+                {deleting ? 'Borrando...' : 'Borrar cliente'}
+              </Button>
+            ) : (
+              <div />
+            )}
             <div className="flex items-center gap-2">
               <Button variant="outline" onClick={onClose}>
                 Cerrar
               </Button>
-              <Button onClick={handleEdit} disabled={!clientId || loading}>
-                Editar
-              </Button>
+              {canManageClients && (
+                <Button onClick={handleEdit} disabled={!clientId || loading}>
+                  Editar
+                </Button>
+              )}
             </div>
           </div>
         </DialogFooter>
