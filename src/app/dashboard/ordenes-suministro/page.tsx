@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SupplyOrderPDF } from "./SupplyOrderPDF";
+import { useAuth } from "@/contexts/auth-context";
 
 const PAGE_SIZE = 12;
 
@@ -97,6 +98,14 @@ const shortId = (value?: string | null) => {
 };
 
 export default function OrdenesSuministroPage() {
+  const { isAdmin, hasPermission } = useAuth();
+  const canViewSupplyOrders = isAdmin || hasPermission?.("VIEW_SUPPLY_ORDERS");
+  const canCreateSupplyOrder = isAdmin || hasPermission?.("CREATE_SUPPLY_ORDER");
+  const canReceiveSupplyOrder = isAdmin || hasPermission?.("RECEIVE_SUPPLY_ORDER");
+  const canApproveSupplyOrder = isAdmin || hasPermission?.("APPROVE_SUPPLY_ORDER");
+  const canCancelSupplyOrder = isAdmin || hasPermission?.("CANCEL_SUPPLY_ORDER");
+  const canEditEmittedSupplyOrder = isAdmin || hasPermission?.("EDIT_EMITTED_SUPPLY_ORDER");
+
   const [activeTab, setActiveTab] = useState<"manage" | "receive">("manage");
   const [orders, setOrders] = useState<SupplyOrderItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -247,9 +256,16 @@ export default function OrdenesSuministroPage() {
   }, []);
 
   useEffect(() => {
+    if (!canViewSupplyOrders || !canReceiveSupplyOrder) return;
     if (activeTab !== "receive") return;
     loadReceiveOrders(1);
-  }, [activeTab]);
+  }, [activeTab, canReceiveSupplyOrder, canViewSupplyOrders, loadReceiveOrders]);
+
+  useEffect(() => {
+    if (!canReceiveSupplyOrder && activeTab === "receive") {
+      setActiveTab("manage");
+    }
+  }, [activeTab, canReceiveSupplyOrder]);
 
   useEffect(() => {
     setPage(1);
@@ -298,6 +314,11 @@ export default function OrdenesSuministroPage() {
   };
 
   const openReceive = async (orderId: string) => {
+    if (!canViewSupplyOrders || !canReceiveSupplyOrder) {
+      toast.error("No tienes permisos para registrar recepciones.");
+      return;
+    }
+
     setReceiveOpen(true);
     setReceiveDetailLoading(true);
     setReceiveDetail(null);
@@ -323,6 +344,11 @@ export default function OrdenesSuministroPage() {
   };
 
   const openDetail = async (orderId: string) => {
+    if (!canViewSupplyOrders) {
+      toast.error("No tienes permisos para ver órdenes de suministro.");
+      return;
+    }
+
     setDetailOpen(true);
     setDetailLoading(true);
     setDetail(null);
@@ -377,6 +403,11 @@ export default function OrdenesSuministroPage() {
   };
 
   const handleCreate = async () => {
+    if (!canCreateSupplyOrder) {
+      toast.error("No tienes permisos para crear órdenes de suministro.");
+      return;
+    }
+
     const nextErrors = {
       providerId: !createForm.providerId.trim(),
       locationId:
@@ -449,6 +480,10 @@ export default function OrdenesSuministroPage() {
   };
 
   const startEdit = () => {
+    if (!canEditEmittedSupplyOrder) {
+      toast.error("No tienes permisos para editar órdenes emitidas.");
+      return;
+    }
     if (!detail) return;
     setIsEditing(true);
     setEditForm({
@@ -472,6 +507,10 @@ export default function OrdenesSuministroPage() {
   };
 
   const handleEditSubmit = async () => {
+    if (!canEditEmittedSupplyOrder) {
+      toast.error("No tienes permisos para editar órdenes emitidas.");
+      return;
+    }
     if (!detail) return;
     
     // Validaciones básicas
@@ -535,6 +574,10 @@ export default function OrdenesSuministroPage() {
   };
 
   const handleAnnull = async () => {
+    if (!canCancelSupplyOrder) {
+      toast.error("No tienes permisos para anular órdenes de suministro.");
+      return;
+    }
     if (!detail) return;
 
     const confirmed = window.confirm("¿Estás seguro de anular esta orden? Esta acción es irreversible.");
@@ -555,6 +598,10 @@ export default function OrdenesSuministroPage() {
   };
 
   const handleReceive = async () => {
+    if (!canReceiveSupplyOrder) {
+      toast.error("No tienes permisos para registrar recepciones.");
+      return;
+    }
     if (!receiveDetail) return;
 
     if (receiveDetail.status !== "PENDING") {
@@ -600,6 +647,10 @@ export default function OrdenesSuministroPage() {
   };
 
   const handleApprove = async () => {
+    if (!canApproveSupplyOrder) {
+      toast.error("No tienes permisos para aprobar órdenes de suministro.");
+      return;
+    }
     if (!detail) return;
 
     const confirmed = window.confirm("¿Deseas aprobar esta orden de suministro?");
@@ -643,10 +694,18 @@ export default function OrdenesSuministroPage() {
 
   return (
     <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
+      {!canViewSupplyOrders ? (
+        <Card className="shadow-sm">
+          <CardContent className="py-10 text-center text-muted-foreground">
+            No tienes permisos para ver esta sección (VIEW_SUPPLY_ORDERS).
+          </CardContent>
+        </Card>
+      ) : (
+      <>
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "manage" | "receive")} className="space-y-4">
         <TabsList>
           <TabsTrigger value="manage">Órdenes de suministro</TabsTrigger>
-          <TabsTrigger value="receive">Recepciones</TabsTrigger>
+          {canReceiveSupplyOrder && <TabsTrigger value="receive">Recepciones</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="manage">
@@ -662,14 +721,16 @@ export default function OrdenesSuministroPage() {
                       Lista de órdenes con filtros dinámicos por estado, usuario y fecha
                     </p>
                   </div>
-                  <Button
-                    onClick={() => {
-                      ensureLookupsLoaded();
-                      setCreateOpen(true);
-                    }}
-                  >
-                    Crear orden
-                  </Button>
+                  {canCreateSupplyOrder && (
+                    <Button
+                      onClick={() => {
+                        ensureLookupsLoaded();
+                        setCreateOpen(true);
+                      }}
+                    >
+                      Crear orden
+                    </Button>
+                  )}
                 </div>
 
                 <div className="space-y-3">
@@ -948,6 +1009,13 @@ export default function OrdenesSuministroPage() {
         </TabsContent>
 
         <TabsContent value="receive">
+          {!canReceiveSupplyOrder ? (
+            <Card className="shadow-sm">
+              <CardContent className="py-10 text-center text-muted-foreground">
+                No tienes permisos para acceder a recepciones (RECEIVE_SUPPLY_ORDER).
+              </CardContent>
+            </Card>
+          ) : (
           <Card className="shadow-sm">
             <CardHeader className="p-4 sm:p-6 pb-0 sm:pb-0">
               <div className="flex flex-col space-y-2">
@@ -1041,6 +1109,7 @@ export default function OrdenesSuministroPage() {
               )}
             </CardContent>
           </Card>
+          )}
         </TabsContent>
       </Tabs>
 
@@ -1295,22 +1364,24 @@ export default function OrdenesSuministroPage() {
                     </Button>
                   </>
                 ) : (
-                  <Button
-                    variant="destructive"
-                    onClick={handleAnnull}
-                    disabled={
-                      detailSubmitting ||
-                      detailLoading ||
-                      !detail ||
-                      !["ISSUED", "PENDING"].includes(detail.status)
-                    }
-                  >
-                    {detailSubmitting ? "Anulando..." : "Anular orden"}
-                  </Button>
+                  canCancelSupplyOrder && (
+                    <Button
+                      variant="destructive"
+                      onClick={handleAnnull}
+                      disabled={
+                        detailSubmitting ||
+                        detailLoading ||
+                        !detail ||
+                        !["ISSUED", "PENDING"].includes(detail.status)
+                      }
+                    >
+                      {detailSubmitting ? "Anulando..." : "Anular orden"}
+                    </Button>
+                  )
                 )}
               </div>
               <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
-                {!isEditing && (
+                {!isEditing && canEditEmittedSupplyOrder && (
                   <Button
                     variant="outline"
                     onClick={startEdit}
@@ -1322,7 +1393,7 @@ export default function OrdenesSuministroPage() {
                 <Button variant="muted" onClick={closeDetail} disabled={detailSubmitting || editSubmitting}>
                   Cerrar
                 </Button>
-                {!isEditing && (
+                {!isEditing && canApproveSupplyOrder && (
                   <Button
                     onClick={handleApprove}
                     disabled={detailSubmitting || detailLoading || !detail || detail.status !== "ISSUED"}
@@ -1458,6 +1529,8 @@ export default function OrdenesSuministroPage() {
       <Dialog
         open={createOpen}
         onOpenChange={(open) => {
+          if (!canCreateSupplyOrder) return;
+
           if (open) {
             ensureLookupsLoaded();
             setCreateOpen(true);
@@ -1732,6 +1805,8 @@ export default function OrdenesSuministroPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </>
+      )}
     </div>
   );
 }
