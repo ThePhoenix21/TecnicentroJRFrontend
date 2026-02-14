@@ -177,21 +177,76 @@ export const orderService = {
     page?: number;
     pageSize?: number;
     clientName?: string;
+    sellerName?: string;
     orderNumber?: string;
     status?: string;
+    storeId: string;
     currentCash?: boolean;
-    storeId?: string;
-    sellerName?: string;
   }): Promise<OrdersListResponse> {
     const token = localStorage.getItem("auth_token");
+    
     try {
-      const response = await api.get<OrdersListResponse>('orders/list', {
-        params,
+      // SIEMPRE usar /orders/store/{storeId} - storeId es obligatorio
+      if (!params.storeId) {
+        throw new Error('storeId es obligatorio para listar órdenes');
+      }
+      
+      const { storeId, ...otherParams } = params;
+      
+      // Filtrar solo parámetros que el endpoint /orders/store/:storeId acepta
+      const validParams: any = {};
+      if (otherParams.page) validParams.page = otherParams.page;
+      if (otherParams.pageSize) validParams.pageSize = otherParams.pageSize;
+      if (otherParams.currentCash !== undefined) validParams.currentCash = otherParams.currentCash;
+      if (otherParams.clientName) validParams.clientName = otherParams.clientName;
+      if (otherParams.sellerName) validParams.sellerName = otherParams.sellerName;
+      if (otherParams.orderNumber) validParams.orderNumber = otherParams.orderNumber;
+      if (otherParams.status) validParams.status = otherParams.status;
+      
+      // El endpoint /orders/store/{storeId} ahora devuelve OrdersListResponse con paginación
+      const response = await api.get<OrdersListResponse>(`/orders/store/${storeId}`, {
+        params: validParams,
         headers: {
           "Content-Type": "application/json",
           ...(token && { Authorization: `Bearer ${token}` }),
         },
       });
+      
+      // Si el backend devuelve Order[] en lugar de OrderListItem[], necesitamos convertir
+      const firstOrder = response.data.data?.[0];
+      
+      if (firstOrder && !firstOrder.clientName && (firstOrder as any).client) {
+        // El backend devuelve Order[], necesitamos convertir a OrderListItem[]
+        const convertedData = response.data.data.map((order: any) => {
+          return {
+            id: order.id,
+            createdAt: order.createdAt,
+            clientName: order.client?.name || 'Cliente sin nombre',
+            sellerName: order.user?.name || 'Vendedor sin nombre',
+            products: order.orderProducts?.map((p: any) => ({
+              name: p.product?.name || 'Producto',
+              quantity: p.quantity
+            })) || [],
+            services: order.services?.map((s: any) => ({
+              name: s.name,
+              price: s.price
+            })) || [],
+            status: order.status,
+            paymentMethods: order.paymentMethods?.map((p: any) => ({
+              type: p.type,
+              amount: p.amount
+            })) || [],
+            totalAmount: order.totalAmount,
+            total: order.totalAmount
+          };
+        });
+        
+        return {
+          ...response.data,
+          data: convertedData
+        };
+      }
+      
       return response.data;
     } catch (error) {
       const status = (error as any)?.response?.status;

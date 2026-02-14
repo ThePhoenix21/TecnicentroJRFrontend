@@ -200,7 +200,10 @@ export default function VentasPage() {
       setLoading(true);
 
       if (currentStore) {
-        const effectiveStoreId = selectedStoreId || currentStore.id;
+        // Usar directamente currentStore.id - ya está sincronizado con el selector
+        const effectiveStoreId = currentStore.id;
+        
+        console.log('🏪 Usando storeId desde currentStore:', effectiveStoreId);
 
         if (canSellProducts && (canViewInventory || canViewProductsForSales)) {
           try {
@@ -251,8 +254,7 @@ export default function VentasPage() {
       setLoading(false);
     }
   }, [
-    currentStore,
-    selectedStoreId,
+    currentStore, // Eliminado selectedStoreId - ahora depende solo de currentStore
     canSellProducts,
     canViewInventory,
     canViewProductsForSales,
