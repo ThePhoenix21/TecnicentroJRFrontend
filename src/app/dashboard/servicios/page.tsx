@@ -29,7 +29,12 @@ import { Label } from "@/components/ui/label";
 
 export default function ServiciosPage() {
   const { currentStore, hasPermission, isAdmin } = useAuth();
-  const canViewServices = isAdmin || hasPermission?.("VIEW_SERVICES") || hasPermission?.("MANAGE_SERVICES");
+  const canViewServices =
+    isAdmin ||
+    hasPermission?.("VIEW_SERVICES") ||
+    hasPermission?.("VIEW_ALL_SERVICES");
+  const canUseCashSessionFilter =
+    isAdmin || hasPermission?.("VIEW_CASH") || hasPermission?.("MANAGE_CASH");
   const PAGE_SIZE = 12;
 
   const [services, setServices] = useState<ServiceListItem[]>([]);
@@ -65,7 +70,7 @@ export default function ServiciosPage() {
   const [clientNameFilter, setClientNameFilter] = useState<string>("");
   const [serviceNameFilter, setServiceNameFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<ServiceStatus | "all">("all");
-  const [openCashOnly, setOpenCashOnly] = useState(true);
+  const [openCashOnly, setOpenCashOnly] = useState<boolean>(canUseCashSessionFilter);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
@@ -80,6 +85,12 @@ export default function ServiciosPage() {
   const requestSeq = useRef(0);
   const lastStoreIdRef = useRef<string | null>(null);
   const firstLoadRef = useRef(true);
+
+  useEffect(() => {
+    if (!canUseCashSessionFilter && openCashOnly) {
+      setOpenCashOnly(false);
+    }
+  }, [canUseCashSessionFilter, openCashOnly]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -314,7 +325,7 @@ export default function ServiciosPage() {
       <div className="space-y-6 p-4 sm:p-6">
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Servicios</h1>
         <p className="text-muted-foreground text-sm sm:text-base">
-          No tienes permisos para ver esta sección (se requiere VIEW_SERVICES o MANAGE_SERVICES).
+          No tienes permisos para ver esta sección (se requiere VIEW_SERVICES o VIEW_ALL_SERVICES).
         </p>
       </div>
     );
@@ -537,9 +548,12 @@ export default function ServiciosPage() {
                 id="open-cash-only"
                 checked={openCashOnly}
                 onCheckedChange={(checked) => setOpenCashOnly(Boolean(checked))}
-                disabled={loading}
+                disabled={loading || !canUseCashSessionFilter}
               />
-              <label htmlFor="open-cash-only" className="cursor-pointer select-none">
+              <label
+                htmlFor="open-cash-only"
+                className={`select-none ${canUseCashSessionFilter ? "cursor-pointer" : "cursor-not-allowed opacity-60"}`}
+              >
                 Solo caja abierta
               </label>
             </div>

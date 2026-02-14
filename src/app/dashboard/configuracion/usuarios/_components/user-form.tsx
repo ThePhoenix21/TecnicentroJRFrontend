@@ -138,6 +138,7 @@ const DEFAULT_USER_PERMISSIONS = [
   'VIEW_PRODUCTS',
   'MANAGE_PRODUCTS',
   'VIEW_SERVICES',
+  'VIEW_ALL_SERVICES',
   'MANAGE_SERVICES',
   'VIEW_ORDERS',
   'MANAGE_ORDERS',
@@ -278,6 +279,7 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
 
     if (hasFeature('SERVICES')) {
       allowed.add('VIEW_SERVICES');
+      allowed.add('VIEW_ALL_SERVICES');
       allowed.add('MANAGE_SERVICES');
     }
 

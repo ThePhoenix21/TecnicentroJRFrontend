@@ -26,6 +26,7 @@ export const PERMISSIONS = {
 
   // servicios
   VIEW_SERVICES: 'VIEW_SERVICES',
+  VIEW_ALL_SERVICES: 'VIEW_ALL_SERVICES',
   MANAGE_SERVICES: 'MANAGE_SERVICES',
 
   // productos
@@ -145,7 +146,9 @@ export const usePermissions = () => {
     canViewOrders() && (canViewAllOrdersHistory() || canViewOwnOrdersHistory());
   
   // Servicios
-  const canViewServices = () => resolvePermission(PERMISSIONS.VIEW_SERVICES);
+  const canViewServices = () =>
+    resolvePermission(PERMISSIONS.VIEW_SERVICES) ||
+    resolvePermission(PERMISSIONS.VIEW_ALL_SERVICES);
   const canManageServices = () => resolvePermission(PERMISSIONS.MANAGE_SERVICES);
   
   // Productos

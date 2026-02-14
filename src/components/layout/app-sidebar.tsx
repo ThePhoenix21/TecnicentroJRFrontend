@@ -77,7 +77,7 @@ const getSidebarItems = (
       href: "/dashboard/servicios",
       icon: FileText,
       requiredTenantFeatures: ["SERVICES"],
-      requiredPermissions: ["VIEW_SERVICES"],
+      requiredPermissions: ["VIEW_SERVICES", "VIEW_ALL_SERVICES"],
     },
     {
       name: "Productos",

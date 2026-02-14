@@ -55,16 +55,30 @@ export interface UpdateServiceDto {
   price?: number;
 }
 
-export interface ServiceWithClient extends Service {
+export interface ServiceWithClient {
+  id?: string;
+  type?: ServiceType;
+  status?: ServiceStatus;
+  name?: string;
+  description?: string;
+  photoUrls?: string[];
+  price?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  orderId?: string;
   hasPendingPayment?: boolean;
+  service?: {
+    id: string;
+    name: string;
+  };
   client?: {
     id: string;
     name: string;
-    email: string;
-    phone: string;
+    email?: string;
+    phone?: string;
     address?: string;
-    dni: string;
-    createdAt: string;
+    dni?: string;
+    createdAt?: string;
   };
   store?: {
     id: string;
@@ -102,10 +116,28 @@ export interface ServiceListItem {
   status: ServiceStatus;
   price: number;
   createdAt: string;
+  hasPendingPayment?: boolean;
 }
 
 export interface ServiceListResponse {
   data: ServiceListItem[];
+  total: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
+}
+
+interface FindAllWithClientsPagedResponse {
+  data: Array<{
+    clientId?: string;
+    clientName?: string;
+    serviceId?: string;
+    serviceName?: string;
+    status?: ServiceStatus;
+    price?: number;
+    createdAt?: string;
+    hasPendingPayment?: boolean;
+  }>;
   total: number;
   totalPages: number;
   page: number;
@@ -219,6 +251,17 @@ interface IServiceService {
 class ServiceService implements IServiceService {
   private baseUrl = '/services';
 
+  private normalizeDateFilter(dateValue: string, endOfDay = false): string {
+    const trimmed = dateValue.trim();
+    if (!trimmed) return trimmed;
+
+    if (trimmed.includes('T')) {
+      return trimmed;
+    }
+
+    return `${trimmed}${endOfDay ? 'T23:59:59.999Z' : 'T00:00:00.000Z'}`;
+  }
+
   private toFriendlyError(error: unknown, fallbackMessage: string): Error {
     const axiosError = error as AxiosError<{ message?: string }>;
     const status = axiosError.response?.status;
@@ -236,73 +279,81 @@ class ServiceService implements IServiceService {
   async getServicesPaged(filters: GetServicesFilters = {}): Promise<ServiceListResponse> {
     try {
       const params = new URLSearchParams();
+      const page = filters.page ?? 1;
+      const pageSize = filters.pageSize ?? 12;
 
+      params.append('page', String(page));
+      params.append('pageSize', String(pageSize));
       if (filters.status) params.append('status', filters.status);
       if (filters.storeId) params.append('storeId', filters.storeId);
       if (filters.clientName) params.append('clientName', filters.clientName);
       if (filters.serviceName) params.append('serviceName', filters.serviceName);
-      // Note: /findAllWithClients does NOT support openCashOnly, fromDate, toDate, clientId, serviceId, type yet
+      if (filters.fromDate) params.append('fromDate', this.normalizeDateFilter(filters.fromDate, false));
+      if (filters.toDate) params.append('toDate', this.normalizeDateFilter(filters.toDate, true));
+
+      if (filters.storeId) {
+        params.append('cashSessionScope', filters.openCashOnly ? 'CURRENT' : 'ALL');
+      }
 
       const url = params.toString()
         ? `${this.baseUrl}/findAllWithClients?${params.toString()}`
         : `${this.baseUrl}/findAllWithClients`;
 
-      const response = await api.get<ServiceWithClient[]>(url);
+      const response = await api.get<FindAllWithClientsPagedResponse | ServiceWithClient[]>(url);
+
+      // Nuevo contrato (paginado por backend)
+      if (!Array.isArray(response.data)) {
+        const payload = response.data;
+        return {
+          data: (payload.data || []).map((item) => ({
+            id: item.serviceId || '',
+            clientName: item.clientName || 'Sin cliente',
+            serviceName: item.serviceName || 'Servicio sin nombre',
+            status: (item.status || ServiceStatus.PENDING) as ServiceStatus,
+            price: Number(item.price ?? 0),
+            createdAt: item.createdAt || '',
+            hasPendingPayment: item.hasPendingPayment,
+          })),
+          total: payload.total ?? 0,
+          totalPages: payload.totalPages ?? 1,
+          page: payload.page ?? page,
+          pageSize: payload.pageSize ?? pageSize,
+        };
+      }
+
+      // Compatibilidad con contrato antiguo (array)
       let all = response.data || [];
 
-      // Sort by createdAt descending (most recent first)
-      all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      all.sort((a, b) => {
+        const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bDate - aDate;
+      });
 
-      // Client-side filters for unsupported params (temporary)
       if (filters.clientId) {
-        all = all.filter(s => s.client?.id === filters.clientId);
+        all = all.filter((s) => s.client?.id === filters.clientId);
       }
       if (filters.serviceId) {
-        all = all.filter(s => s.id === filters.serviceId);
+        all = all.filter((s) => (s.service?.id || s.id) === filters.serviceId);
       }
-      if (filters.openCashOnly === true && filters.storeId) {
-        // Get current cash session to filter services from this specific session
-        try {
-          const { cashService } = await import('./cash.service');
-          const currentSession = await cashService.getCurrentCashSession(filters.storeId);
-          if (currentSession && currentSession.status === 'OPEN') {
-            all = all.filter(s => s.order?.cashSessionsId === currentSession.id);
-          } else {
-            // If no open session, return empty array
-            all = [];
-          }
-        } catch (error) {
-          console.warn('Could not get current cash session for filtering:', error);
-          // If we can't get the session, show all services (fallback behavior)
-        }
-      }
-      // TODO: fromDate, toDate not supported yet
 
-      // Client-side pagination (temporary until backend supports /services?page=...)
-      const page = filters.page ?? 1;
-      const pageSize = filters.pageSize ?? 12;
       const start = (page - 1) * pageSize;
       const paginated = all.slice(start, start + pageSize);
 
-      // Map to ServiceListItem
-      const data: ServiceListItem[] = paginated.map(s => ({
-        id: s.id,
-        clientName: s.client?.name ?? 'Sin cliente',
-        serviceName: s.name,
-        status: s.status,
-        price: s.price,
-        createdAt: s.createdAt,
-        updatedAt: s.updatedAt,
-        storeId: s.store?.id,
-        hasPendingPayment: s.hasPendingPayment
-      }));
-
       return {
-        data,
+        data: paginated.map((s) => ({
+          id: s.service?.id || s.id || '',
+          clientName: s.client?.name ?? 'Sin cliente',
+          serviceName: s.service?.name || s.name || 'Servicio sin nombre',
+          status: (s.status || ServiceStatus.PENDING) as ServiceStatus,
+          price: Number(s.price ?? 0),
+          createdAt: s.createdAt || '',
+          hasPendingPayment: s.hasPendingPayment,
+        })),
         total: all.length,
         totalPages: Math.ceil(all.length / pageSize),
         page,
-        pageSize
+        pageSize,
       };
     } catch (error) {
       throw this.toFriendlyError(error, 'No se pudieron cargar los servicios.');
@@ -348,8 +399,30 @@ class ServiceService implements IServiceService {
         ? `${this.baseUrl}/findAllWithClients?${params.toString()}`
         : `${this.baseUrl}/findAllWithClients`;
 
-      const response = await api.get<ServiceWithClient[]>(url);
-      return response.data;
+      const response = await api.get<FindAllWithClientsPagedResponse | ServiceWithClient[]>(url);
+
+      if (Array.isArray(response.data)) {
+        return response.data;
+      }
+
+      return (response.data.data || []).map((item) => ({
+        id: item.serviceId,
+        status: item.status,
+        price: item.price,
+        createdAt: item.createdAt,
+        service: item.serviceId || item.serviceName
+          ? {
+              id: item.serviceId || '',
+              name: item.serviceName || 'Servicio sin nombre',
+            }
+          : undefined,
+        client: item.clientId || item.clientName
+          ? {
+              id: item.clientId || '',
+              name: item.clientName || 'Sin cliente',
+            }
+          : undefined,
+      }));
     } catch (error) {
       console.error('Error en getServicesWithClients:', error);
       throw error;

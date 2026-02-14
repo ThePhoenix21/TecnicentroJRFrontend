@@ -188,6 +188,7 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
 
     if (hasFeature('SERVICES')) {
       allowed.add('VIEW_SERVICES');
+      allowed.add('VIEW_ALL_SERVICES');
       allowed.add('MANAGE_SERVICES');
     }
 

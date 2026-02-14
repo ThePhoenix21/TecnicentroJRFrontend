@@ -4,6 +4,7 @@ const permissionRouteMap: Record<string, string> = {
   VIEW_CASH: "/dashboard/caja",
   VIEW_ORDERS: "/dashboard/ventas",
   VIEW_SERVICES: "/dashboard/servicios",
+  VIEW_ALL_SERVICES: "/dashboard/servicios",
   VIEW_PRODUCTS: "/dashboard/productos",
   VIEW_INVENTORY: "/dashboard/inventario",
   VIEW_SUPPORT: "/dashboard/support",
