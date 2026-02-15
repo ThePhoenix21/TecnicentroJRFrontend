@@ -98,7 +98,7 @@ const shortId = (value?: string | null) => {
 };
 
 export default function OrdenesSuministroPage() {
-  const { isAdmin, hasPermission } = useAuth();
+  const { isAdmin, hasPermission, isAuthenticated } = useAuth();
   const canViewSupplyOrders = isAdmin || hasPermission?.("VIEW_SUPPLY_ORDERS");
   const canCreateSupplyOrder = isAdmin || hasPermission?.("CREATE_SUPPLY_ORDER");
   const canReceiveSupplyOrder = isAdmin || hasPermission?.("RECEIVE_SUPPLY_ORDER");
@@ -204,6 +204,14 @@ export default function OrdenesSuministroPage() {
 
   const loadOrders = useCallback(
     async (targetPage = 1) => {
+      if (!isAuthenticated || !canViewSupplyOrders) {
+        setOrders([]);
+        setTotal(0);
+        setTotalPages(1);
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
 
@@ -223,7 +231,12 @@ export default function OrdenesSuministroPage() {
         setTotalPages(response.totalPages || 1);
         setPage(response.page || targetPage);
       } catch (error: any) {
-        console.error(error);
+        const status = error?.response?.status;
+        const message = String(error?.response?.data?.message || error?.message || "").toLowerCase();
+        const isAuthError = status === 401 || status === 403 || message.includes("token");
+        if (!isAuthError) {
+          console.error(error);
+        }
         toast.error(error?.response?.data?.message || error?.message || "No se pudieron cargar las órdenes");
         setOrders([]);
         setTotal(0);
@@ -232,12 +245,14 @@ export default function OrdenesSuministroPage() {
         setLoading(false);
       }
     },
-    [fromDate, toDate, statusFilter, createdByFilter, codeFilter]
+    [fromDate, toDate, statusFilter, createdByFilter, codeFilter, isAuthenticated, canViewSupplyOrders]
   );
 
   loadOrdersRef.current = loadOrders;
 
   useEffect(() => {
+    if (!isAuthenticated || !canViewSupplyOrders) return;
+
     const loadLookups = async () => {
       try {
         const [users, orders] = await Promise.all([
@@ -247,18 +262,24 @@ export default function OrdenesSuministroPage() {
         setUsersLookup(Array.isArray(users) ? users : []);
         setOrdersLookup(Array.isArray(orders) ? orders : []);
       } catch (error: any) {
-        console.error(error);
-        toast.error(error?.response?.data?.message || error?.message || "No se pudieron cargar los lookups");
+        const status = error?.response?.status;
+        const message = String(error?.response?.data?.message || error?.message || "").toLowerCase();
+        const isAuthError = status === 401 || status === 403 || message.includes("token");
+        if (!isAuthError) {
+          console.error(error);
+          toast.error(error?.response?.data?.message || error?.message || "No se pudieron cargar los lookups");
+        }
       }
     };
 
     loadLookups();
-  }, []);
+  }, [isAuthenticated, canViewSupplyOrders]);
 
   useEffect(() => {
+    if (!isAuthenticated || !canViewSupplyOrders) return;
     setPage(1);
     loadOrdersRef.current?.(1);
-  }, [filtersKey]);
+  }, [filtersKey, isAuthenticated, canViewSupplyOrders]);
 
   const handlePageChange = (nextPage: number) => {
     if (nextPage < 1 || nextPage > totalPages) return;
