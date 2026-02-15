@@ -256,18 +256,6 @@ export default function OrdenesSuministroPage() {
   }, []);
 
   useEffect(() => {
-    if (!canViewSupplyOrders || !canReceiveSupplyOrder) return;
-    if (activeTab !== "receive") return;
-    loadReceiveOrders(1);
-  }, [activeTab, canReceiveSupplyOrder, canViewSupplyOrders, loadReceiveOrders]);
-
-  useEffect(() => {
-    if (!canReceiveSupplyOrder && activeTab === "receive") {
-      setActiveTab("manage");
-    }
-  }, [activeTab, canReceiveSupplyOrder]);
-
-  useEffect(() => {
     setPage(1);
     loadOrdersRef.current?.(1);
   }, [filtersKey]);
@@ -300,6 +288,18 @@ export default function OrdenesSuministroPage() {
       setReceiveLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (!canViewSupplyOrders || !canReceiveSupplyOrder) return;
+    if (activeTab !== "receive") return;
+    loadReceiveOrders(1);
+  }, [activeTab, canReceiveSupplyOrder, canViewSupplyOrders, loadReceiveOrders]);
+
+  useEffect(() => {
+    if (!canReceiveSupplyOrder && activeTab === "receive") {
+      setActiveTab("manage");
+    }
+  }, [activeTab, canReceiveSupplyOrder]);
 
   const clearFilters = () => {
     setStatusFilter("all");
@@ -384,16 +384,32 @@ export default function OrdenesSuministroPage() {
     }
     try {
       setLookupLoading(true);
-      const [providers, stores, warehouses, products] = await Promise.all([
+      const [providersResult, storesResult, warehousesResult, productsResult] = await Promise.allSettled([
         providerService.getProvidersLookup(),
         storeService.getStoresLookup(),
         warehouseService.getWarehousesSimple(),
         providerService.getProductsLookup(),
       ]);
-      setProvidersLookup(Array.isArray(providers) ? providers : []);
-      setStoresLookup(Array.isArray(stores) ? stores : []);
-      setWarehousesLookup(Array.isArray(warehouses) ? warehouses : []);
-      setProductsLookup(Array.isArray(products) ? products : []);
+
+      if (providersResult.status === "fulfilled") {
+        setProvidersLookup(Array.isArray(providersResult.value) ? providersResult.value : []);
+      }
+
+      if (storesResult.status === "fulfilled") {
+        setStoresLookup(Array.isArray(storesResult.value) ? storesResult.value : []);
+      }
+
+      if (warehousesResult.status === "fulfilled") {
+        setWarehousesLookup(Array.isArray(warehousesResult.value) ? warehousesResult.value : []);
+      }
+
+      if (productsResult.status === "fulfilled") {
+        setProductsLookup(Array.isArray(productsResult.value) ? productsResult.value : []);
+      }
+
+      if (storesResult.status === "rejected" || productsResult.status === "rejected") {
+        toast.error("No se pudieron cargar algunos listados para edición.");
+      }
     } catch (error: any) {
       console.error(error);
       toast.error(error?.response?.data?.message || error?.message || "No se pudieron cargar los listados");
@@ -479,12 +495,13 @@ export default function OrdenesSuministroPage() {
     setIsEditing(false);
   };
 
-  const startEdit = () => {
+  const startEdit = async () => {
     if (!canEditEmittedSupplyOrder) {
       toast.error("No tienes permisos para editar órdenes emitidas.");
       return;
     }
     if (!detail) return;
+    await ensureLookupsLoaded();
     setIsEditing(true);
     setEditForm({
       description: detail.description || '',

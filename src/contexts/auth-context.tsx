@@ -158,13 +158,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     
     if (redirect) {
-      // Redirigir a la página de login
-      router.push('/login');
-      
-      // Forzar un recargue completo para limpiar cualquier estado de la aplicación
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login';
-      }
+      // Redirección única para evitar navegación duplicada y errores transitorios de runtime.
+      router.replace('/login');
     }
   }, [router]);
 
