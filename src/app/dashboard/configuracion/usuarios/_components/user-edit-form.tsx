@@ -158,6 +158,7 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
       allowed.add('MANAGE_ORDERS');
       allowed.add('VIEW_ALL_ORDERS_HISTORY');
       allowed.add('VIEW_OWN_ORDERS_HISTORY');
+      allowed.add('DETAIL_ORDERS');
     }
 
     if (hasFeature('PRODUCTS')) {

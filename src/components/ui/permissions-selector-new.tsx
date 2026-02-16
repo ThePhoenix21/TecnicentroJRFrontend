@@ -14,6 +14,7 @@ const formatPermissionLabel = (permission: string): string => {
   if (!permission) return "";
   if (permission === "VIEW_ORDERS") return "Ver ventas";
   if (permission === "MANAGE_ORDERS") return "Gestionar ventas";
+  if (permission === "DETAIL_ORDERS") return "Ver detalle de ventas";
   if (permission === "VIEW_STORES") return "Ver tiendas";
   if (permission === "MANAGE_STORES") return "Gestionar tiendas";
   if (permission === "CHANGE_STORE_LOGO") return "Cambiar logo de tienda";
