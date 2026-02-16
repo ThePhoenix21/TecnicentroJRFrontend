@@ -33,6 +33,7 @@ export function StoreForm({ isOpen, onClose, onStoreSaved, editingStore }: Store
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [authError, setAuthError] = useState<string>("");
 
   useEffect(() => {
     if (editingStore) {
@@ -53,6 +54,7 @@ export function StoreForm({ isOpen, onClose, onStoreSaved, editingStore }: Store
       });
     }
     setErrors({});
+    setAuthError("");
   }, [editingStore, isOpen]);
 
   const validateForm = (): boolean => {
@@ -114,7 +116,21 @@ export function StoreForm({ isOpen, onClose, onStoreSaved, editingStore }: Store
 
       onStoreSaved();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Error al guardar la tienda");
+      // Verificar si es un error de autenticación
+      if (error instanceof Error && (
+        error.message.includes("401") || 
+        error.message.includes("Unauthorized") || 
+        error.message.includes("credenciales") ||
+        error.message.includes("Credenciales") ||
+        error.message.includes("correo") ||
+        error.message.includes("contraseña") ||
+        error.message.includes("inválidas") ||
+        error.message.includes("administradores pueden crear tiendas")
+      )) {
+        setAuthError("Las credenciales del administrador son incorrectas. Por favor, verifica el correo y la contraseña.");
+      } else {
+        toast.error(error instanceof Error ? error.message : "Error al guardar la tienda");
+      }
     } finally {
       setLoading(false);
     }
@@ -124,6 +140,10 @@ export function StoreForm({ isOpen, onClose, onStoreSaved, editingStore }: Store
     setFormData(prev => ({ ...prev, [field]: value }));
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: "" }));
+    }
+    // Limpiar error de autenticación cuando el usuario empieza a escribir
+    if (authError && (field === "adminEmail" || field === "adminPassword")) {
+      setAuthError("");
     }
   };
 
@@ -185,6 +205,13 @@ export function StoreForm({ isOpen, onClose, onStoreSaved, editingStore }: Store
                 <User className="h-4 w-4" />
                 Credenciales del Administrador
               </h3>
+
+              {/* Mostrar error de autenticación si existe */}
+              {authError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                  <p className="text-sm text-red-600 font-medium">{authError}</p>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="adminEmail" className="flex items-center gap-2">

@@ -49,7 +49,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response: AxiosResponse) => response,
   (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean; _skipAuthRedirect?: boolean };
     
     if (error.code === 'ECONNABORTED' || !error.response) {
       // Error de timeout o de red - activar pantalla de error de conexión
@@ -60,7 +60,7 @@ api.interceptors.response.use(
       }
     } else if (error.response.status === 401) {
       // Manejar acceso no autorizado
-      if (typeof window !== 'undefined' && !originalRequest?._retry) {
+      if (typeof window !== 'undefined' && !originalRequest?._retry && !originalRequest?._skipAuthRedirect) {
         if (originalRequest) {
           originalRequest._retry = true;
         }

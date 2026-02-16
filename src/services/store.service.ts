@@ -16,7 +16,10 @@ class StoreService {
 
     async createStore(storeData: CreateStoreDto): Promise<StoreResponse> {
         try {
-            const response = await api.post<StoreResponse>(this.baseUrl, storeData);
+            // Marcar esta solicitud para que el interceptor no redirija automáticamente en caso de 401
+            const response = await api.post<StoreResponse>(this.baseUrl, storeData, {
+                _skipAuthRedirect: true
+            } as any);
             return response.data;
         } catch (error) {
             this.handleError(error);
