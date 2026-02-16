@@ -57,12 +57,18 @@ import {
 
 export default function VentasPage() {
   const router = useRouter();
-  const { canViewOrdersHistory, canViewAllOrdersHistory } = usePermissions();
+  const { canViewOrders, canViewAllOrdersHistory, canViewOwnOrdersHistory, canDetailOrders } = usePermissions();
 
-  // Guard de acceso - Regla: VIEW_ORDERS + (ALL u OWN)
-  if (!canViewOrdersHistory()) {
+  // Guard de acceso - Consulta de ventas
+  if (!canViewOrders()) {
     return <AccessDeniedView />;
   }
+
+  const canViewAllOrdersHistoryPermission = canViewAllOrdersHistory();
+  const canViewOwnOrdersHistoryPermission = canViewOwnOrdersHistory();
+  const canViewOrdersHistoryPermission =
+    canViewAllOrdersHistoryPermission || canViewOwnOrdersHistoryPermission;
+  const canDetailOrdersPermission = canDetailOrders();
 
   const [orders, setOrders] = useState<OrderListItem[]>([]);
   const [products, setProducts] = useState<StoreProduct[]>([]);
@@ -221,22 +227,28 @@ export default function VentasPage() {
           setProducts([]);
         }
 
-        try {
-          const response = await orderService.listOrders({
-            page: currentPage,
-            pageSize: itemsPerPage,
-            storeId: effectiveStoreId,
-            ...(appliedClientName ? { clientName: appliedClientName } : {}),
-            ...(appliedSellerName ? { sellerName: appliedSellerName } : {}),
-            ...(appliedOrderNumber ? { orderNumber: appliedOrderNumber } : {}),
-            ...(selectedStatus ? { status: selectedStatus } : {}),
-            ...(onlyCurrentCash ? { currentCash: true } : {}),
-          });
-          setOrders(response.data || []);
-          setTotalPages(response.totalPages || 1);
-          setTotalItems(response.total || 0);
-        } catch (error) {
-          console.error("Error al cargar órdenes:", error);
+        if (canViewOrdersHistoryPermission) {
+          try {
+            const response = await orderService.listOrders({
+              page: currentPage,
+              pageSize: itemsPerPage,
+              storeId: effectiveStoreId,
+              ...(appliedClientName ? { clientName: appliedClientName } : {}),
+              ...(appliedSellerName ? { sellerName: appliedSellerName } : {}),
+              ...(appliedOrderNumber ? { orderNumber: appliedOrderNumber } : {}),
+              ...(selectedStatus ? { status: selectedStatus } : {}),
+              ...(onlyCurrentCash ? { currentCash: true } : {}),
+            });
+            setOrders(response.data || []);
+            setTotalPages(response.totalPages || 1);
+            setTotalItems(response.total || 0);
+          } catch (error) {
+            console.error("Error al cargar órdenes:", error);
+            setOrders([]);
+            setTotalPages(1);
+            setTotalItems(0);
+          }
+        } else {
           setOrders([]);
           setTotalPages(1);
           setTotalItems(0);
@@ -265,6 +277,7 @@ export default function VentasPage() {
     appliedOrderNumber,
     selectedStatus,
     onlyCurrentCash,
+    canViewOrdersHistoryPermission,
   ]);
 
   const resetHardDeleteModal = useCallback(() => {
@@ -412,8 +425,13 @@ export default function VentasPage() {
   }, []);
 
   const refreshFilterLookups = useCallback(async () => {
-    await Promise.all([loadClientLookup(), loadSellerLookup()]);
-  }, [loadClientLookup, loadSellerLookup]);
+    await loadClientLookup();
+    if (canViewAllOrdersHistoryPermission) {
+      await loadSellerLookup();
+    } else {
+      setSellerLookup([]);
+    }
+  }, [loadClientLookup, loadSellerLookup, canViewAllOrdersHistoryPermission]);
 
   const loadOrderNumberLookup = useCallback(async (search: string) => {
     const trimmed = search.trim();
@@ -567,6 +585,11 @@ export default function VentasPage() {
   };
 
   const handleViewOrder = (orderId: string) => {
+    if (!canDetailOrdersPermission) {
+      toast.error('No tienes permisos para ver el detalle de órdenes (DETAIL_ORDERS requerido)');
+      return;
+    }
+
     orderService.getOrderById(orderId)
       .then((order) => {
         setSelectedOrder(order);
@@ -666,7 +689,7 @@ export default function VentasPage() {
                   </Button>
                 )}
 
-                {isAdmin && hasHardDeleteSalesHistory && (
+                {canManageOrders && hasHardDeleteSalesHistory && (
                   <Button
                     onClick={() => setIsHardDeleteOpen(true)}
                     className="w-full sm:w-auto"
@@ -679,474 +702,431 @@ export default function VentasPage() {
                 )}
               </div>
             </div>
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
-                <div ref={clientDropdownRef} className="relative">
-                  <Label className="text-xs text-muted-foreground">Cliente</Label>
-                  <Input
-                    placeholder="Nombre del cliente..."
-                    value={clientQuery}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setClientQuery(val);
-                      setShowClientSuggestions(Boolean(val.trim()));
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        applyClientFilter(clientQuery);
-                      }
-                      if (e.key === 'Escape') {
-                        setShowClientSuggestions(false);
-                      }
-                    }}
-                    onFocus={() => setShowClientSuggestions(Boolean(clientQuery.trim()))}
-                  />
-                  {showClientSuggestions && (
-                    <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
-                      <div className="max-h-56 overflow-auto">
-                        {clientOptions
-                          .filter((c) => c.name.toLowerCase().includes(clientQuery.trim().toLowerCase()))
-                          .slice(0, 12)
-                          .map((c) => (
-                            <button
-                              key={c.id}
-                              type="button"
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
-                              onClick={() => applyClientFilter(c.name)}
-                            >
-                              {c.name}
-                            </button>
-                          ))}
-                        {clientQuery.trim() &&
-                          clientOptions.filter((c) => c.name.toLowerCase().includes(clientQuery.trim().toLowerCase())).length === 0 && (
-                            <div className="px-3 py-2 text-sm text-muted-foreground">Sin coincidencias</div>
-                          )}
+            {canViewOrdersHistoryPermission && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+                  <div ref={clientDropdownRef} className="relative">
+                    <Label className="text-xs text-muted-foreground">Cliente</Label>
+                    <Input
+                      placeholder="Nombre del cliente..."
+                      value={clientQuery}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setClientQuery(val);
+                        setShowClientSuggestions(Boolean(val.trim()));
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          applyClientFilter(clientQuery);
+                        }
+                        if (e.key === 'Escape') {
+                          setShowClientSuggestions(false);
+                        }
+                      }}
+                      onFocus={() => setShowClientSuggestions(Boolean(clientQuery.trim()))}
+                    />
+                    {showClientSuggestions && (
+                      <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
+                        <div className="max-h-56 overflow-auto">
+                          {clientOptions
+                            .filter((c) => c.name.toLowerCase().includes(clientQuery.trim().toLowerCase()))
+                            .slice(0, 12)
+                            .map((c) => (
+                              <button
+                                key={c.id}
+                                type="button"
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                                onClick={() => applyClientFilter(c.name)}
+                              >
+                                {c.name}
+                              </button>
+                            ))}
+                          {clientQuery.trim() &&
+                            clientOptions.filter((c) => c.name.toLowerCase().includes(clientQuery.trim().toLowerCase())).length === 0 && (
+                              <div className="px-3 py-2 text-sm text-muted-foreground">Sin coincidencias</div>
+                            )}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
+
+                  <div ref={orderNumberDropdownRef} className="relative">
+                    <Label className="text-xs text-muted-foreground">N° Orden</Label>
+                    <Input
+                      placeholder="Número de orden..."
+                      value={orderNumberQuery}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setOrderNumberQuery(val);
+                        setShowOrderNumberSuggestions(Boolean(val.trim()));
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          applyOrderNumberFilter(orderNumberQuery);
+                        }
+                        if (e.key === 'Escape') {
+                          setShowOrderNumberSuggestions(false);
+                        }
+                      }}
+                      onFocus={() => setShowOrderNumberSuggestions(Boolean(orderNumberQuery.trim()))}
+                    />
+                    {showOrderNumberSuggestions && (
+                      <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
+                        <div className="max-h-56 overflow-auto">
+                          {orderNumberLookup
+                            .filter((n) => n.toLowerCase().includes(orderNumberQuery.trim().toLowerCase()))
+                            .slice(0, 12)
+                            .map((n) => (
+                              <button
+                                key={n}
+                                type="button"
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                                onClick={() => applyOrderNumberFilter(n)}
+                              >
+                                {n}
+                              </button>
+                            ))}
+                          {orderNumberQuery.trim() &&
+                            orderNumberLookup.filter((n) => n.toLowerCase().includes(orderNumberQuery.trim().toLowerCase())).length === 0 && (
+                              <div className="px-3 py-2 text-sm text-muted-foreground">Sin coincidencias</div>
+                            )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <div ref={orderNumberDropdownRef} className="relative">
-                  <Label className="text-xs text-muted-foreground">N° Orden</Label>
-                  <Input
-                    placeholder="Número de orden..."
-                    value={orderNumberQuery}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setOrderNumberQuery(val);
-                      setShowOrderNumberSuggestions(Boolean(val.trim()));
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        applyOrderNumberFilter(orderNumberQuery);
-                      }
-                      if (e.key === 'Escape') {
-                        setShowOrderNumberSuggestions(false);
-                      }
-                    }}
-                    onFocus={() => setShowOrderNumberSuggestions(Boolean(orderNumberQuery.trim()))}
-                  />
-                  {showOrderNumberSuggestions && (
-                    <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
-                      <div className="max-h-56 overflow-auto">
-                        {orderNumberLookup
-                          .filter((n) => n.toLowerCase().includes(orderNumberQuery.trim().toLowerCase()))
-                          .slice(0, 12)
-                          .map((n) => (
-                            <button
-                              key={n}
-                              type="button"
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
-                              onClick={() => applyOrderNumberFilter(n)}
-                            >
-                              {n}
-                            </button>
-                          ))}
-                        {orderNumberQuery.trim() &&
-                          orderNumberLookup.filter((n) => n.toLowerCase().includes(orderNumberQuery.trim().toLowerCase())).length === 0 && (
-                            <div className="px-3 py-2 text-sm text-muted-foreground">Sin coincidencias</div>
-                          )}
+                {/* Filtro de Vendedor - SOLO para usuarios con VIEW_ALL_ORDERS_HISTORY */}
+                {canViewAllOrdersHistoryPermission && (
+                  <div ref={sellerDropdownRef} className="relative">
+                    <Label className="text-xs text-muted-foreground">Vendedor</Label>
+                    <Input
+                      placeholder="Nombre del vendedor..."
+                      value={sellerQuery}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSellerQuery(val);
+                        setShowSellerSuggestions(Boolean(val.trim()));
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          applySellerFilter(sellerQuery);
+                        }
+                        if (e.key === 'Escape') {
+                          setShowSellerSuggestions(false);
+                        }
+                      }}
+                      onFocus={() => setShowSellerSuggestions(Boolean(sellerQuery.trim()))}
+                    />
+                    {showSellerSuggestions && (
+                      <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
+                        <div className="max-h-56 overflow-auto">
+                          {sellerOptions
+                            .filter((u) => u.name.toLowerCase().includes(sellerQuery.trim().toLowerCase()))
+                            .slice(0, 12)
+                            .map((u) => (
+                              <button
+                                key={u.id}
+                                type="button"
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                                onClick={() => applySellerFilter(u.name)}
+                              >
+                                {u.name}
+                              </button>
+                            ))}
+                          {sellerQuery.trim() &&
+                            sellerOptions.filter((u) => u.name.toLowerCase().includes(sellerQuery.trim().toLowerCase())).length === 0 && (
+                              <div className="px-3 py-2 text-sm text-muted-foreground">Sin coincidencias</div>
+                            )}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              </div>
+                    )}
+                  </div>
+                )}
 
-              {/* Filtro de Vendedor - SOLO para usuarios con VIEW_ALL_ORDERS_HISTORY */}
-              {canViewAllOrdersHistory() && (
-                <div ref={sellerDropdownRef} className="relative">
-                  <Label className="text-xs text-muted-foreground">Vendedor</Label>
-                  <Input
-                    placeholder="Nombre del vendedor..."
-                    value={sellerQuery}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setSellerQuery(val);
-                      setShowSellerSuggestions(Boolean(val.trim()));
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        applySellerFilter(sellerQuery);
-                      }
-                      if (e.key === 'Escape') {
-                        setShowSellerSuggestions(false);
-                      }
-                    }}
-                    onFocus={() => setShowSellerSuggestions(Boolean(sellerQuery.trim()))}
-                  />
-                  {showSellerSuggestions && (
-                    <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
-                      <div className="max-h-56 overflow-auto">
-                        {sellerOptions
-                          .filter((u) => u.name.toLowerCase().includes(sellerQuery.trim().toLowerCase()))
-                          .slice(0, 12)
-                          .map((u) => (
-                            <button
-                              key={u.id}
-                              type="button"
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
-                              onClick={() => applySellerFilter(u.name)}
-                            >
-                              {u.name}
-                            </button>
-                          ))}
-                        {sellerQuery.trim() &&
-                          sellerOptions.filter((u) => u.name.toLowerCase().includes(sellerQuery.trim().toLowerCase())).length === 0 && (
-                            <div className="px-3 py-2 text-sm text-muted-foreground">Sin coincidencias</div>
-                          )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div>
-                <Label className="text-xs text-muted-foreground">Estado</Label>
-                <Select
-                  value={selectedStatus}
-                  onValueChange={(value) => {
-                    setSelectedStatus(value === '__ALL__' ? '' : value);
-                    setCurrentPage(1);
-                  }}
-                >
-                  <SelectTrigger className="w-full lg:max-w-[200px]">
-                    <SelectValue placeholder="Todos" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__ALL__">Todos</SelectItem>
-                    {statusOptions.map((s) => (
-                      <SelectItem key={s.value} value={s.value}>
-                        {s.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex items-end">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground h-10">
-                  <Checkbox
-                    id="current-cash-orders"
-                    checked={onlyCurrentCash}
-                    onCheckedChange={(checked) => {
-                      setOnlyCurrentCash(Boolean(checked));
+                <div>
+                  <Label className="text-xs text-muted-foreground">Estado</Label>
+                  <Select
+                    value={selectedStatus}
+                    onValueChange={(value) => {
+                      setSelectedStatus(value === '__ALL__' ? '' : value);
                       setCurrentPage(1);
                     }}
-                  />
-                  <label
-                    htmlFor="current-cash-orders"
-                    className="cursor-pointer select-none"
                   >
-                    Caja actual
-                  </label>
+                    <SelectTrigger className="w-full lg:max-w-[200px]">
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__ALL__">Todos</SelectItem>
+                      {statusOptions.map((s) => (
+                        <SelectItem key={s.value} value={s.value}>
+                          {s.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-end">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground h-10">
+                    <Checkbox
+                      id="current-cash-orders"
+                      checked={onlyCurrentCash}
+                      onCheckedChange={(checked) => {
+                        setOnlyCurrentCash(Boolean(checked));
+                        setCurrentPage(1);
+                      }}
+                    />
+                    <label
+                      htmlFor="current-cash-orders"
+                      className="cursor-pointer select-none"
+                    >
+                      Caja actual
+                    </label>
+                  </div>
+                </div>
+
+                <ActiveFilters 
+                  hasActiveFilters={!!(appliedClientName || appliedSellerName || appliedOrderNumber || selectedStatus)}
+                  onClearFilters={clearFilters}
+                />
+
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Info className="h-3.5 w-3.5" />
+                  <span>
+                    Mostrando <strong>{orders.length}</strong> de <strong>{totalItems}</strong> ventas
+                    {totalPages > 1 && ` - página ${currentPage} de ${totalPages}`}
+                  </span>
                 </div>
               </div>
-
-              <ActiveFilters 
-                hasActiveFilters={!!(appliedClientName || appliedSellerName || appliedOrderNumber || selectedStatus)}
-                onClearFilters={clearFilters}
-              />
-
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Info className="h-3.5 w-3.5" />
-                <span>
-                  Mostrando <strong>{orders.length}</strong> de <strong>{totalItems}</strong> ventas
-                  {totalPages > 1 && ` - página ${currentPage} de ${totalPages}`}
-                </span>
-              </div>
-            </div>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-0 sm:p-6 pt-0">
-          <div className="rounded-md border overflow-hidden">
-            <div className="overflow-x-auto">
-              <Table className="w-full">
-                <TableHeader className="bg-muted/50">
-                  <TableRow>
-                    <TableHead className="w-[90px] px-2 text-center">Fecha</TableHead>
-                    <TableHead className="min-w-[120px] px-2 text-center">{hasNamedServices ? 'Nombre' : 'Cliente'}</TableHead>
-                    {isAdmin && (
-                      <TableHead className="w-[110px] px-2 text-center">Vendedor</TableHead>
-                    )}
-                    {hasProductsFeature && (
-                      <TableHead className="w-[100px] px-2 text-center hidden md:table-cell">Productos</TableHead>
-                    )}
-                    <TableHead className="w-[100px] px-2 text-center hidden md:table-cell">Servicios</TableHead>
-                    <TableHead className="w-[110px] px-2 text-center">Estado</TableHead>
-                    <TableHead className="min-w-[160px] px-2 text-center hidden md:table-cell">Método</TableHead>
-                    <TableHead className="w-[100px] px-2 text-right">Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {orders.length > 0 ? (
-                    orders.map((order, index) => {
-                      const createdAt = order.createdAt ? new Date(order.createdAt) : null;
-                      const shortDate = createdAt ? format(createdAt, "dd/MM/yy") : "N/A";
-                      const shortTime = createdAt ? format(createdAt, "HH:mm") : "-";
-                      const clientName = order.clientName || "Sin cliente";
-                      const displayName = hasNamedServices
-                        ? order.services?.[0]?.name || "Sin nombre"
-                        : clientName;
-                      const productCount = order.products?.length ?? 0;
-                      const serviceCount = order.services?.length ?? 0;
-                      const paymentMethods = order.paymentMethods ?? [];
-                      const refundPaymentMethods = order.refundPaymentMethods ?? [];
-                      const visiblePaymentMethods = paymentMethods.slice(0, 2);
-                      const hasMorePaymentMethods = paymentMethods.length > 2;
-                      const totalPaidAmount = paymentMethods.reduce((sum, pm) => sum + (Number(pm?.amount) || 0), 0);
-                      const latestPaymentMethod = paymentMethods[paymentMethods.length - 1];
-                      const totalRefundAmount = refundPaymentMethods.reduce((sum, pm) => sum + (Number(pm?.amount) || 0), 0);
-                      const hasRegisteredPayments = totalPaidAmount > 0;
+          {canViewOrdersHistoryPermission ? (
+            <div className="rounded-md border overflow-hidden">
+              <div className="overflow-x-auto">
+                <Table className="w-full">
+                  <TableHeader className="bg-muted/50">
+                    <TableRow>
+                      <TableHead className="w-[90px] px-2 text-center">Fecha</TableHead>
+                      <TableHead className="min-w-[120px] px-2 text-center">{hasNamedServices ? 'Nombre' : 'Cliente'}</TableHead>
+                      {isAdmin && (
+                        <TableHead className="w-[110px] px-2 text-center">Vendedor</TableHead>
+                      )}
+                      {hasProductsFeature && (
+                        <TableHead className="w-[100px] px-2 text-center hidden md:table-cell">Productos</TableHead>
+                      )}
+                      <TableHead className="w-[100px] px-2 text-center hidden md:table-cell">Servicios</TableHead>
+                      <TableHead className="w-[110px] px-2 text-center">Estado</TableHead>
+                      <TableHead className="min-w-[160px] px-2 text-center hidden md:table-cell">Método</TableHead>
+                      <TableHead className="w-[100px] px-2 text-right">Total</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {orders.length > 0 ? (
+                      orders.map((order, index) => {
+                        const createdAt = order.createdAt ? new Date(order.createdAt) : null;
+                        const shortDate = createdAt ? format(createdAt, "dd/MM/yy") : "N/A";
+                        const shortTime = createdAt ? format(createdAt, "HH:mm") : "-";
+                        const clientName = order.clientName || "Sin cliente";
+                        const displayName = hasNamedServices
+                          ? order.services?.[0]?.name || "Sin nombre"
+                          : clientName;
+                        const productCount = order.products?.length ?? 0;
+                        const serviceCount = order.services?.length ?? 0;
+                        const paymentMethods = order.paymentMethods ?? [];
+                        const refundPaymentMethods = order.refundPaymentMethods ?? [];
+                        const visiblePaymentMethods = paymentMethods.slice(0, 2);
+                        const hasMorePaymentMethods = paymentMethods.length > 2;
+                        const totalPaidAmount = paymentMethods.reduce((sum, pm) => sum + (Number(pm?.amount) || 0), 0);
+                        const latestPaymentMethod = paymentMethods[paymentMethods.length - 1];
+                        const totalRefundAmount = refundPaymentMethods.reduce((sum, pm) => sum + (Number(pm?.amount) || 0), 0);
+                        const hasRegisteredPayments = totalPaidAmount > 0;
 
-                      const displayTotal = Number(order.total ?? 0);
+                        const displayTotal = Number(order.total ?? 0);
 
-                      const statusConfig = {
-                        COMPLETED: {
-                          text: "Completado",
-                          className:
-                            "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-                          icon: "✓",
-                        },
-                        PAID: {
-                          text: "Pagado",
-                          className:
-                            "bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-400",
-                          icon: "💰",
-                        },
-                        PENDING: {
-                          text: "Pendiente",
-                          className:
-                            "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
-                          icon: "⏳",
-                        },
-                        CANCELLED: {
-                          text: "Anulado",
-                          className:
-                            "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-                          icon: "✕",
-                        },
-                      } as const;
+                        const statusConfig = {
+                          COMPLETED: {
+                            text: "Completado",
+                            className:
+                              "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+                            icon: "✓",
+                          },
+                          PAID: {
+                            text: "Pagado",
+                            className:
+                              "bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-400",
+                            icon: "💰",
+                          },
+                          PENDING: {
+                            text: "Pendiente",
+                            className:
+                              "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
+                            icon: "⏳",
+                          },
+                          CANCELLED: {
+                            text: "Anulado",
+                            className:
+                              "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+                            icon: "✕",
+                          },
+                        } as const;
 
-                      const statusKey = (order.status || "PENDING") as keyof typeof statusConfig;
-                      const status = statusConfig[statusKey] || statusConfig.PENDING;
-                      const orderId = order.id || String(index);
-                      const isServiceOrder = serviceCount > 0;
-                      const isCancelledOrder = statusKey === 'CANCELLED';
-                      const refundDifference = Math.abs(totalPaidAmount - totalRefundAmount);
-                      const hasRefundDifference = refundDifference > 0.009; // Consider cent-level differences
-                      let shouldShowPaymentMethods =
-                        paymentMethods.length > 0 &&
-                        (!isServiceOrder || hasRegisteredPayments) &&
-                        (!isCancelledOrder || (hasRegisteredPayments && hasRefundDifference));
+                        const statusKey = (order.status || "PENDING") as keyof typeof statusConfig;
+                        const status = statusConfig[statusKey] || statusConfig.PENDING;
+                        const orderId = order.id || String(index);
+                        const isServiceOrder = serviceCount > 0;
+                        const isCancelledOrder = statusKey === 'CANCELLED';
+                        const refundDifference = Math.abs(totalPaidAmount - totalRefundAmount);
+                        const hasRefundDifference = refundDifference > 0.009; // Consider cent-level differences
+                        let shouldShowPaymentMethods =
+                          paymentMethods.length > 0 &&
+                          (!isServiceOrder || hasRegisteredPayments) &&
+                          (!isCancelledOrder || (hasRegisteredPayments && hasRefundDifference));
 
-                      if (isCancelledOrder) {
-                        shouldShowPaymentMethods = false;
-                      }
+                        if (isCancelledOrder) {
+                          shouldShowPaymentMethods = false;
+                        }
 
-                      return (
-                        <TableRow
-                          key={orderId}
-                          className="hover:bg-muted/60 cursor-pointer"
-                          onClick={() => order.id && handleViewOrder(order.id)}
-                        >
-                          <TableCell className="px-2 py-3 text-center">
-                            <div className="flex flex-col items-center">
-                              <span className="text-xs sm:text-sm font-medium">{shortDate}</span>
-                              <span className="text-xs text-muted-foreground">{shortTime}</span>
-                            </div>
-                          </TableCell>
-
-                          <TableCell className="px-2 py-3">
-                            <div className="flex flex-col min-w-0">
-                              <span className="text-sm font-medium truncate max-w-[140px] sm:max-w-[200px]">
-                                {displayName}
-                              </span>
-                              {!hasNamedServices && (
-                                <span className="text-xs text-muted-foreground truncate max-w-[140px] sm:max-w-[200px]">
-                                  {clientName}
-                                </span>
-                              )}
-                            </div>
-                          </TableCell>
-
-                          {isAdmin && (
-                            <TableCell className="px-2 py-3">
-                              <span className="text-sm font-medium truncate max-w-[140px] sm:max-w-[200px]">
-                                {order.sellerName || "Sistema"}
-                              </span>
+                        return (
+                          <TableRow
+                            key={orderId}
+                            className={`hover:bg-muted/60 ${canDetailOrdersPermission ? 'cursor-pointer' : 'cursor-default'}`}
+                            onClick={() => {
+                              if (!canDetailOrdersPermission) return;
+                              if (order.id) handleViewOrder(order.id);
+                            }}
+                          >
+                            <TableCell className="px-2 py-3 text-center">
+                              <div className="flex flex-col items-center">
+                                <span className="text-xs sm:text-sm font-medium">{shortDate}</span>
+                                <span className="text-xs text-muted-foreground">{shortTime}</span>
+                              </div>
                             </TableCell>
-                          )}
 
-                          {hasProductsFeature && (
+                            <TableCell className="px-2 py-3">
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-sm font-medium truncate max-w-[140px] sm:max-w-[200px]">
+                                  {displayName}
+                                </span>
+                                {!hasNamedServices && (
+                                  <span className="text-xs text-muted-foreground truncate max-w-[140px] sm:max-w-[200px]">
+                                    {clientName}
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+
+                            {isAdmin && (
+                              <TableCell className="px-2 py-3">
+                                <span className="text-sm font-medium truncate max-w-[140px] sm:max-w-[200px]">
+                                  {order.sellerName || "Sistema"}
+                                </span>
+                              </TableCell>
+                            )}
+
+                            {hasProductsFeature && (
+                              <TableCell className="px-2 py-3 text-center hidden md:table-cell">
+                                {productCount > 0 ? (
+                                  <Badge variant="outline" className="text-xs py-0.5">
+                                    {productCount} {productCount === 1 ? "prod." : "prod."}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-muted-foreground text-sm">-</span>
+                                )}
+                              </TableCell>
+                            )}
+
                             <TableCell className="px-2 py-3 text-center hidden md:table-cell">
-                              {productCount > 0 ? (
+                              {serviceCount > 0 ? (
                                 <Badge variant="outline" className="text-xs py-0.5">
-                                  {productCount} {productCount === 1 ? "prod." : "prod."}
+                                  {serviceCount} {serviceCount === 1 ? "serv." : "serv."}
                                 </Badge>
                               ) : (
                                 <span className="text-muted-foreground text-sm">-</span>
                               )}
                             </TableCell>
-                          )}
 
-                          <TableCell className="px-2 py-3 text-center hidden md:table-cell">
-                            {serviceCount > 0 ? (
-                              <Badge variant="outline" className="text-xs py-0.5">
-                                {serviceCount} {serviceCount === 1 ? "serv." : "serv."}
-                              </Badge>
-                            ) : (
-                              <span className="text-muted-foreground text-sm">-</span>
-                            )}
-                          </TableCell>
-
-                          <TableCell className="px-2 py-3">
-                            <div className="flex justify-center">
-                              <span
-                                className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-medium ${status.className}`}
-                              >
-                                <span className="mr-1">{status.icon}</span>
-                                <span className="hidden sm:inline">{status.text}</span>
-                              </span>
-                            </div>
-                          </TableCell>
-
-                          <TableCell className="px-2 py-3 text-center hidden md:table-cell">
-                            {shouldShowPaymentMethods ? (
-                              <div className="flex flex-col items-center gap-0.5">
-                                {statusKey === "PAID" ? (
-                                  <span className="text-xs whitespace-nowrap">
-                                    {`${latestPaymentMethod?.type || "-"} ${formatCurrency(totalPaidAmount)}`}
-                                  </span>
-                                ) : (
-                                  <>
-                                    {visiblePaymentMethods.map((pm, idx) => (
-                                      <span
-                                        key={`${order.id || index}-${pm?.type || "pm"}-${idx}`}
-                                        className="text-xs whitespace-nowrap"
-                                        title={String(pm?.type || "")}
-                                      >
-                                        {`${pm?.type || "-"} ${formatCurrency(Number(pm?.amount) || 0)}`}
-                                      </span>
-                                    ))}
-                                    {hasMorePaymentMethods && (
-                                      <span className="text-xs text-muted-foreground">...</span>
-                                    )}
-                                  </>
-                                )}
+                            <TableCell className="px-2 py-3">
+                              <div className="flex justify-center">
+                                <span
+                                  className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-medium ${status.className}`}
+                                >
+                                  <span className="mr-1">{status.icon}</span>
+                                  <span className="hidden sm:inline">{status.text}</span>
+                                </span>
                               </div>
-                            ) : (
-                              <span className="text-muted-foreground text-sm">-</span>
+                            </TableCell>
+
+                            <TableCell className="px-2 py-3 text-center hidden md:table-cell">
+                              {shouldShowPaymentMethods ? (
+                                <div className="flex flex-col items-center gap-0.5">
+                                  {statusKey === "PAID" ? (
+                                    <span className="text-xs whitespace-nowrap">
+                                      {`${latestPaymentMethod?.type || "-"} ${formatCurrency(totalPaidAmount)}`}
+                                    </span>
+                                  ) : (
+                                    <>
+                                      {visiblePaymentMethods.map((pm, idx) => (
+                                        <span
+                                          key={`${order.id || index}-${pm?.type || "pm"}-${idx}`}
+                                          className="text-xs whitespace-nowrap"
+                                          title={String(pm?.type || "")}
+                                        >
+                                          {`${pm?.type || "-"} ${formatCurrency(Number(pm?.amount) || 0)}`}
+                                        </span>
+                                      ))}
+                                      {hasMorePaymentMethods && (
+                                        <span className="text-xs text-muted-foreground">...</span>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">-</span>
+                              )}
+                            </TableCell>
+
+                            <TableCell className="px-2 py-3 text-right">
+                              <span className="text-sm font-medium whitespace-nowrap">
+                                {formatCurrency(displayTotal)}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={tableColSpan} className="py-12">
+                          <div className="flex flex-col items-center justify-center text-center">
+                            <ShoppingCart className="h-12 w-12 text-muted-foreground/50 mb-4" />
+                            <h3 className="text-lg font-medium text-muted-foreground">
+                              No se encontraron ventas
+                            </h3>
+                            <p className="text-sm text-muted-foreground mt-1 max-w-md">
+                              Ajusta los filtros o crea una nueva venta.
+                            </p>
+                            {canManageOrders && (
+                              <Button onClick={() => setIsFormOpen(true)} className="mt-4" size="sm">
+                                <Plus className="h-4 w-4 mr-2" />
+                                Crear venta
+                              </Button>
                             )}
-                          </TableCell>
-
-                          <TableCell className="px-2 py-3 text-right">
-                            <span className="text-sm font-medium whitespace-nowrap">
-                              {formatCurrency(displayTotal)}
-                            </span>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={tableColSpan} className="py-12">
-                        <div className="flex flex-col items-center justify-center text-center">
-                          <ShoppingCart className="h-12 w-12 text-muted-foreground/50 mb-4" />
-                          <h3 className="text-lg font-medium text-muted-foreground">
-                            No se encontraron ventas
-                          </h3>
-                          <p className="text-sm text-muted-foreground mt-1 max-w-md">
-                            Ajusta los filtros o crea una nueva venta.
-                          </p>
-                          {canManageOrders && (
-                            <Button onClick={() => setIsFormOpen(true)} className="mt-4" size="sm">
-                              <Plus className="h-4 w-4 mr-2" />
-                              Crear venta
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
-          </div>
-
-          {/* Controles de paginación */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>
-                  Página {currentPage} de {totalPages}
-                </span>
-              </div>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage <= 1}
-                  className="h-8 w-8 p-0"
-                >
-                  <span className="sr-only">Página anterior</span>
-                  ←
-                </Button>
-
-                {/* Números de página */}
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    const pageNum = Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i;
-                    if (pageNum > totalPages) return null;
-
-                    return (
-                      <Button
-                        key={pageNum}
-                        variant={currentPage === pageNum ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => handlePageChange(pageNum)}
-                        className="h-8 w-8 p-0"
-                      >
-                        {pageNum}
-                      </Button>
-                    );
-                  })}
-                </div>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage >= totalPages}
-                  className="h-8 w-8 p-0"
-                >
-                  <span className="sr-only">Página siguiente</span>
-                  →
-                </Button>
-              </div>
+          ) : (
+            <div className="py-12 text-center text-muted-foreground">
+              aqui no hay nada que ver.
             </div>
           )}
         </CardContent>

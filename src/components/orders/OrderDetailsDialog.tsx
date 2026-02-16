@@ -129,8 +129,9 @@ interface PaymentEntry {
 
 const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenChange, order, onOrderUpdate }) => {
   const { user, currentStore, canIssuePdf, tenantFeatures, hasPermission, isAdmin: isAdminFromContext } = useAuth();
-  const { canManageOrders: canManageOrdersFn } = usePermissions();
+  const { canManageOrders: canManageOrdersFn, canDetailOrders: canDetailOrdersFn } = usePermissions();
   const canManageOrders = canManageOrdersFn();
+  const canDetailOrders = canDetailOrdersFn();
   const [showPDF, setShowPDF] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
@@ -167,7 +168,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
 
   // Cargar detalles de la orden cuando se abre el diálogo
   useEffect(() => {
-    if (open && order?.id) {
+    if (open && order?.id && canDetailOrders) {
       const loadDetails = async () => {
         setIsLoadingDetails(true);
         try {
@@ -185,7 +186,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
     } else {
       setOrderDetails(null);
     }
-  }, [open, order?.id]);
+  }, [open, order?.id, canDetailOrders]);
 
   useEffect(() => {
     if (!open) {
@@ -312,11 +313,15 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
 
       // Refrescar orden en el padre (para que refresque la lista)
       if (onOrderUpdate) {
-        try {
-          const updatedOrder = await orderService.getOrderById(order.id);
-          onOrderUpdate(updatedOrder);
-        } catch (error) {
-          console.error('Error fetching updated order:', error);
+        if (canDetailOrders) {
+          try {
+            const updatedOrder = await orderService.getOrderById(order.id);
+            onOrderUpdate(updatedOrder);
+          } catch (error) {
+            console.error('Error fetching updated order:', error);
+            onOrderUpdate(order);
+          }
+        } else {
           onOrderUpdate(order);
         }
       }
@@ -560,11 +565,15 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
       onOpenChange(false);
 
       if (onOrderUpdate && order?.id) {
-        try {
-          const updatedOrder = await orderService.getOrderById(order.id);
-          onOrderUpdate(updatedOrder);
-        } catch (error) {
-          console.error('Error fetching updated order:', error);
+        if (canDetailOrders) {
+          try {
+            const updatedOrder = await orderService.getOrderById(order.id);
+            onOrderUpdate(updatedOrder);
+          } catch (error) {
+            console.error('Error fetching updated order:', error);
+            onOrderUpdate(order);
+          }
+        } else {
           onOrderUpdate(order);
         }
       }
@@ -619,7 +628,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
         if (currentStore) {
           const currentSession = await cashService.getCurrentCashSession(currentStore.id);
           if (currentSession && currentSession.status === 'OPEN') {
-            const freshOrder = await orderService.getOrderById(order.id);
+            const freshOrder = canDetailOrders ? await orderService.getOrderById(order.id) : order;
 
             let shouldCreateManualMovement = false;
             if (freshOrder.cashSessionId) {
@@ -647,25 +656,31 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
       }
 
       // Recargar detalles y pendiente
-      try {
-        setIsLoadingDetails(true);
-        const details = await orderService.getOrderDetails(order.id);
-        setOrderDetails(details);
-      } catch (error) {
-        console.error('Error al recargar detalles de la orden:', error);
-      } finally {
-        setIsLoadingDetails(false);
+      if (canDetailOrders) {
+        try {
+          setIsLoadingDetails(true);
+          const details = await orderService.getOrderDetails(order.id);
+          setOrderDetails(details);
+        } catch (error) {
+          console.error('Error al recargar detalles de la orden:', error);
+        } finally {
+          setIsLoadingDetails(false);
+        }
       }
 
       setPaymentMethods([{ id: '1', type: PaymentType.EFECTIVO, amount: 0 }]);
       setIsPaymentModalOpen(false);
       onOpenChange(false);
       if (onOrderUpdate && order?.id) {
-        try {
-          const updatedOrder = await orderService.getOrderById(order.id);
-          onOrderUpdate(updatedOrder);
-        } catch (error) {
-          console.error('Error fetching updated order:', error);
+        if (canDetailOrders) {
+          try {
+            const updatedOrder = await orderService.getOrderById(order.id);
+            onOrderUpdate(updatedOrder);
+          } catch (error) {
+            console.error('Error fetching updated order:', error);
+            onOrderUpdate(order);
+          }
+        } else {
           onOrderUpdate(order);
         }
       }

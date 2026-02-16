@@ -21,6 +21,7 @@ export const PERMISSIONS = {
   // ventas
   VIEW_ORDERS: 'VIEW_ORDERS',
   MANAGE_ORDERS: 'MANAGE_ORDERS',
+  DETAIL_ORDERS: 'DETAIL_ORDERS',
   VIEW_ALL_ORDERS_HISTORY: 'VIEW_ALL_ORDERS_HISTORY',
   VIEW_OWN_ORDERS_HISTORY: 'VIEW_OWN_ORDERS_HISTORY',
 
@@ -138,6 +139,7 @@ export const usePermissions = () => {
   // Ventas
   const canViewOrders = () => resolvePermission(PERMISSIONS.VIEW_ORDERS);
   const canManageOrders = () => resolvePermission(PERMISSIONS.MANAGE_ORDERS);
+  const canDetailOrders = () => resolvePermission(PERMISSIONS.DETAIL_ORDERS);
   const canViewAllOrdersHistory = () => resolvePermission(PERMISSIONS.VIEW_ALL_ORDERS_HISTORY);
   const canViewOwnOrdersHistory = () => resolvePermission(PERMISSIONS.VIEW_OWN_ORDERS_HISTORY);
   
@@ -226,6 +228,7 @@ export const usePermissions = () => {
     // Ventas
     canViewOrders,
     canManageOrders,
+    canDetailOrders,
     canViewAllOrdersHistory,
     canViewOwnOrdersHistory,
     canViewOrdersHistory,
