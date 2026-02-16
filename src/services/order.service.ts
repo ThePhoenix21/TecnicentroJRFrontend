@@ -202,7 +202,7 @@ export const orderService = {
       if (otherParams.sellerName) validParams.sellerName = otherParams.sellerName;
       if (otherParams.orderNumber) validParams.orderNumber = otherParams.orderNumber;
       if (otherParams.status) validParams.status = otherParams.status;
-      
+                  
       // El endpoint /orders/store/{storeId} ahora devuelve OrdersListResponse con paginación
       const response = await api.get<OrdersListResponse>(`/orders/store/${storeId}`, {
         params: validParams,

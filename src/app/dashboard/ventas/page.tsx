@@ -228,7 +228,7 @@ export default function VentasPage() {
         }
 
         if (canViewOrdersHistoryPermission) {
-          try {
+          try {            
             const response = await orderService.listOrders({
               page: currentPage,
               pageSize: itemsPerPage,
@@ -238,6 +238,8 @@ export default function VentasPage() {
               ...(appliedOrderNumber ? { orderNumber: appliedOrderNumber } : {}),
               ...(selectedStatus ? { status: selectedStatus } : {}),
               ...(onlyCurrentCash ? { currentCash: true } : {}),
+              // New code added here
+              ...(selectedStoreId ? { storeId: selectedStoreId } : {}),
             });
             setOrders(response.data || []);
             setTotalPages(response.totalPages || 1);
@@ -278,6 +280,7 @@ export default function VentasPage() {
     selectedStatus,
     onlyCurrentCash,
     canViewOrdersHistoryPermission,
+    canViewAllOrdersHistoryPermission, // Agregar dependencia faltante
   ]);
 
   const resetHardDeleteModal = useCallback(() => {
