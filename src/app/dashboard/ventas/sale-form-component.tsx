@@ -48,7 +48,8 @@ enum PaymentType {
   PLIN = 'PLIN',
   DATAPHONE = 'DATAPHONE',
   BIZUM = 'BIZUM',
-  OTRO = 'OTRO'
+  OTRO = 'OTRO',
+  MISELANEOUS = 'MISELANEOUS' // Agregado para servicios forzados
 }
 
 type PaymentTypeValue = (typeof PaymentType)[keyof typeof PaymentType];
@@ -137,6 +138,7 @@ type Service = {
   name: string;
   description?: string;
   price: number;
+  type: 'MISELANEOUS'; // Forzar siempre MISELANEOUS
   duration?: number;
   isActive: boolean;
   createdAt: string;
@@ -1105,7 +1107,7 @@ export function SaleForm({
           
           // Usar los métodos de pago del formulario
           const payments = item.paymentMethods.map(pm => ({
-            type: pm.type,
+            type: pm.type as 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'DATAPHONE' | 'BIZUM' | 'OTRO',
             amount: pm.amount
           }));
 
@@ -1139,14 +1141,14 @@ export function SaleForm({
 
             // Usar los métodos de pago del formulario
             const payments = item.paymentMethods.map(pm => ({
-              type: pm.type,
+              type: pm.type as 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'DATAPHONE' | 'BIZUM' | 'OTRO',
               amount: pm.amount
             }));
 
             return {
               name: item.name?.trim() || 'Defauld_Service',              
               price: Number(typeof item.price === "string" ? parseFloat(item.price) : item.price),
-              type: (item.serviceType || (tenantDefaultServiceLoaded ? tenantDefaultService : "REPAIR")),
+              type: 'MISELANEOUS' as const, // Forzar siempre MISELANEOUS
               description: item.notes,
               photoUrls,
               payments
@@ -1207,8 +1209,14 @@ export function SaleForm({
       const saleData = {
         clientInfo,
         products: productsData,
-        services: servicesData,
-        paymentMethods: orderPaymentMethodsToUse,
+        services: servicesData.map(service => ({
+          ...service,
+          type: 'MISELANEOUS' as 'MISELANEOUS' // Forzar siempre MISELANEOUS con casting explícito
+        })),
+        paymentMethods: orderPaymentMethodsToUse.map(pm => ({
+          type: pm.type as 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'DATAPHONE' | 'BIZUM' | 'OTRO',
+          amount: pm.amount
+        })),
         totalAmount, // Agregar el monto total confirmado
         cashSessionId: currentCashSession, // Usar sesión de caja real
       };
@@ -1842,7 +1850,15 @@ export function SaleForm({
   }, [businessInfo]);
 
   return (
-    <div className={`fixed inset-0 bg-black/90 flex items-start md:items-center justify-center z-50 p-2 md:p-4 overflow-y-auto ${(!isOpen && !showServiceSheet) ? 'hidden' : ''}`}>
+    <div 
+      className={`fixed inset-0 bg-black/90 flex items-start md:items-center justify-center z-50 p-2 md:p-4 overflow-y-auto ${(!isOpen && !showServiceSheet) ? 'hidden' : ''}`}
+      onClick={(e) => {
+        // Cerrar el modal solo si se hace clic en el fondo (no en el contenido)
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
       <div className="bg-background border border-muted rounded-3xl shadow-xl w-full max-w-4xl max-h-[95vh] md:max-h-[90vh] flex flex-col">
         <div className="flex justify-between items-center p-3 md:p-4 border-b rounded-t-3xl sticky top-0 bg-background z-10">
           <h2 className="text-lg md:text-xl font-semibold">Nueva Venta</h2>
@@ -1862,9 +1878,7 @@ export function SaleForm({
         {/* Diálogo de hoja de servicio */}
         <Dialog open={showServiceSheet} onOpenChange={(open) => {
           if (!open) {
-            console.log(" Usuario cerró hoja de servicio - reseteando formulario");
-            resetSaleState(); // Reset completo cuando el usuario cierra la hoja de servicio
-            setShowServiceSheet(false);
+            resetSaleState();
           }
         }}>
           <DialogContent className="w-[98vw] max-w-[98vw] h-[98vh] max-h-[98vh] flex flex-col p-0 overflow-hidden z-[60]">
@@ -2169,17 +2183,17 @@ export function SaleForm({
 
                 {newItem.type === "service" && (
                   <>
-                    <div className="space-y-2">
+                    {/* Tipo de servicio oculto - siempre MISELANEOUS */}
+                    <div className="space-y-2 hidden">
                       <label className="text-sm font-medium">Tipo de servicio</label>
                       <select
                         name="serviceType"
-                        value={newItem.serviceType || (tenantDefaultServiceLoaded ? tenantDefaultService : "REPAIR")}
+                        value="MISELANEOUS"
                         onChange={handleNewItemChange}
                         className="w-full p-2 bg-muted border rounded"
                         required
+                        disabled
                       >
-                        <option value="REPAIR">Reparación</option>
-                        <option value="WARRANTY">Garantía</option>
                         <option value="MISELANEOUS">Misceláneo</option>
                       </select>
                     </div>

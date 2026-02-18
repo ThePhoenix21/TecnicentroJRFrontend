@@ -538,7 +538,7 @@ export default function DashboardPage() {
                 <CardHeader>
                   <CardTitle>Productos Destacados</CardTitle>
                   <p className="text-sm text-muted-foreground">
-                    {loading ? 'Cargando...' : `Top ${Math.min(5, stats?.topProducts?.length || 0)} productos`}
+                    {loading ? 'Cargando...' : `Top ${Math.min(5, stats?.topProducts?.length || 0)} productos vendidos`}
                   </p>
                 </CardHeader>
                 <CardContent>
@@ -566,7 +566,7 @@ export default function DashboardPage() {
                               <p className="font-medium">{product.name}</p>
                             </div>
                           </div>
-                          <Badge variant="secondary">{formatCurrency(product.value)}</Badge>
+                          <Badge variant="secondary">{(product.value)}</Badge>
                         </div>
                       ))}
                     </div>
@@ -802,7 +802,7 @@ export default function DashboardPage() {
                               </Card>
                               <Card>
                                 <CardHeader className="pb-2">
-                                  <CardTitle className="text-sm font-medium">Métodos usados</CardTitle>
+                                  <CardTitle className="text-sm font-medium">Métodos de pago usados</CardTitle>
                                 </CardHeader>
                                 <CardContent>
                                   <div className="text-2xl font-bold">
@@ -874,10 +874,46 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
+                    {hasProducts && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Top usuarios por ventas de productos</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="rounded-md border">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Usuario</TableHead>
+                                  <TableHead className="text-right">Total</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {(incomeData?.rankings?.topUsersProducts || []).length === 0 ? (
+                                  <TableRow>
+                                    <TableCell colSpan={2} className="h-24 text-center text-muted-foreground">
+                                      No hay datos.
+                                    </TableCell>
+                                  </TableRow>
+                                ) : (
+                                  (incomeData?.rankings?.topUsersProducts || []).map((u) => (
+                                    <TableRow key={u.userId}>
+                                      <TableCell>{u.userName}</TableCell>
+                                      <TableCell className="text-right font-medium">{formatCurrency(u.totalAmount ?? u.total ?? 0)}</TableCell>
+                                    </TableRow>
+                                  ))
+                                )}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+
                     {hasServices && (
                       <Card>
                         <CardHeader>
-                          <CardTitle>Tabla de servicios</CardTitle>
+                          <CardTitle>Top usuarios por registro de servicios</CardTitle>
                         </CardHeader>
                         <CardContent>
                           {hasNamedServices ? (
@@ -1000,42 +1036,6 @@ export default function DashboardPage() {
                               </Table>
                             </div>
                           )}
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {hasProducts && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>Top usuarios por ventas de productos</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="rounded-md border">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>Usuario</TableHead>
-                                  <TableHead className="text-right">Total</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {(incomeData?.rankings?.topUsersProducts || []).length === 0 ? (
-                                  <TableRow>
-                                    <TableCell colSpan={2} className="h-24 text-center text-muted-foreground">
-                                      No hay datos.
-                                    </TableCell>
-                                  </TableRow>
-                                ) : (
-                                  (incomeData?.rankings?.topUsersProducts || []).map((u) => (
-                                    <TableRow key={u.userId}>
-                                      <TableCell>{u.userName}</TableCell>
-                                      <TableCell className="text-right font-medium">{formatCurrency(u.totalAmount ?? u.total ?? 0)}</TableCell>
-                                    </TableRow>
-                                  ))
-                                )}
-                              </TableBody>
-                            </Table>
-                          </div>
                         </CardContent>
                       </Card>
                     )}

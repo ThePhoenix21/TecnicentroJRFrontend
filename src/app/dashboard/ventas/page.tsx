@@ -1148,8 +1148,6 @@ export default function VentasPage() {
         isOpen={isFormOpen}
         onClose={() => {
           setIsFormOpen(false);
-          // Recargar la lista después de cerrar el modal para asegurarse de que la nueva venta aparezca
-          loadData();
         }}
         onSubmit={async (data: SaleData) => {
           const transformedData: SaleData = {

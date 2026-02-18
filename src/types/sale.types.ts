@@ -21,7 +21,7 @@ export interface ServiceOrderItem {
   name: string;
   price: number;
   description?: string;
-  type: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS'; // Updated to match backend specification
+  type: 'MISELANEOUS'; // Forzado siempre MISELANEOUS
   photoUrls?: string[];
 }
 
@@ -80,7 +80,7 @@ export interface SaleData {
     name?: string;
     description?: string;
     price: number;
-    type: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS'; // Updated to match backend
+    type: 'MISELANEOUS'; // Forzado siempre MISELANEOUS
     photoUrls?: string[];
     payments?: Array<{
       type: 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'DATAPHONE' | 'BIZUM' | 'OTRO';
