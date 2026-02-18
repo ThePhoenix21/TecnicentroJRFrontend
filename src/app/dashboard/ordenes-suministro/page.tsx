@@ -1347,7 +1347,8 @@ export default function OrdenesSuministroPage() {
                       </>
                     )}
                   </div>
-
+                  
+                  {/*almacen*/}
                   {detail.warehouseReceptions.length > 0 && (
                     <div className="space-y-2 rounded-lg border bg-background p-4">
                       <h3 className="text-sm font-semibold">Recepciones de almacén</h3>
@@ -1357,13 +1358,14 @@ export default function OrdenesSuministroPage() {
                             <div className="font-medium">{new Date(reception.receivedAt).toLocaleString()}</div>
                             {reception.reference && <div className="text-muted-foreground">Ref: {reception.reference}</div>}
                             {reception.notes && <div className="text-muted-foreground">{reception.notes}</div>}
-                            <div className="text-muted-foreground">Productos: {reception.products.length}</div>
+                            <div className="text-muted-foreground">Tipo de productos: {reception.products.length}</div>
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
 
+                  {/*tienda*/}
                   {detail.storeReceptions.length > 0 && (
                     <div className="space-y-2 rounded-lg border bg-background p-4">
                       <h3 className="text-sm font-semibold">Recepciones de tienda</h3>
@@ -1373,7 +1375,7 @@ export default function OrdenesSuministroPage() {
                             <div className="font-medium">{new Date(reception.receivedAt).toLocaleString()}</div>
                             {reception.reference && <div className="text-muted-foreground">Ref: {reception.reference}</div>}
                             {reception.notes && <div className="text-muted-foreground">{reception.notes}</div>}
-                            <div className="text-muted-foreground">Productos: {reception.products.length}</div>
+                            <div className="text-muted-foreground">Tipo de productos: {reception.products.length}</div>
                           </div>
                         ))}
                       </div>
