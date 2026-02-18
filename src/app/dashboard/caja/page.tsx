@@ -83,6 +83,15 @@ export default function CajaPage() {
   const [loading, setLoading] = useState(true);
   const [openingAmount, setOpeningAmount] = useState('0');
   const [isOpening, setIsOpening] = useState(false);
+  const [openCashConflictModal, setOpenCashConflictModal] = useState<{
+    open: boolean;
+    message: string;
+    storeName?: string;
+  }>({
+    open: false,
+    message: '',
+    storeName: undefined,
+  });
   const [isClosing, setIsClosing] = useState(false);
   const [showMovementForm, setShowMovementForm] = useState(false);
   const [movementData, setMovementData] = useState({
@@ -456,8 +465,30 @@ export default function CajaPage() {
       await loadCurrentSession();
       setOpeningAmount('0');
     } catch (error: any) {
+      const status = error?.response?.status;
+      const responseData = error?.response?.data;
+
+      if (status === 409) {
+        const storeName =
+          typeof responseData?.storeName === 'string' ? responseData.storeName : undefined;
+        const message =
+          typeof responseData?.message === 'string' && responseData.message.trim()
+            ? responseData.message
+            : storeName
+              ? `Ya tienes una sesión de caja abierta en la tienda ${storeName}. Ciérrala antes de abrir otra.`
+              : 'Ya tienes una sesión de caja abierta en otra tienda. Ciérrala antes de abrir otra.';
+
+        setOpenCashConflictModal({
+          open: true,
+          message,
+          storeName,
+        });
+        return;
+      }
+
       console.error('Error al abrir caja:', error);
-      toast.error(error.response?.data?.message || 'Error al abrir la caja');
+
+      toast.error(responseData?.message || 'Error al abrir la caja');
     } finally {
       setIsOpening(false);
     }
@@ -958,6 +989,42 @@ export default function CajaPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={openCashConflictModal.open}
+        onOpenChange={(open) => {
+          setOpenCashConflictModal((prev) => ({ ...prev, open }));
+        }}
+      >
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Caja abierta en otra tienda</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {openCashConflictModal.message}
+            </p>
+            {openCashConflictModal.storeName && (
+              <div className="text-sm font-medium">
+                Tienda: {openCashConflictModal.storeName}
+              </div>
+            )}
+            <div className="flex justify-end pt-1">
+              <Button
+                type="button"
+                onClick={() =>
+                  setOpenCashConflictModal((prev) => ({
+                    ...prev,
+                    open: false,
+                  }))
+                }
+              >
+                Entendido
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

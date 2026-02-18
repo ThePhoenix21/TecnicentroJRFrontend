@@ -123,8 +123,12 @@ export class CashSessionService {
         }
       });
       return response.data;
-    } catch (error) {
-      console.error('Error al crear sesión de caja:', error);
+    } catch (error: any) {
+      // 409 es un caso de negocio esperado (sesión abierta en otra tienda)
+      // y se maneja en la UI con un modal específico.
+      if (error?.response?.status !== 409) {
+        console.error('Error al crear sesión de caja:', error);
+      }
       throw error;
     }
   }
