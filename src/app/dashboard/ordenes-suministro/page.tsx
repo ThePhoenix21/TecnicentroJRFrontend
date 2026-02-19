@@ -250,8 +250,8 @@ export default function OrdenesSuministroPage() {
         const isAuthError = status === 401 || status === 403 || message.includes("token");
         if (!isAuthError) {
           console.error(error);
+          toast.error(error?.response?.data?.message || error?.message || "No se pudieron cargar las órdenes");
         }
-        toast.error(error?.response?.data?.message || error?.message || "No se pudieron cargar las órdenes");
         setOrders([]);
         setTotal(0);
         setTotalPages(1);

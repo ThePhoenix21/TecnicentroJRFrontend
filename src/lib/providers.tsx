@@ -5,6 +5,7 @@ import { ReactNode, useState } from 'react';
 import { AuthProvider } from '@/contexts/auth-context';
 import { ThemeProvider } from 'next-themes';
 import { Toaster as SonnerToaster } from 'sonner';
+import '@/lib/toast-setup';
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
