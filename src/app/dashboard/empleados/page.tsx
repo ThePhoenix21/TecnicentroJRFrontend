@@ -65,6 +65,7 @@ import {
   Edit2, 
   Save, 
   CheckCircle2,
+  AlertTriangle,
   Users 
 } from "lucide-react";
 
@@ -140,6 +141,8 @@ export default function EmpleadosPage() {
   const [createResult, setCreateResult] = useState<any>(null);
   const [createDocuments, setCreateDocuments] = useState<File[]>([]);
   const [createUploadedDocuments, setCreateUploadedDocuments] = useState<any[]>([]);
+  const [createFailedDocuments, setCreateFailedDocuments] = useState<any[]>([]);
+  const [createWarningMessage, setCreateWarningMessage] = useState<string | null>(null);
 
   const [isRecreateOpen, setIsRecreateOpen] = useState(false);
   const [recreateStep, setRecreateStep] = useState<"warning" | "form" | "result">("warning");
@@ -399,6 +402,8 @@ export default function EmpleadosPage() {
     setCreateSubmitting(false);
     setCreateDocuments([]);
     setCreateUploadedDocuments([]);
+    setCreateFailedDocuments([]);
+    setCreateWarningMessage(null);
     setCreateAssignmentMode("STORE");
     setCreateForm({
       firstName: "",
@@ -422,6 +427,8 @@ export default function EmpleadosPage() {
     setCreateResult(null);
     setCreateDocuments([]);
     setCreateUploadedDocuments([]);
+    setCreateFailedDocuments([]);
+    setCreateWarningMessage(null);
   };
 
   const submitCreate = async () => {
@@ -457,11 +464,40 @@ export default function EmpleadosPage() {
 
     try {
       setCreateSubmitting(true);
+      setCreateFailedDocuments([]);
+      setCreateWarningMessage(null);
       const res = await employedService.createEmployed(dto, createDocuments);
+      const uploadedDocuments = Array.isArray(res?.documents) ? res.documents : [];
+      const apiFailedDocuments = Array.isArray(res?.failedDocuments) ? res.failedDocuments : [];
+      const apiWarningMessage = typeof res?.warning === "string" && res.warning.trim().length > 0
+        ? res.warning.trim()
+        : null;
+
+      const inferredUploadIssue =
+        createDocuments.length > 0 &&
+        uploadedDocuments.length === 0 &&
+        apiFailedDocuments.length === 0 &&
+        !apiWarningMessage;
+
+      const failedDocuments = inferredUploadIssue
+        ? createDocuments.map((file) => file?.name || "Documento sin nombre")
+        : apiFailedDocuments;
+
+      const warningMessage = inferredUploadIssue
+        ? "Empleado creado, pero no se pudo confirmar el registro de documentos adjuntos."
+        : apiWarningMessage;
+
       setCreateResult(res?.employed ?? res);
-      setCreateUploadedDocuments(Array.isArray(res?.documents) ? res.documents : []);
+      setCreateUploadedDocuments(uploadedDocuments);
+      setCreateFailedDocuments(failedDocuments);
+      setCreateWarningMessage(warningMessage);
       setCreateStep("result");
-      toast.success("Empleado creado");
+
+      if (warningMessage || failedDocuments.length > 0) {
+        toast.warning(warningMessage || "Empleado creado, pero no se pudieron registrar algunos documentos");
+      } else {
+        toast.success("Empleado creado");
+      }
       
       // Refresh all data including employees list and lookups
       await Promise.all([
@@ -491,7 +527,9 @@ export default function EmpleadosPage() {
         })
       ]);
     } catch (error: any) {
-      console.error(error);
+      if (error?.response?.status !== 413) {
+        console.error(error);
+      }
       toast.error(error?.response?.data?.message || error?.message || "Error al crear empleado");
     } finally {
       setCreateSubmitting(false);
@@ -633,8 +671,15 @@ export default function EmpleadosPage() {
   const assignmentInfo = useMemo(() => {
     if (!detail) return { store: null as string | null, warehouse: null as string | null };
 
-    const storeName = detail.storeAssignments?.[0]?.store?.name ?? null;
-    const warehouseName = detail.warehouseAssignments?.[0]?.warehouse?.name ?? null;
+    const storeName =
+      detail.assignment?.type === 'STORE'
+        ? (detail.assignment?.store?.name ?? null)
+        : (detail.storeAssignments?.[0]?.store?.name ?? null);
+
+    const warehouseName =
+      detail.assignment?.type === 'WAREHOUSE'
+        ? (detail.assignment?.warehouse?.name ?? null)
+        : (detail.warehouseAssignments?.[0]?.warehouse?.name ?? null);
 
     return { store: storeName, warehouse: warehouseName };
   }, [detail]);
@@ -842,7 +887,7 @@ export default function EmpleadosPage() {
                 <p className="text-sm text-muted-foreground">Lista de empleados del tenant</p>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+              <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">                
                 <ProtectedButton
                   permissions="MANAGE_EMPLOYEES"
                   onClick={openCreate}
@@ -1285,7 +1330,7 @@ export default function EmpleadosPage() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Documento</label>
-                  <Input value={detail.document} disabled />
+                  <Input value={detail.documentNumber ?? detail.document} disabled />
                 </div>
 
                 <div className="space-y-2">
@@ -1350,6 +1395,14 @@ export default function EmpleadosPage() {
                   />
                 </div>
 
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Rol de asignación</label>
+                  <Input
+                    value={detail.assignment?.role ?? detail.storeAssignments?.[0]?.role ?? detail.warehouseAssignments?.[0]?.role ?? "-"}
+                    disabled
+                  />
+                </div>
+
                 {detail.storeAssignments && detail.storeAssignments.length > 0 && (
                   <div className="space-y-2 sm:col-span-2">
                     <label className="text-sm font-medium">Detalles de asignación a tienda</label>
@@ -1387,7 +1440,7 @@ export default function EmpleadosPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Usuario que lo creó</label>
                   <Input 
-                    value={detail.createdByUser ? `${detail.createdByUser.name} (${detail.createdByUser.email})` : "-"} 
+                    value={detail.audit?.createdBy ? `${detail.audit.createdBy.name} (${detail.audit.createdBy.email})` : (detail.createdByUser ? `${detail.createdByUser.name} (${detail.createdByUser.email})` : "-")} 
                     disabled 
                   />
                 </div>
@@ -1399,23 +1452,66 @@ export default function EmpleadosPage() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Fecha de creación</label>
-                  <Input value={new Date(detail.createdAt).toLocaleString()} disabled />
+                  <Input value={new Date(detail.audit?.createdAt ?? detail.createdAt).toLocaleString()} disabled />
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Última actualización</label>
-                  <Input value={new Date(detail.updatedAt).toLocaleString()} disabled />
+                  <Input value={new Date(detail.audit?.updatedAt ?? detail.updatedAt).toLocaleString()} disabled />
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Fecha de eliminación</label>
-                  <Input value={detail.deletedAt ? new Date(detail.deletedAt).toLocaleString() : "-"} disabled />
+                  {(() => {
+                    const deletedAt = detail.audit?.deletedAt ?? detail.deletedAt;
+                    return (
+                      <Input
+                        value={deletedAt ? new Date(deletedAt).toLocaleString() : "-"}
+                        disabled
+                      />
+                    );
+                  })()}
                 </div>
 
                 <div className="space-y-2 sm:col-span-2">
-                  <label className="text-sm font-medium">Documentos ({detail.documentUrls?.length || 0})</label>
+                  <label className="text-sm font-medium">Documentos ({detail.documents?.length ?? detail.documentUrls?.length ?? 0})</label>
                   <div className="rounded-md border p-3 min-h-[60px]">
-                    {detail.documentUrls && detail.documentUrls.length > 0 ? (
+                    {Array.isArray(detail.documents) && detail.documents.length > 0 ? (
+                      <div className="space-y-2">
+                        {detail.documents.map((doc: any, idx: number) => (
+                          <div key={doc.id || `${doc.originalName}-${idx}`} className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="text-sm font-medium truncate">{doc.originalName || `Documento ${idx + 1}`}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {doc.mimeType || '—'}{typeof doc.size === 'number' ? ` · ${doc.size} bytes` : ''}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3 shrink-0">
+                              {doc?.links?.view && (
+                                <a
+                                  href={doc.links.view}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:underline text-xs"
+                                >
+                                  Ver
+                                </a>
+                              )}
+                              {doc?.links?.download && (
+                                <a
+                                  href={doc.links.download}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:underline text-xs"
+                                >
+                                  Descargar
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : detail.documentUrls && detail.documentUrls.length > 0 ? (
                       <div className="space-y-1">
                         {detail.documentUrls.map((url, idx) => (
                           <div key={idx} className="text-xs break-all">
@@ -1431,16 +1527,16 @@ export default function EmpleadosPage() {
                   </div>
                 </div>
 
-                {detail.employedHistories && detail.employedHistories.length > 0 && (
+                {((detail.history && detail.history.length > 0) || (detail.employedHistories && detail.employedHistories.length > 0)) && (
                   <div className="space-y-2 sm:col-span-2">
                     <label className="text-sm font-medium">Historial laboral</label>
                     <div className="rounded-md border p-3 space-y-2">
-                      {detail.employedHistories.map((hist) => (
+                      {(detail.history ?? detail.employedHistories ?? []).map((hist: any) => (
                         <div key={hist.id} className="text-sm border-b pb-2 last:border-0">
                           <div><strong>Motivo:</strong> {hist.reason}</div>
-                          <div><strong>Contratado el:</strong> {new Date(hist.hiredAt).toLocaleString()}</div>
+                          <div><strong>Contratado el:</strong> {hist.hiredAt ? new Date(hist.hiredAt).toLocaleString() : "-"}</div>
                           <div><strong>Estado:</strong> {hist.endedAt ? new Date(hist.endedAt).toLocaleString() : "Activo"}</div>
-                          <div><strong>Editado por:</strong> {hist.createdBy?.name || "-"}</div>
+                          <div><strong>Creado por:</strong> {hist.createdBy?.name || "-"}</div>
                         </div>
                       ))}
                     </div>
@@ -2027,16 +2123,43 @@ export default function EmpleadosPage() {
                   <div>
                     <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tienda / Almacén</dt>
                     <dd className="text-sm font-semibold">{createResult?.assignmentName || "—"}</dd>
-                  </div>                  
+                  </div>
                 </dl>
+
+                {(createWarningMessage || createFailedDocuments.length > 0) && (
+                  <div className="mt-5 rounded-xl border border-amber-300/70 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                      <div className="space-y-2">
+                        <p className="text-sm font-semibold">Empleado creado con advertencias</p>
+                        <p className="text-sm">
+                          {createWarningMessage || "Se creó el empleado, pero no se pudieron registrar algunos documentos."}
+                        </p>
+                        {createFailedDocuments.length > 0 && (
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide">Documentos no registrados</p>
+                            <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
+                              {createFailedDocuments.map((doc: any, index: number) => {
+                                const label = typeof doc === "string"
+                                  ? doc
+                                  : doc?.originalName || doc?.fileName || doc?.name || doc?.documentName || doc?.url || "Documento sin nombre";
+                                return <li key={`${label}-${index}`}>{label}</li>;
+                              })}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {createUploadedDocuments.length > 0 && (
                   <div className="mt-5">
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Documentos subidos</p>
                     <div className="mt-2 space-y-1 text-sm">
-                      {createUploadedDocuments.map((doc: any) => (
-                        <div key={doc.id || doc.url} className="flex items-center justify-between gap-2">
-                          <span className="truncate">{doc.originalName || doc.url || 'Documento'}</span>
+                      {createUploadedDocuments.map((doc: any, index: number) => (
+                        <div key={doc.id || doc.url || `uploaded-${index}`} className="flex items-center justify-between gap-2">
+                          <span className="truncate">{doc.originalName || doc.fileName || doc.name || doc.url || "Documento"}</span>
                           {doc.url && (
                             <a
                               href={doc.url}

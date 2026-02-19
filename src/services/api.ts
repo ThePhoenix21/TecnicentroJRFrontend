@@ -31,6 +31,16 @@ console.log('API Base URL:', getApiBaseUrl());
 // Interceptor de solicitud para agregar token de autenticación
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+      if (config.headers && typeof (config.headers as any).delete === 'function') {
+        (config.headers as any).delete('Content-Type');
+        (config.headers as any).delete('content-type');
+      } else if (config.headers) {
+        delete (config.headers as any)['Content-Type'];
+        delete (config.headers as any)['content-type'];
+      }
+    }
+
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('auth_token');
       if (token) {

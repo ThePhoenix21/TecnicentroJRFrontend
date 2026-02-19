@@ -66,26 +66,39 @@ class EmployedService {
       const dummyFile = new Blob([''], { type: 'text/plain' });
       formData.append('documents', dummyFile, 'dummy.txt');
       
-      const response = await api.post('/employed', formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
-      return response.data;
+      try {
+        const response = await api.post('/employed', formData);
+        return response.data;
+      } catch (error: any) {
+        if (error?.response?.status !== 413) {
+          console.error('Error al crear empleado:', error);
+        }
+        throw error;
+      }
     }
 
     const formData = new FormData();
     formData.append('payload', JSON.stringify(payload));
-    for (const file of documents) {
-      formData.append('documents', file);
-    }
 
-    const response = await api.post('/employed', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+    documents.forEach((file, index) => {
+      if (!file) return;
+
+      const safeName = typeof (file as any)?.name === 'string' && (file as any).name.trim().length > 0
+        ? (file as any).name
+        : `document-${index + 1}`;
+
+      formData.append('documents', file as Blob, safeName);
     });
-    return response.data;
+
+    try {
+      const response = await api.post('/employed', formData);
+      return response.data;
+    } catch (error: any) {
+      if (error?.response?.status !== 413) {
+        console.error('Error al crear empleado:', error);
+      }
+      throw error;
+    }
   }
 
   async updateEmployed(employedId: string, dto: UpdateEmployedDto): Promise<EmployedDetail> {

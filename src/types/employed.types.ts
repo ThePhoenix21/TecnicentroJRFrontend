@@ -97,11 +97,66 @@ export interface CreatedByUser {
   name: string;
 }
 
+export interface EmployedDocumentLinks {
+  view?: string;
+  download?: string;
+}
+
+export interface EmployedDocument {
+  id: string;
+  originalName: string;
+  mimeType?: string;
+  size?: number;
+  status?: string;
+  uploadedAt?: string;
+  links?: EmployedDocumentLinks;
+}
+
+export interface EmployedAssignment {
+  type: 'STORE' | 'WAREHOUSE';
+  role?: string;
+  store?: {
+    id: string;
+    name: string;
+  } | null;
+  warehouse?: {
+    id: string;
+    name: string;
+  } | null;
+  assignedAt?: string;
+}
+
+export interface EmployedAudit {
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  createdBy?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+}
+
+export interface EmployedHistoryItem {
+  id: string;
+  hiredAt: string;
+  endedAt: string | null;
+  reason: string;
+  createdAt?: string;
+  createdBy?: {
+    id: string;
+    name: string;
+    email?: string;
+  };
+}
+
 export interface EmployedDetail {
   id: string;
   firstName: string;
   lastName: string;
   document: string;
+  fullName?: string;
+  documentNumber?: string;
   phone?: string | null;
   email?: string | null;
   position: string;
@@ -117,6 +172,12 @@ export interface EmployedDetail {
   storeAssignments: StoreAssignment[];
   warehouseAssignments: WarehouseAssignment[];
   employedHistories: EmployedHistory[];
+
+  // Nuevo contrato (opcionales para mantener compatibilidad)
+  assignment?: EmployedAssignment;
+  audit?: EmployedAudit;
+  documents?: EmployedDocument[];
+  history?: EmployedHistoryItem[];
 }
 
 export interface UpdateEmployedDto {
