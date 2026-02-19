@@ -1752,6 +1752,22 @@ export default function OrdenesSuministroPage() {
               <Button variant="muted" onClick={closeReceive} disabled={receiveSubmitting}>
                 Cancelar
               </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (!receiveDetail || !["PENDING", "PARTIAL"].includes(receiveDetail.status)) return;
+                  setReceiveForm((prev) => ({ ...prev, closePartial: true }));
+                  setClosePartialConfirmOpen(true);
+                }}
+                disabled={
+                  receiveSubmitting ||
+                  receiveDetailLoading ||
+                  !receiveDetail ||
+                  !["PENDING", "PARTIAL"].includes(receiveDetail.status)
+                }
+              >
+                Cerrar parcialmente
+              </Button>
               <Button onClick={handleReceive} disabled={receiveSubmitting || receiveDetailLoading || !receiveDetail}>
                 {receiveSubmitting ? "Registrando..." : "Registrar recepción"}
               </Button>
