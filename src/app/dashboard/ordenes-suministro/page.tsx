@@ -18,6 +18,8 @@ import type {
   SupplyOrderItem,
   SupplyOrderLookupItem,
   SupplyOrderStatus,
+  SupplyOrderReceptionInfo,
+  SupplyOrderReceptionProductInfo,
 } from "@/types/supply-order.types";
 import type { ProductLookupItem, ProviderLookupItem } from "@/types/provider.types";
 import type { StoreLookupItem } from "@/types/store";
@@ -70,7 +72,7 @@ const statusLabels: Record<SupplyOrderStatus, { label: string; className: string
   },
   PARTIALLY_RECEIVED: {
     label: "Parcialmente recibido",
-    className: "bg-indigo-100 text-indigo-800",
+    className: "bg-emerald-100 text-emerald-800",
   },
   RECEIVED: {
     label: "Recibido",
@@ -143,6 +145,18 @@ export default function OrdenesSuministroPage() {
     closePartial: false,
     products: [],
   });
+  const [overReceiveWarningOpen, setOverReceiveWarningOpen] = useState(false);
+  const [overReceiveWarningItems, setOverReceiveWarningItems] = useState<
+    {
+      productId: string;
+      productName: string;
+      requested: number;
+      received: number;
+      alreadyReceived: number;
+      remaining: number;
+    }[]
+  >([]);
+  const [closePartialConfirmOpen, setClosePartialConfirmOpen] = useState(false);
 
   // Estados para edición
   const [isEditing, setIsEditing] = useState(false);
@@ -293,12 +307,15 @@ export default function OrdenesSuministroPage() {
       const response = await supplyOrderService.getSupplyOrders({
         page: targetPage,
         pageSize: PAGE_SIZE,
-        status: "PENDING",
       });
-      setReceiveOrders(response.data || []);
-      setReceiveTotal(response.total || 0);
-      setReceiveTotalPages(response.totalPages || 1);
-      setReceivePage(response.page || targetPage);
+      const allowedStatuses = ["PENDING", "PARTIAL"] as const;
+      const filtered = (response.data || []).filter((order) =>
+        allowedStatuses.includes(order.status as (typeof allowedStatuses)[number])
+      );
+      setReceiveOrders(filtered);
+      setReceiveTotal(filtered.length);
+      setReceiveTotalPages(1);
+      setReceivePage(1);
     } catch (error: any) {
       console.error(error);
       toast.error(error?.response?.data?.message || error?.message || "No se pudieron cargar las órdenes aprobadas");
@@ -635,23 +652,8 @@ export default function OrdenesSuministroPage() {
     }
   };
 
-  const handleReceive = async () => {
-    if (!canReceiveSupplyOrder) {
-      toast.error("No tienes permisos para registrar recepciones.");
-      return;
-    }
+  const performReceive = async (validProducts: { productId: string; quantity: number }[]) => {
     if (!receiveDetail) return;
-
-    if (receiveDetail.status !== "PENDING") {
-      toast.error("Solo se pueden recibir órdenes aprobadas");
-      return;
-    }
-
-    const validProducts = receiveForm.products.filter((item) => item.productId && item.quantity > 0);
-    if (validProducts.length === 0) {
-      toast.error("Debes ingresar al menos una cantidad válida");
-      return;
-    }
 
     try {
       setReceiveSubmitting(true);
@@ -673,15 +675,121 @@ export default function OrdenesSuministroPage() {
     }
   };
 
+  const handleReceive = async () => {
+    if (!canReceiveSupplyOrder) {
+      toast.error("No tienes permisos para registrar recepciones.");
+      return;
+    }
+    if (!receiveDetail) return;
+
+    if (!["PENDING", "PARTIAL"].includes(receiveDetail.status)) {
+      toast.error("Solo se pueden recibir órdenes en estado pendiente o parcial");
+      return;
+    }
+
+    const validProducts = receiveForm.products
+      .filter((product) => product.productId && Number(product.quantity) > 0)
+      .map((product) => ({
+        productId: product.productId,
+        quantity: product.quantity,
+      }));
+
+    if (validProducts.length === 0) {
+      if (receiveForm.closePartial) {
+        setClosePartialConfirmOpen(true);
+        return;
+      }
+      toast.error("Debes ingresar al menos una cantidad válida");
+      return;
+    }
+
+    const requestedByProductId = new Map(
+      (receiveDetail.products || []).map((p) => [p.productId, Number(p.quantity) || 0] as const)
+    );
+
+    const alreadyReceivedByProductId = new Map<string, number>();
+    const aggregateReceived = (receptions?: SupplyOrderReceptionInfo[]) => {
+      receptions?.forEach((reception) => {
+        reception.products.forEach((product: SupplyOrderReceptionProductInfo) => {
+          const current = alreadyReceivedByProductId.get(product.productId) || 0;
+          alreadyReceivedByProductId.set(product.productId, current + (Number(product.quantity) || 0));
+        });
+      });
+    };
+
+    aggregateReceived(receiveDetail.warehouseReceptions);
+    aggregateReceived(receiveDetail.storeReceptions);
+
+    const exceeded = validProducts
+      .map((item) => {
+        const requested = requestedByProductId.get(item.productId) ?? 0;
+        const received = Number(item.quantity) || 0;
+        const accumulated = alreadyReceivedByProductId.get(item.productId) || 0;
+        if (accumulated + received <= requested) return null;
+        const productName =
+          receiveDetail.products.find((p) => p.productId === item.productId)?.product?.name ||
+          detail?.products.find((p) => p.productId === item.productId)?.product?.name ||
+          "Producto";
+        return {
+          productId: item.productId,
+          productName,
+          requested,
+          received: accumulated + received,
+          alreadyReceived: accumulated,
+          remaining: Math.max(requested - accumulated, 0),
+        };
+      })
+      .filter(Boolean) as {
+        productId: string;
+        productName: string;
+        requested: number;
+        received: number;
+        alreadyReceived: number;
+        remaining: number;
+      }[];
+
+    if (exceeded.length > 0) {
+      setOverReceiveWarningItems(exceeded);
+      setOverReceiveWarningOpen(true);
+      return;
+    }
+
+    await performReceive(validProducts);
+  };
+
   const closeReceive = () => {
     setReceiveOpen(false);
     setReceiveDetail(null);
+    setOverReceiveWarningOpen(false);
+    setOverReceiveWarningItems([]);
+    setClosePartialConfirmOpen(false);
     setReceiveForm({
       reference: "",
       notes: "",
       closePartial: false,
       products: [],
     });
+  };
+
+  const handleClosePartial = async () => {
+    if (!receiveDetail) return;
+    try {
+      setReceiveSubmitting(true);
+      const response = await supplyOrderService.closePartialSupplyOrder(receiveDetail.id);
+      toast.success("Orden marcada como parcialmente recibida");
+      if (response?.pendingProducts?.length) {
+        console.table(response.pendingProducts);
+      }
+      setClosePartialConfirmOpen(false);
+      closeReceive();
+      loadReceiveOrders(receivePage);
+      loadOrders(page);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.response?.data?.message || error?.message || "No se pudo cerrar la orden como parcial");
+    } finally {
+      setReceiveSubmitting(false);
+    }
   };
 
   const handleApprove = async () => {
@@ -1061,7 +1169,7 @@ export default function OrdenesSuministroPage() {
                   Recepciones de órdenes
                 </CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Solo se pueden recibir órdenes aprobadas (estado pendiente).
+                  Puedes seguir recibiendo órdenes en estado pendiente o parcial.
                 </p>
               </div>
             </CardHeader>
@@ -1071,7 +1179,7 @@ export default function OrdenesSuministroPage() {
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                 </div>
               ) : receiveOrders.length === 0 ? (
-                <div className="text-center py-10 text-muted-foreground">No hay órdenes aprobadas.</div>
+                <div className="text-center py-10 text-muted-foreground">No hay órdenes pendientes o parciales.</div>
               ) : (
                 <div className="rounded-md border overflow-hidden">
                   <Table>
@@ -1356,15 +1464,36 @@ export default function OrdenesSuministroPage() {
                           <h3 className="text-sm font-semibold">Recepciones de almacén</h3>
                           <div className="space-y-3">
                             {detail.warehouseReceptions.map((reception) => (
-                              <div key={reception.id} className="rounded-md border p-3 text-sm space-y-1">
+                              <div key={reception.id} className="rounded-md border p-4 text-sm space-y-2 bg-muted/20">
                                 {reception.products.length === 0 ? (
                                   <div className="text-muted-foreground">Orden sin recepciones registradas aún</div>
                                 ) : (
                                   <>
-                                    <div className="font-medium">{new Date(reception.receivedAt).toLocaleString()}</div>
+                                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                      <div className="font-medium">{new Date(reception.receivedAt).toLocaleString()}</div>
+                                      {reception.createdBy?.name ? (
+                                        <div className="text-muted-foreground text-xs">Recibido por: {reception.createdBy.name}</div>
+                                      ) : null}
+                                    </div>
                                     {reception.reference && <div className="text-muted-foreground">Ref: {reception.reference}</div>}
                                     {reception.notes && <div className="text-muted-foreground">{reception.notes}</div>}
                                     <div className="text-muted-foreground">Tipo de productos: {reception.products.length}</div>
+                                    <div className="text-muted-foreground">
+                                      Items recibidos: {reception.products.reduce((acc, item) => acc + (Number(item.quantity) || 0), 0)}
+                                    </div>
+                                    <div className="mt-2 space-y-1">
+                                      {reception.products.map((item) => {
+                                        const productName =
+                                          detail.products.find((p) => p.productId === item.productId)?.product?.name ||
+                                          "Producto";
+                                        return (
+                                          <div key={item.id} className="flex items-center justify-between gap-2 text-xs">
+                                            <span className="truncate">{productName}</span>
+                                            <span className="shrink-0">x {item.quantity}</span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
                                   </>
                                 )}
                               </div>
@@ -1379,15 +1508,36 @@ export default function OrdenesSuministroPage() {
                           <h3 className="text-sm font-semibold">Recepciones de tienda</h3>
                           <div className="space-y-3">
                             {detail.storeReceptions.map((reception) => (
-                              <div key={reception.id} className="rounded-md border p-3 text-sm space-y-1">
+                              <div key={reception.id} className="rounded-md border p-4 text-sm space-y-2 bg-muted/20">
                                 {reception.products.length === 0 ? (
                                   <div className="text-muted-foreground">Orden sin recepciones registradas aún</div>
                                 ) : (
                                   <>
-                                    <div className="font-medium">{new Date(reception.receivedAt).toLocaleString()}</div>
+                                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                      <div className="font-medium">{new Date(reception.receivedAt).toLocaleString()}</div>
+                                      {reception.createdBy?.name ? (
+                                        <div className="text-muted-foreground text-xs">Recibido por: {reception.createdBy.name}</div>
+                                      ) : null}
+                                    </div>
                                     {reception.reference && <div className="text-muted-foreground">Ref: {reception.reference}</div>}
                                     {reception.notes && <div className="text-muted-foreground">{reception.notes}</div>}
                                     <div className="text-muted-foreground">Tipo de productos: {reception.products.length}</div>
+                                    <div className="text-muted-foreground">
+                                      Items recibidos: {reception.products.reduce((acc, item) => acc + (Number(item.quantity) || 0), 0)}
+                                    </div>
+                                    <div className="mt-2 space-y-1">
+                                      {reception.products.map((item) => {
+                                        const productName =
+                                          detail.products.find((p) => p.productId === item.productId)?.product?.name ||
+                                          "Producto";
+                                        return (
+                                          <div key={item.id} className="flex items-center justify-between gap-2 text-xs">
+                                            <span className="truncate">{productName}</span>
+                                            <span className="shrink-0">x {item.quantity}</span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
                                   </>
                                 )}
                               </div>
@@ -1420,15 +1570,16 @@ export default function OrdenesSuministroPage() {
                     </Button>
                   </>
                 ) : (
-                  canCancelSupplyOrder && (
+                  canCancelSupplyOrder &&
+                  detail &&
+                  ["ISSUED", "PENDING"].includes(detail.status) && (
                     <Button
                       variant="destructive"
                       onClick={handleAnnull}
                       disabled={
                         detailSubmitting ||
                         detailLoading ||
-                        !detail ||
-                        !["ISSUED", "PENDING"].includes(detail.status)
+                        !detail
                       }
                     >
                       {detailSubmitting ? "Anulando..." : "Anular orden"}
@@ -1437,22 +1588,22 @@ export default function OrdenesSuministroPage() {
                 )}
               </div>
               <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
-                {!isEditing && canEditEmittedSupplyOrder && (
+                {!isEditing && canEditEmittedSupplyOrder && detail?.status === "ISSUED" && (
                   <Button
                     variant="outline"
                     onClick={startEdit}
-                    disabled={detailSubmitting || detailLoading || !detail || detail.status !== "ISSUED"}
+                    disabled={detailSubmitting || detailLoading || !detail}
                   >
                     Editar
                   </Button>
                 )}
-                <Button variant="muted" onClick={closeDetail} disabled={detailSubmitting || editSubmitting}>
+                <Button variant="outline" onClick={closeDetail} disabled={detailSubmitting || editSubmitting}>
                   Cerrar
                 </Button>
-                {!isEditing && canApproveSupplyOrder && (
+                {!isEditing && canApproveSupplyOrder && detail?.status === "ISSUED" && (
                   <Button
                     onClick={handleApprove}
-                    disabled={detailSubmitting || detailLoading || !detail || detail.status !== "ISSUED"}
+                    disabled={detailSubmitting || detailLoading || !detail}
                   >
                     {detailSubmitting ? "Aprobando..." : "Aprobar orden"}
                   </Button>
@@ -1460,6 +1611,33 @@ export default function OrdenesSuministroPage() {
               </div>
             </DialogFooter>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={closePartialConfirmOpen} onOpenChange={setClosePartialConfirmOpen}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>¿Cerrar la orden como parcialmente recibida?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p className="text-muted-foreground">
+              No registraste cantidades en esta recepción, pero activaste la opción de cerrar como parcialmente recibida.
+            </p>
+            <p className="text-muted-foreground">
+              Al confirmar se actualizará el estado de la orden a "Parcialmente recibida" con los productos pendientes registrados.
+            </p>
+            <p className="text-muted-foreground">
+              Esta acción es irreversible y deberás registrar manualmente cualquier ingreso adicional fuera de esta orden.
+            </p>
+          </div>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:justify-end">
+            <Button variant="outline" onClick={() => setClosePartialConfirmOpen(false)} disabled={receiveSubmitting}>
+              Cancelar
+            </Button>
+            <Button onClick={handleClosePartial} disabled={receiveSubmitting || receiveDetailLoading || !receiveDetail}>
+              Sí, cerrar como parcialmente recibida
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1579,6 +1757,56 @@ export default function OrdenesSuministroPage() {
               </Button>
             </DialogFooter>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={overReceiveWarningOpen}
+        onOpenChange={(open) => {
+          setOverReceiveWarningOpen(open);
+          if (!open) {
+            setOverReceiveWarningItems([]);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>La cantidad recibida supera lo solicitado</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3 text-sm">
+            <div className="text-muted-foreground">
+              Algunos productos superarían el total solicitado en la orden. Ajusta las cantidades antes de registrar la recepción.
+            </div>
+            <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+              {overReceiveWarningItems.map((item) => (
+                <div key={item.productId} className="flex flex-col gap-1">
+                  <div className="font-medium">{item.productName}</div>
+                  <div className="text-xs text-muted-foreground">
+                    Solicitado: {item.requested} | Recibido actualmente: {item.alreadyReceived} | Intento total: {item.received}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Pendiente por recibir: {item.remaining}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="text-muted-foreground">
+              Para recibir unidades extra deberás registrar movimientos manuales de inventario fuera de esta orden.
+            </div>
+          </div>
+
+          <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:justify-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setOverReceiveWarningOpen(false);
+                setOverReceiveWarningItems([]);
+              }}
+            >
+              Volver
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

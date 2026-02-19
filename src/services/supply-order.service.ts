@@ -6,6 +6,7 @@ import type {
   SupplyOrderFilters,
   SupplyOrderListResponse,
   SupplyOrderLookupItem,
+  ClosePartialSupplyOrderResponse,
 } from "@/types/supply-order.types";
 
 class SupplyOrderService {
@@ -43,6 +44,11 @@ class SupplyOrderService {
 
   async receiveSupplyOrder(orderId: string, payload: ReceiveSupplyOrderDto): Promise<void> {
     await api.post(`${this.baseUrl}/${orderId}/receive`, payload);
+  }
+
+  async closePartialSupplyOrder(orderId: string): Promise<ClosePartialSupplyOrderResponse> {
+    const response = await api.post<ClosePartialSupplyOrderResponse>(`${this.baseUrl}/${orderId}/close-partial`);
+    return response.data;
   }
 
   async createSupplyOrder(payload: CreateSupplyOrderDto): Promise<string> {

@@ -79,11 +79,18 @@ export interface SupplyOrderReceptionProductInfo {
   createdAt?: string | null;
 }
 
+export interface SupplyOrderReceptionCreatedByInfo {
+  id: string;
+  name: string;
+  email?: string | null;
+}
+
 export interface SupplyOrderReceptionInfo {
   id: string;
   receivedAt: string;
   reference?: string | null;
   notes?: string | null;
+  createdBy?: SupplyOrderReceptionCreatedByInfo | null;
   products: SupplyOrderReceptionProductInfo[];
 }
 
@@ -153,4 +160,17 @@ export interface ReceiveSupplyOrderDto {
 export interface SupplyOrderLookupItem {
   id: string;
   code: string;
+}
+
+export interface ClosePartialPendingProductInfo {
+  productId: string;
+  name: string;
+  ordered: number;
+  received: number;
+  remaining: number;
+}
+
+export interface ClosePartialSupplyOrderResponse {
+  success: boolean;
+  pendingProducts: ClosePartialPendingProductInfo[];
 }
