@@ -1348,38 +1348,54 @@ export default function OrdenesSuministroPage() {
                     )}
                   </div>
                   
-                  {/*almacen*/}
-                  {detail.warehouseReceptions.length > 0 && (
-                    <div className="space-y-2 rounded-lg border bg-background p-4">
-                      <h3 className="text-sm font-semibold">Recepciones de almacén</h3>
-                      <div className="space-y-3">
-                        {detail.warehouseReceptions.map((reception) => (
-                          <div key={reception.id} className="rounded-md border p-3 text-sm space-y-1">
-                            <div className="font-medium">{new Date(reception.receivedAt).toLocaleString()}</div>
-                            {reception.reference && <div className="text-muted-foreground">Ref: {reception.reference}</div>}
-                            {reception.notes && <div className="text-muted-foreground">{reception.notes}</div>}
-                            <div className="text-muted-foreground">Tipo de productos: {reception.products.length}</div>
+                  {detail.status !== "ISSUED" && (
+                    <>
+                      {/*almacen*/}
+                      {(detail.warehouseReceptions?.length ?? 0) > 0 && (
+                        <div className="space-y-2 rounded-lg border bg-background p-4">
+                          <h3 className="text-sm font-semibold">Recepciones de almacén</h3>
+                          <div className="space-y-3">
+                            {detail.warehouseReceptions.map((reception) => (
+                              <div key={reception.id} className="rounded-md border p-3 text-sm space-y-1">
+                                {reception.products.length === 0 ? (
+                                  <div className="text-muted-foreground">Orden sin recepciones registradas aún</div>
+                                ) : (
+                                  <>
+                                    <div className="font-medium">{new Date(reception.receivedAt).toLocaleString()}</div>
+                                    {reception.reference && <div className="text-muted-foreground">Ref: {reception.reference}</div>}
+                                    {reception.notes && <div className="text-muted-foreground">{reception.notes}</div>}
+                                    <div className="text-muted-foreground">Tipo de productos: {reception.products.length}</div>
+                                  </>
+                                )}
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                        </div>
+                      )}
 
-                  {/*tienda*/}
-                  {detail.storeReceptions.length > 0 && (
-                    <div className="space-y-2 rounded-lg border bg-background p-4">
-                      <h3 className="text-sm font-semibold">Recepciones de tienda</h3>
-                      <div className="space-y-3">
-                        {detail.storeReceptions.map((reception) => (
-                          <div key={reception.id} className="rounded-md border p-3 text-sm space-y-1">
-                            <div className="font-medium">{new Date(reception.receivedAt).toLocaleString()}</div>
-                            {reception.reference && <div className="text-muted-foreground">Ref: {reception.reference}</div>}
-                            {reception.notes && <div className="text-muted-foreground">{reception.notes}</div>}
-                            <div className="text-muted-foreground">Tipo de productos: {reception.products.length}</div>
+                      {/*tienda*/}
+                      {(detail.storeReceptions?.length ?? 0) > 0 && (
+                        <div className="space-y-2 rounded-lg border bg-background p-4">
+                          <h3 className="text-sm font-semibold">Recepciones de tienda</h3>
+                          <div className="space-y-3">
+                            {detail.storeReceptions.map((reception) => (
+                              <div key={reception.id} className="rounded-md border p-3 text-sm space-y-1">
+                                {reception.products.length === 0 ? (
+                                  <div className="text-muted-foreground">Orden sin recepciones registradas aún</div>
+                                ) : (
+                                  <>
+                                    <div className="font-medium">{new Date(reception.receivedAt).toLocaleString()}</div>
+                                    {reception.reference && <div className="text-muted-foreground">Ref: {reception.reference}</div>}
+                                    {reception.notes && <div className="text-muted-foreground">{reception.notes}</div>}
+                                    <div className="text-muted-foreground">Tipo de productos: {reception.products.length}</div>
+                                  </>
+                                )}
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    </div>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               )}
