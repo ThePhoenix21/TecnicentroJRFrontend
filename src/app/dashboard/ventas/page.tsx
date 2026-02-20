@@ -729,8 +729,8 @@ export default function VentasPage() {
             </div>
             {canViewOrdersHistoryPermission && (
               <div className="space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
-                  <div ref={clientDropdownRef} className="relative">
+                <div className="flex items-end gap-3 overflow-x-auto overflow-y-visible">
+                  <div ref={clientDropdownRef} className="relative min-w-[220px]">
                     <Label className="text-xs text-muted-foreground">Cliente</Label>
                     <Input
                       placeholder="Nombre del cliente..."
@@ -776,7 +776,7 @@ export default function VentasPage() {
                     )}
                   </div>
 
-                  <div ref={orderNumberDropdownRef} className="relative">
+                  <div ref={orderNumberDropdownRef} className="relative min-w-[220px]">
                     <Label className="text-xs text-muted-foreground">N° Orden</Label>
                     <Input
                       placeholder="Número de orden..."
@@ -821,82 +821,80 @@ export default function VentasPage() {
                       </div>
                     )}
                   </div>
-                </div>
 
-                {/* Filtro de Vendedor - SOLO para usuarios con VIEW_ALL_ORDERS_HISTORY */}
-                {canViewAllOrdersHistoryPermission && (
-                  <div ref={sellerDropdownRef} className="relative">
-                    <Label className="text-xs text-muted-foreground">Vendedor</Label>
-                    <Input
-                      placeholder="Nombre del vendedor..."
-                      value={sellerQuery}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setSellerQuery(val);
-                        setShowSellerSuggestions(Boolean(val.trim()));
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          applySellerFilter(sellerQuery);
-                        }
-                        if (e.key === 'Escape') {
-                          setShowSellerSuggestions(false);
-                        }
-                      }}
-                      onFocus={() => setShowSellerSuggestions(Boolean(sellerQuery.trim()))}
-                    />
-                    {showSellerSuggestions && (
-                      <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
-                        <div className="max-h-56 overflow-auto">
-                          {sellerOptions
-                            .filter((u) => u.name.toLowerCase().includes(sellerQuery.trim().toLowerCase()))
-                            .slice(0, 12)
-                            .map((u) => (
-                              <button
-                                key={u.id}
-                                type="button"
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
-                                onClick={() => applySellerFilter(u.name)}
-                              >
-                                {u.name}
-                              </button>
-                            ))}
-                          {sellerQuery.trim() &&
-                            sellerOptions.filter((u) => u.name.toLowerCase().includes(sellerQuery.trim().toLowerCase())).length === 0 && (
-                              <div className="px-3 py-2 text-sm text-muted-foreground">Sin coincidencias</div>
-                            )}
+                  {/* Filtro de Vendedor - SOLO para usuarios con VIEW_ALL_ORDERS_HISTORY */}
+                  {canViewAllOrdersHistoryPermission && (
+                    <div ref={sellerDropdownRef} className="relative min-w-[220px]">
+                      <Label className="text-xs text-muted-foreground">Vendedor</Label>
+                      <Input
+                        placeholder="Nombre del vendedor..."
+                        value={sellerQuery}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSellerQuery(val);
+                          setShowSellerSuggestions(Boolean(val.trim()));
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            applySellerFilter(sellerQuery);
+                          }
+                          if (e.key === 'Escape') {
+                            setShowSellerSuggestions(false);
+                          }
+                        }}
+                        onFocus={() => setShowSellerSuggestions(Boolean(sellerQuery.trim()))}
+                      />
+                      {showSellerSuggestions && (
+                        <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md">
+                          <div className="max-h-56 overflow-auto">
+                            {sellerOptions
+                              .filter((u) => u.name.toLowerCase().includes(sellerQuery.trim().toLowerCase()))
+                              .slice(0, 12)
+                              .map((u) => (
+                                <button
+                                  key={u.id}
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
+                                  onClick={() => applySellerFilter(u.name)}
+                                >
+                                  {u.name}
+                                </button>
+                              ))}
+                            {sellerQuery.trim() &&
+                              sellerOptions.filter((u) => u.name.toLowerCase().includes(sellerQuery.trim().toLowerCase())).length === 0 && (
+                                <div className="px-3 py-2 text-sm text-muted-foreground">Sin coincidencias</div>
+                              )}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
+                  )}
+
+                  <div className="min-w-[180px]">
+                    <Label className="text-xs text-muted-foreground">Estado</Label>
+                    <Select
+                      value={selectedStatus}
+                      onValueChange={(value) => {
+                        setSelectedStatus(value === '__ALL__' ? '' : value);
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Todos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__ALL__">Todos</SelectItem>
+                        {statusOptions.map((s) => (
+                          <SelectItem key={s.value} value={s.value}>
+                            {s.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                )}
 
-                <div>
-                  <Label className="text-xs text-muted-foreground">Estado</Label>
-                  <Select
-                    value={selectedStatus}
-                    onValueChange={(value) => {
-                      setSelectedStatus(value === '__ALL__' ? '' : value);
-                      setCurrentPage(1);
-                    }}
-                  >
-                    <SelectTrigger className="w-full lg:max-w-[200px]">
-                      <SelectValue placeholder="Todos" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__ALL__">Todos</SelectItem>
-                      {statusOptions.map((s) => (
-                        <SelectItem key={s.value} value={s.value}>
-                          {s.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-end">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground h-10">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground h-10 whitespace-nowrap min-w-[120px]">
                     <Checkbox
                       id="current-cash-orders"
                       checked={onlyCurrentCash}
