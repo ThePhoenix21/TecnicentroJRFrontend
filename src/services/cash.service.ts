@@ -1,14 +1,19 @@
 import { api } from './api';
-import { 
-  CashSession, 
-  CashBalance, 
-  OpenCashSessionRequest, 
+import {
+  CashSession,
+  CashBalance,
+  OpenCashSessionRequest,
   CloseCashSessionResponse,
   ManualMovementRequest,
   CashMovement,
   CashMovementListResponse,
-  CashMovementLookupItem
+  CashMovementLookupItem,
 } from '@/types/cash.types';
+
+const isAuthError = (error: unknown) => {
+  const status = (error as any)?.response?.status;
+  return status === 401 || status === 403;
+};
 
 class CashService {
   // Abrir caja
@@ -120,8 +125,10 @@ class CashService {
       const response = await api.get<CashMovementLookupItem[]>('/cash-movement/lookup-payment');
       return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
-      console.error('[CashService.getCashMovementsLookupPayment] Error:', error);
-      throw error;
+      if (!isAuthError(error)) {
+        console.error('[CashService.getCashMovementsLookupPayment] Error:', error);
+      }
+      return [];
     }
   }
 
@@ -130,8 +137,10 @@ class CashService {
       const response = await api.get<CashMovementLookupItem[]>('/cash-movement/lookup-operation');
       return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
-      console.error('[CashService.getCashMovementsLookupOperation] Error:', error);
-      throw error;
+      if (!isAuthError(error)) {
+        console.error('[CashService.getCashMovementsLookupOperation] Error:', error);
+      }
+      return [];
     }
   }
 

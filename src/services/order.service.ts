@@ -118,6 +118,8 @@ export interface OrderListItem {
   refundPaymentMethods?: OrderListPaymentMethodItem[];
   totalAmount?: number;
   total?: number;
+  cashSessionId?: string;
+  isFromCurrentCashSession?: boolean;
 }
 
 export interface OrdersListResponse {
@@ -180,31 +182,41 @@ export const orderService = {
     sellerName?: string;
     orderNumber?: string;
     status?: string;
+    fromDate?: string;
+    toDate?: string;
+    onlyProducts?: boolean;
+    onlyServices?: boolean;
     storeId: string;
-    currentCash?: boolean;
+    openCashOnly?: boolean;
   }): Promise<OrdersListResponse> {
+
     const token = localStorage.getItem("auth_token");
     
     try {
-      // SIEMPRE usar /orders/store/{storeId} - storeId es obligatorio
+      // SIEMPRE usar /orders/list - storeId es obligatorio
       if (!params.storeId) {
         throw new Error('storeId es obligatorio para listar órdenes');
       }
       
       const { storeId, ...otherParams } = params;
       
-      // Filtrar solo parámetros que el endpoint /orders/store/:storeId acepta
+      // Filtrar parámetros válidos para /orders/list
       const validParams: any = {};
       if (otherParams.page) validParams.page = otherParams.page;
       if (otherParams.pageSize) validParams.pageSize = otherParams.pageSize;
-      if (otherParams.currentCash !== undefined) validParams.currentCash = otherParams.currentCash;
+      if (otherParams.openCashOnly !== undefined) validParams.openCashOnly = otherParams.openCashOnly;
       if (otherParams.clientName) validParams.clientName = otherParams.clientName;
       if (otherParams.sellerName) validParams.sellerName = otherParams.sellerName;
       if (otherParams.orderNumber) validParams.orderNumber = otherParams.orderNumber;
       if (otherParams.status) validParams.status = otherParams.status;
+      if (otherParams.fromDate) validParams.fromDate = otherParams.fromDate;
+      if (otherParams.toDate) validParams.toDate = otherParams.toDate;
+      if (otherParams.onlyProducts !== undefined) validParams.onlyProducts = otherParams.onlyProducts;
+      if (otherParams.onlyServices !== undefined) validParams.onlyServices = otherParams.onlyServices;
+      validParams.storeId = storeId;
                   
-      // El endpoint /orders/store/{storeId} ahora devuelve OrdersListResponse con paginación
-      const response = await api.get<OrdersListResponse>(`/orders/store/${storeId}`, {
+      // El endpoint /orders/list devuelve OrdersListResponse con paginación
+      const response = await api.get<OrdersListResponse>(`/orders/list`, {
         params: validParams,
         headers: {
           "Content-Type": "application/json",
@@ -237,7 +249,9 @@ export const orderService = {
               amount: p.amount
             })) || [],
             totalAmount: order.totalAmount,
-            total: order.totalAmount
+            total: order.totalAmount,
+            cashSessionId: order.cashSessionId || order.cashSessionsId || order.cashSession?.id,
+            isFromCurrentCashSession: order.isFromCurrentCashSession,
           };
         });
         
@@ -247,7 +261,15 @@ export const orderService = {
         };
       }
       
-      return response.data;
+      // Backend ya devolvió OrderListItem[] (paginado). Aseguramos cashSessionId por consistencia.
+      return {
+        ...response.data,
+        data: (response.data.data || []).map((item: any) => ({
+          ...item,
+          cashSessionId: item.cashSessionId || item.cashSessionsId || item.cashSession?.id,
+          isFromCurrentCashSession: item.isFromCurrentCashSession,
+        })),
+      };
     } catch (error) {
       const status = (error as any)?.response?.status;
       if (status === 404) {
@@ -659,7 +681,7 @@ export const orderService = {
   async getOrderDetails(id: string): Promise<any> {
     try {
       const token = localStorage.getItem("auth_token");
-      const response = await api.get<any>(`orders/details/${id}`, {
+      const response = await api.get<any>(`/orders/details/${id}`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`

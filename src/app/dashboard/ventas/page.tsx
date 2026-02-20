@@ -15,6 +15,7 @@ import { formatCurrency } from "@/lib/utils";
 import { clientService } from "@/services/client.service";
 import { userService, type UserLookupItem } from "@/services/user.service";
 import { storeService } from "@/services/store.service";
+import { cashSessionService } from "@/services/cash-session.service";
 import type { StoreLookupItem } from "@/types/store";
 import { uniqueBy } from "@/utils/array";
 
@@ -102,6 +103,7 @@ export default function VentasPage() {
 
   const [selectedStatus, setSelectedStatus] = useState<string>("");
   const [onlyCurrentCash, setOnlyCurrentCash] = useState(true);
+  const [currentCashSessionId, setCurrentCashSessionId] = useState<string | null>(null);
 
   const clientDropdownRef = useRef<HTMLDivElement | null>(null);
   const sellerDropdownRef = useRef<HTMLDivElement | null>(null);
@@ -211,6 +213,27 @@ export default function VentasPage() {
         
         console.log('🏪 Usando storeId desde currentStore:', effectiveStoreId);
 
+        try {
+          let resolvedSessionId: string | null = null;
+          const openSession = await cashSessionService.getOpenCashSession(effectiveStoreId);
+          resolvedSessionId = openSession?.id || null;
+
+          if (!resolvedSessionId) {
+            try {
+              const currentSession = await cashSessionService.getCurrentSessionByStore(effectiveStoreId);
+              if (currentSession?.status === 'OPEN') {
+                resolvedSessionId = currentSession.id;
+              }
+            } catch {
+              // ignorar
+            }
+          }
+
+          setCurrentCashSessionId(resolvedSessionId);
+        } catch {
+          setCurrentCashSessionId(null);
+        }
+
         if (canSellProducts && (canViewInventory || canViewProductsForSales)) {
           try {
             const productsResponse = await storeProductService.getStoreProductsSimple(effectiveStoreId, {
@@ -237,9 +260,7 @@ export default function VentasPage() {
               ...(appliedSellerName ? { sellerName: appliedSellerName } : {}),
               ...(appliedOrderNumber ? { orderNumber: appliedOrderNumber } : {}),
               ...(selectedStatus ? { status: selectedStatus } : {}),
-              ...(onlyCurrentCash ? { currentCash: true } : {}),
-              // New code added here
-              ...(selectedStoreId ? { storeId: selectedStoreId } : {}),
+              ...(onlyCurrentCash ? { openCashOnly: true } : {}),
             });
             setOrders(response.data || []);
             setTotalPages(response.totalPages || 1);
@@ -260,6 +281,7 @@ export default function VentasPage() {
         setOrders([]);
         setTotalPages(1);
         setTotalItems(0);
+        setCurrentCashSessionId(null);
       }
     } catch (error) {
       console.error("Error al cargar datos:", error);
@@ -910,223 +932,278 @@ export default function VentasPage() {
         </CardHeader>
         <CardContent className="p-0 sm:p-6 pt-0">
           {canViewOrdersHistoryPermission ? (
-            <div className="rounded-md border overflow-hidden">
-              <div className="overflow-x-auto">
-                <Table className="w-full">
-                  <TableHeader className="bg-muted/50">
-                    <TableRow>
-                      <TableHead className="w-[90px] px-2 text-center">Fecha</TableHead>
-                      <TableHead className="min-w-[120px] px-2 text-center">{hasNamedServices ? 'Nombre' : 'Cliente'}</TableHead>
-                      {isAdmin && (
-                        <TableHead className="w-[110px] px-2 text-center">Vendedor</TableHead>
-                      )}
-                      {hasProductsFeature && (
-                        <TableHead className="w-[100px] px-2 text-center hidden md:table-cell">Productos</TableHead>
-                      )}
-                      <TableHead className="w-[100px] px-2 text-center hidden md:table-cell">Servicios</TableHead>
-                      <TableHead className="w-[110px] px-2 text-center">Estado</TableHead>
-                      <TableHead className="min-w-[160px] px-2 text-center hidden md:table-cell">Método</TableHead>
-                      <TableHead className="w-[100px] px-2 text-right">Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {orders.length > 0 ? (
-                      orders.map((order, index) => {
-                        const createdAt = order.createdAt ? new Date(order.createdAt) : null;
-                        const shortDate = createdAt ? format(createdAt, "dd/MM/yy") : "N/A";
-                        const shortTime = createdAt ? format(createdAt, "HH:mm") : "-";
-                        const clientName = order.clientName || "Sin cliente";
-                        const displayName = hasNamedServices
-                          ? order.services?.[0]?.name || "Sin nombre"
-                          : clientName;
-                        const productCount = order.products?.length ?? 0;
-                        const serviceCount = order.services?.length ?? 0;
-                        const paymentMethods = order.paymentMethods ?? [];
-                        const refundPaymentMethods = order.refundPaymentMethods ?? [];
-                        const visiblePaymentMethods = paymentMethods.slice(0, 2);
-                        const hasMorePaymentMethods = paymentMethods.length > 2;
-                        const totalPaidAmount = paymentMethods.reduce((sum, pm) => sum + (Number(pm?.amount) || 0), 0);
-                        const latestPaymentMethod = paymentMethods[paymentMethods.length - 1];
-                        const totalRefundAmount = refundPaymentMethods.reduce((sum, pm) => sum + (Number(pm?.amount) || 0), 0);
-                        const hasRegisteredPayments = totalPaidAmount > 0;
+            <>
+              <div className="rounded-md border overflow-hidden">
+                <div className="overflow-x-auto">
+                  <Table className="w-full">
+                    <TableHeader className="bg-muted/50">
+                      <TableRow>
+                        <TableHead className="w-[90px] px-2 text-center">Fecha</TableHead>
+                        <TableHead className="min-w-[120px] px-2 text-center">{hasNamedServices ? 'Nombre' : 'Cliente'}</TableHead>
+                        {isAdmin && (
+                          <TableHead className="w-[110px] px-2 text-center">Vendedor</TableHead>
+                        )}
+                        {hasProductsFeature && (
+                          <TableHead className="w-[100px] px-2 text-center hidden md:table-cell">Productos</TableHead>
+                        )}
+                        <TableHead className="w-[100px] px-2 text-center hidden md:table-cell">Servicios</TableHead>
+                        <TableHead className="w-[110px] px-2 text-center">Estado</TableHead>
+                        <TableHead className="min-w-[160px] px-2 text-center hidden md:table-cell">Método</TableHead>
+                        <TableHead className="w-[100px] px-2 text-right">Total</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {orders.length > 0 ? (
+                        orders.map((order, index) => {
+                          const createdAt = order.createdAt ? new Date(order.createdAt) : null;
+                          const shortDate = createdAt ? format(createdAt, "dd/MM/yy") : "N/A";
+                          const shortTime = createdAt ? format(createdAt, "HH:mm") : "-";
+                          const clientName = order.clientName || "Sin cliente";
+                          const displayName = hasNamedServices
+                            ? order.services?.[0]?.name || "Sin nombre"
+                            : clientName;
+                          const productCount = order.products?.length ?? 0;
+                          const serviceCount = order.services?.length ?? 0;
+                          const paymentMethods = order.paymentMethods ?? [];
+                          const refundPaymentMethods = order.refundPaymentMethods ?? [];
+                          const visiblePaymentMethods = paymentMethods.slice(0, 2);
+                          const hasMorePaymentMethods = paymentMethods.length > 2;
+                          const totalPaidAmount = paymentMethods.reduce((sum, pm) => sum + (Number(pm?.amount) || 0), 0);
+                          const latestPaymentMethod = paymentMethods[paymentMethods.length - 1];
+                          const totalRefundAmount = refundPaymentMethods.reduce((sum, pm) => sum + (Number(pm?.amount) || 0), 0);
+                          const hasRegisteredPayments = totalPaidAmount > 0;
 
-                        const displayTotal = Number(order.total ?? 0);
+                          const displayTotal = Number(order.total ?? 0);
 
-                        const statusConfig = {
-                          COMPLETED: {
-                            text: "Completado",
-                            className:
-                              "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-                            icon: "✓",
-                          },
-                          PAID: {
-                            text: "Pagado",
-                            className:
-                              "bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-400",
-                            icon: "💰",
-                          },
-                          PENDING: {
-                            text: "Pendiente",
-                            className:
-                              "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
-                            icon: "⏳",
-                          },
-                          CANCELLED: {
-                            text: "Anulado",
-                            className:
-                              "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-                            icon: "✕",
-                          },
-                        } as const;
+                          const statusConfig = {
+                            COMPLETED: {
+                              text: "Completado",
+                              className:
+                                "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+                              icon: "✓",
+                            },
+                            PAID: {
+                              text: "Pagado",
+                              className:
+                                "bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-400",
+                              icon: "💰",
+                            },
+                            PENDING: {
+                              text: "Pendiente",
+                              className:
+                                "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
+                              icon: "⏳",
+                            },
+                            CANCELLED: {
+                              text: "Anulado",
+                              className:
+                                "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+                              icon: "✕",
+                            },
+                          } as const;
 
-                        const statusKey = (order.status || "PENDING") as keyof typeof statusConfig;
-                        const status = statusConfig[statusKey] || statusConfig.PENDING;
-                        const orderId = order.id || String(index);
-                        const isServiceOrder = serviceCount > 0;
-                        const isCancelledOrder = statusKey === 'CANCELLED';
-                        const refundDifference = Math.abs(totalPaidAmount - totalRefundAmount);
-                        const hasRefundDifference = refundDifference > 0.009; // Consider cent-level differences
-                        let shouldShowPaymentMethods =
-                          paymentMethods.length > 0 &&
-                          (!isServiceOrder || hasRegisteredPayments) &&
-                          (!isCancelledOrder || (hasRegisteredPayments && hasRefundDifference));
+                          const statusKey = (order.status || "PENDING") as keyof typeof statusConfig;
+                          const status = statusConfig[statusKey] || statusConfig.PENDING;
+                          const orderId = order.id || String(index);
+                          const isServiceOrder = serviceCount > 0;
+                          const isCancelledOrder = statusKey === 'CANCELLED';
+                          const refundDifference = Math.abs(totalPaidAmount - totalRefundAmount);
+                          const hasRefundDifference = refundDifference > 0.009; // Consider cent-level differences
+                          let shouldShowPaymentMethods =
+                            paymentMethods.length > 0 &&
+                            (!isServiceOrder || hasRegisteredPayments) &&
+                            (!isCancelledOrder || (hasRegisteredPayments && hasRefundDifference));
 
-                        if (isCancelledOrder) {
-                          shouldShowPaymentMethods = false;
-                        }
+                          if (isCancelledOrder) {
+                            shouldShowPaymentMethods = false;
+                          }
 
-                        return (
-                          <TableRow
-                            key={orderId}
-                            className={`hover:bg-muted/60 ${canDetailOrdersPermission ? 'cursor-pointer' : 'cursor-default'}`}
-                            onClick={() => {
-                              if (!canDetailOrdersPermission) return;
-                              if (order.id) handleViewOrder(order.id);
-                            }}
-                          >
-                            <TableCell className="px-2 py-3 text-center">
-                              <div className="flex flex-col items-center">
-                                <span className="text-xs sm:text-sm font-medium">{shortDate}</span>
-                                <span className="text-xs text-muted-foreground">{shortTime}</span>
-                              </div>
-                            </TableCell>
+                          const rawIsFromCurrentCashSession = (order as any).isFromCurrentCashSession;
+                          const normalizedIsFromCurrentCashSession: boolean | undefined =
+                            typeof rawIsFromCurrentCashSession === 'boolean'
+                              ? rawIsFromCurrentCashSession
+                              : typeof rawIsFromCurrentCashSession === 'string'
+                                ? (rawIsFromCurrentCashSession.trim().toLowerCase() === 'true'
+                                  ? true
+                                  : rawIsFromCurrentCashSession.trim().toLowerCase() === 'false'
+                                    ? false
+                                    : undefined)
+                                : typeof rawIsFromCurrentCashSession === 'number'
+                                  ? (rawIsFromCurrentCashSession === 1
+                                    ? true
+                                    : rawIsFromCurrentCashSession === 0
+                                      ? false
+                                      : undefined)
+                                  : undefined;
 
-                            <TableCell className="px-2 py-3">
-                              <div className="flex flex-col min-w-0">
-                                <span className="text-sm font-medium truncate max-w-[140px] sm:max-w-[200px]">
-                                  {displayName}
-                                </span>
-                                {!hasNamedServices && (
-                                  <span className="text-xs text-muted-foreground truncate max-w-[140px] sm:max-w-[200px]">
-                                    {clientName}
-                                  </span>
-                                )}
-                              </div>
-                            </TableCell>
+                          const orderCashSessionId = (order as any).cashSessionId;
+                          const isOutsideCurrentCashSession =
+                            !onlyCurrentCash &&
+                            ((normalizedIsFromCurrentCashSession === false) ||
+                              (!!currentCashSessionId &&
+                                !!orderCashSessionId &&
+                                String(orderCashSessionId) !== String(currentCashSessionId)));
 
-                            {isAdmin && (
-                              <TableCell className="px-2 py-3">
-                                <span className="text-sm font-medium truncate max-w-[140px] sm:max-w-[200px]">
-                                  {order.sellerName || "Sistema"}
-                                </span>
+                          return (
+                            <TableRow
+                              key={orderId}
+                              className={`hover:bg-muted/60 ${canDetailOrdersPermission ? 'cursor-pointer' : 'cursor-default'} ${isOutsideCurrentCashSession ? 'bg-muted/30 text-muted-foreground/80' : ''}`}
+                              style={isOutsideCurrentCashSession ? { opacity: 0.6, filter: 'grayscale(1)' } : undefined}
+                              onClick={() => {
+                                if (!canDetailOrdersPermission) return;
+                                if (order.id) handleViewOrder(order.id);
+                              }}
+                            >
+                              <TableCell className="px-2 py-3 text-center">
+                                <div className="flex flex-col items-center">
+                                  <span className="text-xs sm:text-sm font-medium">{shortDate}</span>
+                                  <span className="text-xs text-muted-foreground">{shortTime}</span>
+                                </div>
                               </TableCell>
-                            )}
 
-                            {hasProductsFeature && (
+                              <TableCell className="px-2 py-3 text-center">
+                                <div className="flex flex-col items-center min-w-0">
+                                  <span className="text-sm font-medium truncate max-w-[140px] sm:max-w-[200px]">
+                                    {displayName}
+                                  </span>
+                                  {!hasNamedServices && (
+                                    <span className="text-xs text-muted-foreground truncate max-w-[140px] sm:max-w-[200px]">
+                                      {clientName}
+                                    </span>
+                                  )}
+                                </div>
+                              </TableCell>
+
+                              {isAdmin && (
+                                <TableCell className="px-2 py-3 text-center">
+                                  <span className="text-sm font-medium truncate max-w-[140px] sm:max-w-[200px]">
+                                    {order.sellerName || "Sistema"}
+                                  </span>
+                                </TableCell>
+                              )}
+
+                              {hasProductsFeature && (
+                                <TableCell className="px-2 py-3 text-center hidden md:table-cell">
+                                  {productCount > 0 ? (
+                                    <Badge variant="outline" className="text-xs py-0.5">
+                                      {productCount} {productCount === 1 ? "prod." : "prod."}
+                                    </Badge>
+                                  ) : (
+                                    <span className="text-muted-foreground text-sm">-</span>
+                                  )}
+                                </TableCell>
+                              )}
+
                               <TableCell className="px-2 py-3 text-center hidden md:table-cell">
-                                {productCount > 0 ? (
+                                {serviceCount > 0 ? (
                                   <Badge variant="outline" className="text-xs py-0.5">
-                                    {productCount} {productCount === 1 ? "prod." : "prod."}
+                                    {serviceCount} {serviceCount === 1 ? "serv." : "serv."}
                                   </Badge>
                                 ) : (
                                   <span className="text-muted-foreground text-sm">-</span>
                                 )}
                               </TableCell>
-                            )}
 
-                            <TableCell className="px-2 py-3 text-center hidden md:table-cell">
-                              {serviceCount > 0 ? (
-                                <Badge variant="outline" className="text-xs py-0.5">
-                                  {serviceCount} {serviceCount === 1 ? "serv." : "serv."}
-                                </Badge>
-                              ) : (
-                                <span className="text-muted-foreground text-sm">-</span>
-                              )}
-                            </TableCell>
-
-                            <TableCell className="px-2 py-3">
-                              <div className="flex justify-center">
-                                <span
-                                  className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-medium ${status.className}`}
-                                >
-                                  <span className="mr-1">{status.icon}</span>
-                                  <span className="hidden sm:inline">{status.text}</span>
-                                </span>
-                              </div>
-                            </TableCell>
-
-                            <TableCell className="px-2 py-3 text-center hidden md:table-cell">
-                              {shouldShowPaymentMethods ? (
-                                <div className="flex flex-col items-center gap-0.5">
-                                  {statusKey === "PAID" ? (
-                                    <span className="text-xs whitespace-nowrap">
-                                      {`${latestPaymentMethod?.type || "-"} ${formatCurrency(totalPaidAmount)}`}
-                                    </span>
-                                  ) : (
-                                    <>
-                                      {visiblePaymentMethods.map((pm, idx) => (
-                                        <span
-                                          key={`${order.id || index}-${pm?.type || "pm"}-${idx}`}
-                                          className="text-xs whitespace-nowrap"
-                                          title={String(pm?.type || "")}
-                                        >
-                                          {`${pm?.type || "-"} ${formatCurrency(Number(pm?.amount) || 0)}`}
-                                        </span>
-                                      ))}
-                                      {hasMorePaymentMethods && (
-                                        <span className="text-xs text-muted-foreground">...</span>
-                                      )}
-                                    </>
-                                  )}
+                              <TableCell className="px-2 py-3">
+                                <div className="flex justify-center">
+                                  <span
+                                    className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-medium ${status.className}`}
+                                  >
+                                    <span className="mr-1">{status.icon}</span>
+                                    <span className="hidden sm:inline">{status.text}</span>
+                                  </span>
                                 </div>
-                              ) : (
-                                <span className="text-muted-foreground text-sm">-</span>
-                              )}
-                            </TableCell>
+                              </TableCell>
 
-                            <TableCell className="px-2 py-3 text-right">
-                              <span className="text-sm font-medium whitespace-nowrap">
-                                {formatCurrency(displayTotal)}
-                              </span>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={tableColSpan} className="py-12">
-                          <div className="flex flex-col items-center justify-center text-center">
-                            <ShoppingCart className="h-12 w-12 text-muted-foreground/50 mb-4" />
-                            <h3 className="text-lg font-medium text-muted-foreground">
-                              No se encontraron ventas
-                            </h3>
-                            <p className="text-sm text-muted-foreground mt-1 max-w-md">
-                              Ajusta los filtros o crea una nueva venta.
-                            </p>
-                            {canManageOrders && (
-                              <Button onClick={() => setIsFormOpen(true)} className="mt-4" size="sm">
-                                <Plus className="h-4 w-4 mr-2" />
-                                Crear venta
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+                              <TableCell className="px-2 py-3 text-center hidden md:table-cell">
+                                {shouldShowPaymentMethods ? (
+                                  <div className="flex flex-col items-center gap-0.5">
+                                    {statusKey === "PAID" ? (
+                                      <span className="text-xs whitespace-nowrap">
+                                        {`${latestPaymentMethod?.type || "-"} ${formatCurrency(totalPaidAmount)}`}
+                                      </span>
+                                    ) : (
+                                      <>
+                                        {visiblePaymentMethods.map((pm, idx) => (
+                                          <span
+                                            key={`${order.id || index}-${pm?.type || "pm"}-${idx}`}
+                                            className="text-xs whitespace-nowrap"
+                                            title={String(pm?.type || "")}
+                                          >
+                                            {`${pm?.type || "-"} ${formatCurrency(Number(pm?.amount) || 0)}`}
+                                          </span>
+                                        ))}
+                                        {hasMorePaymentMethods && (
+                                          <span className="text-xs text-muted-foreground">...</span>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground text-sm">-</span>
+                                )}
+                              </TableCell>
+
+                              <TableCell className="px-2 py-3 text-right">
+                                <span className="text-sm font-medium whitespace-nowrap">
+                                  {formatCurrency(displayTotal)}
+                                </span>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={tableColSpan} className="py-12">
+                            <div className="flex flex-col items-center justify-center text-center">
+                              <ShoppingCart className="h-12 w-12 text-muted-foreground/50 mb-4" />
+                              <h3 className="text-lg font-medium text-muted-foreground">
+                                No se encontraron ventas
+                              </h3>
+                              <p className="text-sm text-muted-foreground mt-1 max-w-md">
+                                Ajusta los filtros o crea una nueva venta.
+                              </p>
+                              {canManageOrders && (
+                                <Button onClick={() => setIsFormOpen(true)} className="mt-4" size="sm">
+                                  <Plus className="h-4 w-4 mr-2" />
+                                  Crear venta
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
-            </div>
+
+              {totalPages > 1 && (
+                <div className="flex items-center justify-end space-x-2 py-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1 || loading}
+                  >
+                    Anterior
+                  </Button>
+                  <div className="text-sm font-medium">
+                    Página {currentPage} de {totalPages}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages || loading}
+                  >
+                    Siguiente
+                  </Button>
+                </div>
+              )}
+            </>
           ) : (
             <div className="py-12 text-center text-muted-foreground">
               aqui no hay nada que ver.

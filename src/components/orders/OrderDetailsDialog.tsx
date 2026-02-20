@@ -132,6 +132,9 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
   const { canManageOrders: canManageOrdersFn, canDetailOrders: canDetailOrdersFn } = usePermissions();
   const canManageOrders = canManageOrdersFn();
   const canDetailOrders = canDetailOrdersFn();
+  const canFetchOrderDetails =
+    hasPermission('DETAIL_ORDERS') &&
+    (hasPermission('VIEW_OWN_ORDERS_HISTORY') || hasPermission('VIEW_ALL_ORDERS_HISTORY') || isAdminFromContext);
   const [showPDF, setShowPDF] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
@@ -168,16 +171,16 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
 
   // Cargar detalles de la orden cuando se abre el diálogo
   useEffect(() => {
-    if (open && order?.id && canDetailOrders) {
+    if (open && order?.id) {
       const loadDetails = async () => {
         setIsLoadingDetails(true);
         try {
           const details = await orderService.getOrderDetails(order.id);
-          console.log('Detalles de la orden cargados:', details);
           setOrderDetails(details);
         } catch (error) {
           console.error('Error al cargar detalles de la orden:', error);
-          toast.error('No se pudieron cargar todos los detalles de la orden');
+          toast.error('No se pudieron cargar los detalles de la orden');
+          setOrderDetails(null);
         } finally {
           setIsLoadingDetails(false);
         }
@@ -186,7 +189,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
     } else {
       setOrderDetails(null);
     }
-  }, [open, order?.id, canDetailOrders]);
+  }, [open, order?.id]);
 
   useEffect(() => {
     if (!open) {
@@ -481,13 +484,26 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
   }, [order, orderDetails?.total, order?.totalAmount, displayProducts, displayServices]);
 
   const sellerDisplayName = useMemo(() => {
-    const detailsSeller = typeof orderDetails?.vendedor === 'string' ? orderDetails.vendedor.trim() : '';
+    const pickString = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+
+    
+    const detailsSeller =
+      pickString(orderDetails?.vendedor) ||
+      pickString(orderDetails?.sellerName) ||
+      pickString(orderDetails?.seller) ||
+      pickString(orderDetails?.vendedorNombre) ||
+      pickString(orderDetails?.createdByName) ||
+      pickString(orderDetails?.user?.name) ||
+      pickString(orderDetails?.userName);    
     if (detailsSeller) return detailsSeller;
+
+    const directSellerName = (order as any)?.sellerName?.trim?.() || (order as any)?.createdByName?.trim?.();
+    if (directSellerName) return directSellerName;
     const userName = order?.user?.name?.trim();
     if (userName) return userName;
     if (order?.user?.email) return order.user.email;
     return 'Sin vendedor asignado';
-  }, [orderDetails?.vendedor, order?.user?.name, order?.user?.email]);
+  }, [orderDetails?.vendedor, order, order?.user?.name, order?.user?.email]);
 
   const totalPayment = useMemo(
     () => paymentMethods.reduce((sum, pm) => sum + (Number(pm.amount) || 0), 0),
@@ -763,17 +779,16 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                   <p className="text-muted-foreground">Total</p>
                   <p className="font-medium">S/{Number(order.totalAmount || 0).toFixed(2)}</p>
                 </div>
-                {hasNamedServices ? (
+                {hasNamedServices && (
                   <div className="space-y-1">
                     <p className="text-muted-foreground">Nombre</p>
                     <p className="font-medium">{namedServiceName || 'Sin nombre'}</p>
                   </div>
-                ) : (
-                  <div className="space-y-1">
-                    <p className="text-muted-foreground">Cajero</p>
-                    <p className="font-medium">{sellerDisplayName}</p>
-                  </div>
                 )}
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Cajero</p>
+                  <p className="font-medium">{sellerDisplayName}</p>
+                </div>
               </div>
             </div>
 

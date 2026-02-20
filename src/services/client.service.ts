@@ -55,6 +55,11 @@ export interface ClientsResponse {
   };
 }
 
+const isAuthError = (error: unknown) => {
+  const status = (error as any)?.response?.status;
+  return status === 401 || status === 403;
+};
+
 export const clientService = {
   async getClients(page: number = 1, pageSize: number = 12, filters: ClientFilters = {}): Promise<ClientsListResponse> {
     try {
@@ -88,18 +93,39 @@ export const clientService = {
   },
 
   async getLookupName(): Promise<ClientLookupNameItem[]> {
-    const response = await api.get<ClientLookupNameItem[]>('/clientes/lookup-name');
-    return response.data;
+    try {
+      const response = await api.get<ClientLookupNameItem[]>('/clientes/lookup-name');
+      return response.data;
+    } catch (error) {
+      if (!isAuthError(error)) {
+        console.error('[clientService.getLookupName] Error:', error);
+      }
+      return [];
+    }
   },
 
   async getLookupPhone(): Promise<ClientLookupPhoneItem[]> {
-    const response = await api.get<ClientLookupPhoneItem[]>('/clientes/lookup-phone');
-    return response.data;
+    try {
+      const response = await api.get<ClientLookupPhoneItem[]>('/clientes/lookup-phone');
+      return response.data;
+    } catch (error) {
+      if (!isAuthError(error)) {
+        console.error('[clientService.getLookupPhone] Error:', error);
+      }
+      return [];
+    }
   },
 
   async getLookupDni(): Promise<ClientLookupDniItem[]> {
-    const response = await api.get<ClientLookupDniItem[]>('/clientes/lookup-dni');
-    return response.data;
+    try {
+      const response = await api.get<ClientLookupDniItem[]>('/clientes/lookup-dni');
+      return response.data;
+    } catch (error) {
+      if (!isAuthError(error)) {
+        console.error('[clientService.getLookupDni] Error:', error);
+      }
+      return [];
+    }
   },
 
   async getClientByDni(dni: string): Promise<Client | null> {

@@ -166,7 +166,7 @@ export function SaleForm({
   products,
   services,
 }: SaleFormProps) {
-  const { currentStore, tenantFeatures, tenantFeaturesLoaded, tenantDefaultService, tenantDefaultServiceLoaded, canIssuePdf } = useAuth();
+  const { currentStore, tenantFeatures, tenantFeaturesLoaded, tenantDefaultService, tenantDefaultServiceLoaded, canIssuePdf, hasPermission } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState<CartItem[]>([]);
@@ -1241,7 +1241,12 @@ export function SaleForm({
         setOrderId(resolvedOrderId ?? null);
         setOrderNumber(resolvedOrderNumber || null);
 
-        if (canIssuePdf) {
+        const canFetchOrderDetails =
+          hasPermission('MANAGE_ORDERS') &&
+          hasPermission('DETAIL_ORDERS') &&
+          hasPermission('VIEW_OWN_ORDERS_HISTORY');
+
+        if (canIssuePdf && canFetchOrderDetails) {
           const idToFetch = String(resolvedOrderId ?? (resolvedOrderData as any)?.orderId ?? '');
           const details = idToFetch ? await orderService.getOrderDetails(idToFetch) : resolvedOrderData;
 

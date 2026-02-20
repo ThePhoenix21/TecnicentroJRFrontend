@@ -12,6 +12,11 @@ import {
   CatalogProductDeletePayload
 } from '@/types/store-product.types';
 
+const isAuthOrForbiddenError = (error: unknown) => {
+  const status = (error as any)?.response?.status;
+  return status === 401 || status === 403;
+};
+
 class StoreProductService {
   // Obtener productos simples de la tienda para el formulario de ventas
   async getStoreProductsSimple(storeId: string, options: {
@@ -133,6 +138,16 @@ class StoreProductService {
       const response = await api.get(`/store/products/store/${storeId}?${params}`);
       return response.data; // El backend devuelve {data: Array, total, page, limit, totalPages}
     } catch (error) {
+      if (isAuthOrForbiddenError(error)) {
+        return {
+          data: [],
+          total: 0,
+          page,
+          limit,
+          totalPages: 1,
+        };
+      }
+
       const anyError = error as any;
       const tokenPresent = typeof window !== 'undefined' ? !!localStorage.getItem('auth_token') : false;
       // Nota: el overlay de Next a veces serializa los objetos como {}. Por eso logueamos
