@@ -172,9 +172,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const hasPermission = useCallback((permission: string): boolean => {
-    if (!user) return false;
+    const isAdmin = user?.role?.toLowerCase() === 'admin';
+    if (isAdmin) return true; // Admins have all permissions
     // Solo verificar permisos, no usar role para acceso
-    return user.permissions?.includes(permission) || false;
+    return user?.permissions?.includes(permission) || false;
   }, [user]);
 
   // Función para cargar tiendas reales desde el backend

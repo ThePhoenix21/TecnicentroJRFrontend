@@ -7,6 +7,7 @@ import {
   type IncomeTimeSeriesResponse,
   type NetProfitResponse,
   type PaymentMethodsSummaryResponse,
+  type UserRankingsResponse,
 } from "@/types/analytics.types";
 import { buildQueryParams, validateCompareRange, validateRequiredRange } from "@/api/common";
 
@@ -71,6 +72,16 @@ export async function getAnalyticsExpenses(
 ): Promise<ExpensesResponse> {
   validateAnalyticsParams(params, "/analytics/expenses");
   const response = await api.get<ExpensesResponse>("/analytics/expenses", {
+    params: buildQueryParams(params),
+  });
+  return response.data;
+}
+
+export async function getAnalyticsUserRankings(
+  params: AnalyticsQueryParams
+): Promise<UserRankingsResponse> {
+  validateAnalyticsParams(params, "/analytics/user-rankings");
+  const response = await api.get<UserRankingsResponse>("/analytics/user-rankings", {
     params: buildQueryParams(params),
   });
   return response.data;

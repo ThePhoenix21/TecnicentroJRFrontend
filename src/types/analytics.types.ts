@@ -196,3 +196,54 @@ export interface AnalyticsQueryParams {
   compareFrom?: string;
   compareTo?: string;
 }
+
+export interface UserRankingsResponse {
+  rankings: {
+    services: Array<{
+      userId: string;
+      userName: string;
+      userEmail: string;
+      ordersCount: number;
+      totalAmount: number;
+    }>;
+    products: Array<{
+      userId: string;
+      userName: string;
+      userEmail: string;
+      ordersCount: number;
+      totalAmount: number;
+    }>;
+  };
+  charts: {
+    servicesRanking: {
+      type: "bar";
+      xKey: "userName";
+      yKeys: ["totalAmount"];
+      series: Array<{
+        userId: string;
+        userName: string;
+        userEmail: string;
+        ordersCount: number;
+        totalAmount: number;
+      }>;
+    };
+    productsRanking: {
+      type: "bar";
+      xKey: "userName";
+      yKeys: ["totalAmount"];
+      series: Array<{
+        userId: string;
+        userName: string;
+        userEmail: string;
+        ordersCount: number;
+        totalAmount: number;
+      }>;
+    };
+  };
+  filters: {
+    from: string;
+    to: string;
+    timeZone: string | null;
+    storeId: string | null;
+  };
+}

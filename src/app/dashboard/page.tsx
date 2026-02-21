@@ -244,7 +244,7 @@ function DynamicBarChart({ chart }: { chart: GenericChart }) {
           <div key={`${toStringSafe(row[xKey], String(index))}-${index}`}>
             <div className="mb-1 flex items-center justify-between text-sm">
               <span>{toStringSafe(row[xKey])}</span>
-              <span className="font-medium">{value.toLocaleString("es-PE")}</span>
+              <span className="font-medium">{yKey === 'totalAmount' ? formatCurrency(value) : value.toLocaleString("es-PE")}</span>
             </div>
             <div className="h-3 rounded-full bg-muted">
               <div className="h-3 rounded-full bg-emerald-600" style={{ width: `${width}%` }} />
@@ -310,7 +310,7 @@ function EndpointErrorAlerts({
 }
 
 export default function DashboardPage() {
-  const { currentStore } = useAuth();
+  const { currentStore, hasPermission } = useAuth();
   const dashboard = useDashboard();
   const analytics = useAnalytics();
   const {
@@ -328,12 +328,21 @@ export default function DashboardPage() {
     netProfit,
     expenses,
     paymentMethodsSummary,
+    userRankings,
+    overviewLoading,
+    incomeTimeseriesLoading,
+    incomeLoading,
+    netProfitLoading,
+    expensesLoading,
+    paymentMethodsLoading,
+    userRankingsLoading,
     loading: analyticsLoading,
     overviewError,
     incomeError,
     netProfitError,
     expensesError,
     paymentMethodsError,
+    userRankingsError,
     fetchAnalytics,
   } = analytics;
 
@@ -371,13 +380,14 @@ export default function DashboardPage() {
   }, [currentStore?.id, fetchDashboard, commonParams]);
 
   const loadAnalytics = useCallback(async () => {
+    if (!hasPermission('VIEW_ANALYTICS')) return;
     if (!currentStore?.id) return;
     try {
       await fetchAnalytics(commonParams);
     } catch {
-      toast.error("No se pudieron cargar Analí­ticas.");
+      toast.error("No se pudieron cargar Análíticas.");
     }
-  }, [fetchAnalytics, commonParams, currentStore?.id]);
+  }, [fetchAnalytics, commonParams, currentStore?.id, hasPermission]);
 
   useEffect(() => {
     if (!from || !to || !currentStore?.id) return;
@@ -397,23 +407,22 @@ export default function DashboardPage() {
 
   const analyticsErrors = [
     overviewError
-      ? { key: "overview", title: "Error en /analytics/overview", message: overviewError.message }
+      ? { key: "overview", title: "Error en /analytics/overview", message: overviewError.status === 403 ? "No tienes permisos para ver analytics" : overviewError.message }
       : null,
     incomeError
-      ? { key: "income", title: "Error en /analytics/income", message: incomeError.message }
+      ? { key: "income", title: "Error en /analytics/income", message: incomeError.status === 403 ? "No tienes permisos para ver analytics" : incomeError.message }
       : null,
     netProfitError
-      ? { key: "net-profit", title: "Error en /analytics/net-profit", message: netProfitError.message }
+      ? { key: "net-profit", title: "Error en /analytics/net-profit", message: netProfitError.status === 403 ? "No tienes permisos para ver analytics" : netProfitError.message }
       : null,
     expensesError
-      ? { key: "expenses", title: "Error en /analytics/expenses", message: expensesError.message }
+      ? { key: "expenses", title: "Error en /analytics/expenses", message: expensesError.status === 403 ? "No tienes permisos para ver analytics" : expensesError.message }
       : null,
     paymentMethodsError
-      ? {
-          key: "payment-methods",
-          title: "Error en /analytics/payment-methods-summary",
-          message: paymentMethodsError.message,
-        }
+      ? { key: "payment-methods", title: "Error en /analytics/payment-methods-summary", message: paymentMethodsError.status === 403 ? "No tienes permisos para ver analytics" : paymentMethodsError.message }
+      : null,
+    userRankingsError
+      ? { key: "user-rankings", title: "Error en /analytics/user-rankings", message: userRankingsError.status === 403 ? "No tienes permisos para ver analytics" : userRankingsError.message }
       : null,
   ].filter((item): item is { key: string; title: string; message: string } => item !== null);
 
@@ -450,6 +459,15 @@ export default function DashboardPage() {
       }
     : null;
 
+  const topServicesChart: GenericChart | null = charts
+    ? {
+        type: charts.charts.topServices.type,
+        xKey: charts.charts.topServices.xKey,
+        yKeys: charts.charts.topServices.yKeys,
+        series: charts.charts.topServices.series,
+      }
+    : null;
+
   const analyticsIncomeTrend: GenericChart | null = overview
     ? {
         type: overview.charts.incomeTrend.chart.type,
@@ -478,6 +496,24 @@ export default function DashboardPage() {
         }
       : null;
 
+  const servicesRankingChart: GenericChart | null = userRankings
+    ? {
+        type: userRankings.charts.servicesRanking.type,
+        xKey: userRankings.charts.servicesRanking.xKey,
+        yKeys: userRankings.charts.servicesRanking.yKeys,
+        series: userRankings.charts.servicesRanking.series,
+      }
+    : null;
+
+  const productsRankingChart: GenericChart | null = userRankings
+    ? {
+        type: userRankings.charts.productsRanking.type,
+        xKey: userRankings.charts.productsRanking.xKey,
+        yKeys: userRankings.charts.productsRanking.yKeys,
+        series: userRankings.charts.productsRanking.series,
+      }
+    : null;
+
   const allLoading = dashboardLoading || analyticsLoading;
 
   return (
@@ -500,7 +536,7 @@ export default function DashboardPage() {
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)} className="space-y-4">
         <TabsList>
           <TabsTrigger value="dashboard">Panel de control</TabsTrigger>
-          <TabsTrigger value="analytics">Análisis</TabsTrigger>
+          {hasPermission('VIEW_ANALYTICS') && <TabsTrigger value="analytics">Análisis</TabsTrigger>}
         </TabsList>
 
         <div className="flex gap-2 items-end">
@@ -535,7 +571,7 @@ export default function DashboardPage() {
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <StatCard
-              title="Ventas Totales"
+              title="Total de ganancia en ventas"
               value={formatCurrency(summary?.kpis.salesTotal ?? 0)}
               description={`Ventas: ${(summary?.kpis.salesCount ?? 0).toLocaleString("es-PE")}`}
               loading={dashboardLoading}
@@ -583,6 +619,13 @@ export default function DashboardPage() {
               <CardTitle>Top productos</CardTitle>
             </CardHeader>
             <CardContent>{topProductsChart ? <DynamicChart chart={topProductsChart} /> : <Skeleton className="h-56" />}</CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Top servicios</CardTitle>
+            </CardHeader>
+            <CardContent>{topServicesChart ? <DynamicChart chart={topServicesChart} /> : <Skeleton className="h-56" />}</CardContent>
           </Card>
 
           {/* {summary?.comparison ? (
@@ -717,6 +760,22 @@ export default function DashboardPage() {
               </div>
             </div>
           ) : null} */}
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Ranking de usuarios por servicios</CardTitle>
+              </CardHeader>
+              <CardContent>{servicesRankingChart ? <DynamicChart chart={servicesRankingChart} /> : <Skeleton className="h-56" />}</CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Ranking de usuarios por productos</CardTitle>
+              </CardHeader>
+              <CardContent>{productsRankingChart ? <DynamicChart chart={productsRankingChart} /> : <Skeleton className="h-56" />}</CardContent>
+            </Card>
+          </div>
 
           <Card>
             <CardHeader>

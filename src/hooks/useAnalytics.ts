@@ -6,6 +6,7 @@ import {
   getAnalyticsNetProfit,
   getAnalyticsOverview,
   getAnalyticsPaymentMethodsSummary,
+  getAnalyticsUserRankings,
 } from "@/api/analytics.api";
 import { normalizeApiError, type ApiRequestError } from "@/api/common";
 import { useAuth } from "@/contexts/auth-context";
@@ -17,6 +18,7 @@ import type {
   IncomeTimeSeriesResponse,
   NetProfitResponse,
   PaymentMethodsSummaryResponse,
+  UserRankingsResponse,
 } from "@/types/analytics.types";
 
 export function useAnalytics() {
@@ -28,6 +30,7 @@ export function useAnalytics() {
   const [expenses, setExpenses] = useState<ExpensesResponse | null>(null);
   const [paymentMethodsSummary, setPaymentMethodsSummary] =
     useState<PaymentMethodsSummaryResponse | null>(null);
+  const [userRankings, setUserRankings] = useState<UserRankingsResponse | null>(null);
 
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [incomeTimeseriesLoading, setIncomeTimeseriesLoading] = useState(false);
@@ -35,6 +38,7 @@ export function useAnalytics() {
   const [netProfitLoading, setNetProfitLoading] = useState(false);
   const [expensesLoading, setExpensesLoading] = useState(false);
   const [paymentMethodsLoading, setPaymentMethodsLoading] = useState(false);
+  const [userRankingsLoading, setUserRankingsLoading] = useState(false);
 
   const [overviewError, setOverviewError] = useState<ApiRequestError | null>(null);
   const [incomeTimeseriesError, setIncomeTimeseriesError] = useState<ApiRequestError | null>(null);
@@ -42,6 +46,7 @@ export function useAnalytics() {
   const [netProfitError, setNetProfitError] = useState<ApiRequestError | null>(null);
   const [expensesError, setExpensesError] = useState<ApiRequestError | null>(null);
   const [paymentMethodsError, setPaymentMethodsError] = useState<ApiRequestError | null>(null);
+  const [userRankingsError, setUserRankingsError] = useState<ApiRequestError | null>(null);
 
   const fetchOverview = useCallback(async (params: AnalyticsQueryParams) => {
     setOverviewLoading(true);
@@ -193,6 +198,32 @@ export function useAnalytics() {
     }
   }, [logout]);
 
+  const fetchUserRankings = useCallback(async (params: AnalyticsQueryParams) => {
+    setUserRankingsLoading(true);
+    setUserRankingsError(null);
+    try {
+      const data = await getAnalyticsUserRankings(params);
+      setUserRankings(data);
+      return data;
+    } catch (error) {
+      const normalized = normalizeApiError(error);
+      setUserRankingsError(normalized);
+      if (normalized.status === 429) {
+        setUserRankings(null);
+        setOverview(null);
+        setIncomeTimeseries(null);
+        setIncome(null);
+        setNetProfit(null);
+        setExpenses(null);
+        setPaymentMethodsSummary(null);
+        logout();
+      }
+      throw normalized;
+    } finally {
+      setUserRankingsLoading(false);
+    }
+  }, [logout]);
+
   const fetchAnalytics = useCallback(
     async (params: AnalyticsQueryParams) => {
       setOverviewLoading(true);
@@ -201,6 +232,7 @@ export function useAnalytics() {
       setNetProfitLoading(true);
       setExpensesLoading(true);
       setPaymentMethodsLoading(true);
+      setUserRankingsLoading(true);
 
       setOverviewError(null);
       setIncomeTimeseriesError(null);
@@ -208,6 +240,7 @@ export function useAnalytics() {
       setNetProfitError(null);
       setExpensesError(null);
       setPaymentMethodsError(null);
+      setUserRankingsError(null);
 
       const [
         overviewResult,
@@ -216,6 +249,7 @@ export function useAnalytics() {
         netProfitResult,
         expensesResult,
         paymentMethodsResult,
+        userRankingsResult,
       ] = await Promise.allSettled([
         getAnalyticsOverview(params),
         getAnalyticsIncomeTimeseries(params),
@@ -223,6 +257,7 @@ export function useAnalytics() {
         getAnalyticsNetProfit(params),
         getAnalyticsExpenses(params),
         getAnalyticsPaymentMethodsSummary(params),
+        getAnalyticsUserRankings(params),
       ]);
 
       if (overviewResult.status === "fulfilled") setOverview(overviewResult.value);
@@ -231,6 +266,7 @@ export function useAnalytics() {
       if (netProfitResult.status === "fulfilled") setNetProfit(netProfitResult.value);
       if (expensesResult.status === "fulfilled") setExpenses(expensesResult.value);
       if (paymentMethodsResult.status === "fulfilled") setPaymentMethodsSummary(paymentMethodsResult.value);
+      if (userRankingsResult.status === "fulfilled") setUserRankings(userRankingsResult.value);
 
       if (overviewResult.status === "rejected") setOverviewError(normalizeApiError(overviewResult.reason));
       if (incomeTimeseriesResult.status === "rejected") {
@@ -242,6 +278,9 @@ export function useAnalytics() {
       if (paymentMethodsResult.status === "rejected") {
         setPaymentMethodsError(normalizeApiError(paymentMethodsResult.reason));
       }
+      if (userRankingsResult.status === "rejected") {
+        setUserRankingsError(normalizeApiError(userRankingsResult.reason));
+      }
 
       // Check for 429 rate limit errors and clear states + logout
       const overviewErr = overviewResult.status === "rejected" ? normalizeApiError(overviewResult.reason) : null;
@@ -250,8 +289,9 @@ export function useAnalytics() {
       const netProfitErr = netProfitResult.status === "rejected" ? normalizeApiError(netProfitResult.reason) : null;
       const expensesErr = expensesResult.status === "rejected" ? normalizeApiError(expensesResult.reason) : null;
       const paymentMethodsErr = paymentMethodsResult.status === "rejected" ? normalizeApiError(paymentMethodsResult.reason) : null;
+      const userRankingsErr = userRankingsResult.status === "rejected" ? normalizeApiError(userRankingsResult.reason) : null;
 
-      const has429 = [overviewErr, incomeTimeseriesErr, incomeErr, netProfitErr, expensesErr, paymentMethodsErr].some(err => err?.status === 429);
+      const has429 = [overviewErr, incomeTimeseriesErr, incomeErr, netProfitErr, expensesErr, paymentMethodsErr, userRankingsErr].some(err => err?.status === 429);
 
       if (has429) {
         setOverview(null);
@@ -260,12 +300,14 @@ export function useAnalytics() {
         setNetProfit(null);
         setExpenses(null);
         setPaymentMethodsSummary(null);
+        setUserRankings(null);
         setOverviewError(null);
         setIncomeTimeseriesError(null);
         setIncomeError(null);
         setNetProfitError(null);
         setExpensesError(null);
         setPaymentMethodsError(null);
+        setUserRankingsError(null);
         logout();
       }
 
@@ -275,6 +317,7 @@ export function useAnalytics() {
       setNetProfitLoading(false);
       setExpensesLoading(false);
       setPaymentMethodsLoading(false);
+      setUserRankingsLoading(false);
 
       return {
         overview:
@@ -291,6 +334,8 @@ export function useAnalytics() {
           paymentMethodsResult.status === "fulfilled"
             ? paymentMethodsResult.value
             : (null as PaymentMethodsSummaryResponse | null),
+        userRankings:
+          userRankingsResult.status === "fulfilled" ? userRankingsResult.value : (null as UserRankingsResponse | null),
       };
     },
     [logout]
@@ -303,7 +348,8 @@ export function useAnalytics() {
       incomeLoading ||
       netProfitLoading ||
       expensesLoading ||
-      paymentMethodsLoading,
+      paymentMethodsLoading ||
+      userRankingsLoading,
     [
       overviewLoading,
       incomeTimeseriesLoading,
@@ -311,6 +357,7 @@ export function useAnalytics() {
       netProfitLoading,
       expensesLoading,
       paymentMethodsLoading,
+      userRankingsLoading,
     ]
   );
 
@@ -321,12 +368,14 @@ export function useAnalytics() {
     netProfit,
     expenses,
     paymentMethodsSummary,
+    userRankings,
     overviewLoading,
     incomeTimeseriesLoading,
     incomeLoading,
     netProfitLoading,
     expensesLoading,
     paymentMethodsLoading,
+    userRankingsLoading,
     loading,
     overviewError,
     incomeTimeseriesError,
@@ -334,12 +383,14 @@ export function useAnalytics() {
     netProfitError,
     expensesError,
     paymentMethodsError,
+    userRankingsError,
     fetchOverview,
     fetchIncomeTimeseries,
     fetchIncome,
     fetchNetProfit,
     fetchExpenses,
     fetchPaymentMethodsSummary,
+    fetchUserRankings,
     fetchAnalytics,
   };
 }

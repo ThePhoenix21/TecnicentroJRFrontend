@@ -111,6 +111,15 @@ export interface DashboardChartsResponse {
         quantity: number;
       }>;
     };
+    topServices: {
+      type: "bar";
+      xKey: "name";
+      yKeys: ["count"];
+      series: Array<{
+        name: string;
+        count: number;
+      }>;
+    };
   };
 }
 
