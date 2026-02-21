@@ -67,6 +67,7 @@ export interface ServiceWithClient {
   updatedAt?: string;
   orderId?: string;
   hasPendingPayment?: boolean;
+  isFromCurrentCash?: boolean;
   service?: {
     id: string;
     name: string;
@@ -117,6 +118,7 @@ export interface ServiceListItem {
   price: number;
   createdAt: string;
   hasPendingPayment?: boolean;
+  isFromCurrentCash?: boolean;
 }
 
 export interface ServiceListResponse {
@@ -137,6 +139,7 @@ interface FindAllWithClientsPagedResponse {
     price?: number;
     createdAt?: string;
     hasPendingPayment?: boolean;
+    isFromCurrentCash?: boolean;
   }>;
   total: number;
   totalPages: number;
@@ -278,6 +281,10 @@ class ServiceService implements IServiceService {
 
   async getServicesPaged(filters: GetServicesFilters = {}): Promise<ServiceListResponse> {
     try {
+      if (!filters.storeId) {
+        throw new Error('storeId es obligatorio para listar servicios');
+      }
+
       const params = new URLSearchParams();
       const page = filters.page ?? 1;
       const pageSize = filters.pageSize ?? 12;
@@ -285,39 +292,51 @@ class ServiceService implements IServiceService {
       params.append('page', String(page));
       params.append('pageSize', String(pageSize));
       if (filters.status) params.append('status', filters.status);
-      if (filters.storeId) params.append('storeId', filters.storeId);
+      params.append('storeId', filters.storeId);
       if (filters.clientName) params.append('clientName', filters.clientName);
       if (filters.serviceName) params.append('serviceName', filters.serviceName);
       if (filters.fromDate) params.append('fromDate', this.normalizeDateFilter(filters.fromDate, false));
       if (filters.toDate) params.append('toDate', this.normalizeDateFilter(filters.toDate, true));
 
-      if (filters.storeId) {
-        params.append('cashSessionScope', filters.openCashOnly ? 'CURRENT' : 'ALL');
+      if (filters.openCashOnly) {
+        params.append('openCashOnly', 'true');
       }
 
       const url = params.toString()
-        ? `${this.baseUrl}/findAllWithClients?${params.toString()}`
-        : `${this.baseUrl}/findAllWithClients`;
+        ? `${this.baseUrl}?${params.toString()}`
+        : `${this.baseUrl}`;
 
-      const response = await api.get<FindAllWithClientsPagedResponse | ServiceWithClient[]>(url);
+      const response = await api.get<ServiceListResponse | FindAllWithClientsPagedResponse | ServiceWithClient[]>(url);
 
       // Nuevo contrato (paginado por backend)
       if (!Array.isArray(response.data)) {
-        const payload = response.data;
+        const payload = response.data as any;
+
+        if (Array.isArray(payload.data) && (typeof payload.totalPages === 'number' || typeof payload.total === 'number')) {
+          return {
+            data: (payload.data || []).map((item: any, idx: number) => ({
+              id: item.id || item.serviceId || '',
+              clientName: item.clientName || 'Sin cliente',
+              serviceName: item.serviceName || 'Servicio sin nombre',
+              status: (item.status || ServiceStatus.PENDING) as ServiceStatus,
+              price: Number(item.price ?? 0),
+              createdAt: item.createdAt || '',
+              hasPendingPayment: item.hasPendingPayment,
+              isFromCurrentCash: item.isFromCurrentCash,
+            })),
+            total: payload.total ?? 0,
+            totalPages: payload.totalPages ?? 1,
+            page: payload.page ?? page,
+            pageSize: payload.pageSize ?? pageSize,
+          };
+        }
+
         return {
-          data: (payload.data || []).map((item) => ({
-            id: item.serviceId || '',
-            clientName: item.clientName || 'Sin cliente',
-            serviceName: item.serviceName || 'Servicio sin nombre',
-            status: (item.status || ServiceStatus.PENDING) as ServiceStatus,
-            price: Number(item.price ?? 0),
-            createdAt: item.createdAt || '',
-            hasPendingPayment: item.hasPendingPayment,
-          })),
-          total: payload.total ?? 0,
-          totalPages: payload.totalPages ?? 1,
-          page: payload.page ?? page,
-          pageSize: payload.pageSize ?? pageSize,
+          data: [],
+          total: 0,
+          totalPages: 1,
+          page,
+          pageSize,
         };
       }
 
@@ -349,6 +368,7 @@ class ServiceService implements IServiceService {
           price: Number(s.price ?? 0),
           createdAt: s.createdAt || '',
           hasPendingPayment: s.hasPendingPayment,
+          isFromCurrentCash: s.isFromCurrentCash,
         })),
         total: all.length,
         totalPages: Math.ceil(all.length / pageSize),
@@ -390,30 +410,38 @@ class ServiceService implements IServiceService {
     storeId?: string
   ): Promise<ServiceWithClient[]> {
     try {
+      if (!storeId) {
+        throw new Error('storeId es obligatorio para listar servicios');
+      }
+
       const params = new URLSearchParams();
       if (status) params.append('status', status);
       if (type) params.append('type', type);
-      if (storeId) params.append('storeId', storeId);
+      params.append('storeId', storeId);
 
       const url = params.toString()
-        ? `${this.baseUrl}/findAllWithClients?${params.toString()}`
-        : `${this.baseUrl}/findAllWithClients`;
+        ? `${this.baseUrl}?${params.toString()}`
+        : `${this.baseUrl}`;
 
-      const response = await api.get<FindAllWithClientsPagedResponse | ServiceWithClient[]>(url);
+      const response = await api.get<ServiceListResponse | FindAllWithClientsPagedResponse | ServiceWithClient[]>(url);
 
       if (Array.isArray(response.data)) {
         return response.data;
       }
 
-      return (response.data.data || []).map((item) => ({
-        id: item.serviceId,
+      const payload = response.data as any;
+      const items = Array.isArray(payload?.data) ? payload.data : [];
+
+      return items.map((item: any, idx: number) => ({
+        id: item.id || item.serviceId || '',
         status: item.status,
         price: item.price,
         createdAt: item.createdAt,
-        service: item.serviceId || item.serviceName
+        isFromCurrentCash: item.isFromCurrentCash,
+        service: item.id || item.serviceId || item.serviceName
           ? {
-              id: item.serviceId || '',
-              name: item.serviceName || 'Servicio sin nombre',
+              id: item.id || item.serviceId || '',
+              name: item.serviceName || item.name || 'Servicio sin nombre',
             }
           : undefined,
         client: item.clientId || item.clientName

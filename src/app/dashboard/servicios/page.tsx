@@ -26,6 +26,7 @@ import { clientService } from "@/services/client.service";
 import type { ClientLookupNameItem } from "@/types/client.types";
 import { Search, X } from "lucide-react";
 import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 
 export default function ServiciosPage() {
   const { currentStore, hasPermission, isAdmin } = useAuth();
@@ -33,8 +34,8 @@ export default function ServiciosPage() {
     isAdmin ||
     hasPermission?.("VIEW_SERVICES") ||
     hasPermission?.("VIEW_ALL_SERVICES");
-  const canUseCashSessionFilter =
-    isAdmin || hasPermission?.("VIEW_CASH") || hasPermission?.("MANAGE_CASH");
+  const canUseCashSessionFilter = canViewServices;
+  const canDetailServices = isAdmin || hasPermission?.('DETAIL_SERVICES');
   const PAGE_SIZE = 12;
 
   const [services, setServices] = useState<ServiceListItem[]>([]);
@@ -70,7 +71,7 @@ export default function ServiciosPage() {
   const [clientNameFilter, setClientNameFilter] = useState<string>("");
   const [serviceNameFilter, setServiceNameFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<ServiceStatus | "all">("all");
-  const [openCashOnly, setOpenCashOnly] = useState<boolean>(canUseCashSessionFilter);
+  const [openCashOnly, setOpenCashOnly] = useState<boolean>(true);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
@@ -185,7 +186,7 @@ export default function ServiciosPage() {
       setClientIdFilter("all");
       setServiceIdFilter("all");
       setStatusFilter("all");
-      setOpenCashOnly(false);
+      setOpenCashOnly(true);
       setFromDate("");
       setToDate("");
       setPage(1);
@@ -250,7 +251,20 @@ export default function ServiciosPage() {
     loadServices(nextPage);
   };
 
+  const isUuid = (value?: string | null) => {
+    if (!value) return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value));
+  };
+
   const openDetail = (serviceId: string) => {
+    if (!canDetailServices) {
+      toast.error('No tienes permisos para ver el detalle del servicio (DETAIL_SERVICES requerido).');
+      return;
+    }
+    if (!isUuid(serviceId)) {
+      toast.error('No se pudo abrir el detalle del servicio: identificador inválido.');
+      return;
+    }
     setSelectedServiceId(serviceId);
     setIsModalOpen(true);
   };
@@ -610,26 +624,63 @@ export default function ServiciosPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {services.map((service) => (
+                    {services.map((service, idx) => (
+                      (() => {
+                        const rawIsFromCurrentCash = (service as any).isFromCurrentCash;
+                        const normalizedIsFromCurrentCash: boolean | undefined =
+                          typeof rawIsFromCurrentCash === 'boolean'
+                            ? rawIsFromCurrentCash
+                            : typeof rawIsFromCurrentCash === 'string'
+                              ? (rawIsFromCurrentCash.trim().toLowerCase() === 'true'
+                                ? true
+                                : rawIsFromCurrentCash.trim().toLowerCase() === 'false'
+                                  ? false
+                                  : undefined)
+                              : typeof rawIsFromCurrentCash === 'number'
+                                ? (rawIsFromCurrentCash === 1
+                                  ? true
+                                  : rawIsFromCurrentCash === 0
+                                    ? false
+                                    : undefined)
+                                : undefined;
+
+                        const isOutsideCurrentCashSession = normalizedIsFromCurrentCash === false;
+                        const cellMutedClass = isOutsideCurrentCashSession ? 'text-muted-foreground opacity-90' : '';
+
+                        const canOpenDetailRow = canDetailServices && isUuid(service.id);
+
+                        return (
                       <TableRow
-                        key={service.id}
-                        className="cursor-pointer hover:bg-accent/50"
-                        onClick={() => openDetail(service.id)}
+                        key={service.id || `${service.serviceName}-${service.createdAt}-${idx}`}
+                        className={`${canOpenDetailRow ? 'cursor-pointer hover:bg-accent/50' : 'cursor-default'} ${isOutsideCurrentCashSession ? 'bg-muted/40 text-muted-foreground opacity-70 grayscale' : ''}`}
+                        onClick={() => {
+                          if (!canDetailServices) {
+                            toast.error('No tienes permisos para ver el detalle del servicio (DETAIL_SERVICES requerido).');
+                            return;
+                          }
+                          if (!isUuid(service.id)) {
+                            toast.error('Este servicio no tiene un ID válido para abrir su detalle.');
+                            return;
+                          }
+                          openDetail(service.id);
+                        }}
                       >
-                        <TableCell className="max-w-[180px] truncate">{service.clientName}</TableCell>
-                        <TableCell className="max-w-[220px] truncate">
+                        <TableCell className={`max-w-[180px] truncate ${cellMutedClass}`}>{service.clientName}</TableCell>
+                        <TableCell className={`max-w-[220px] truncate ${cellMutedClass}`}>
                           <div className="font-medium">{service.serviceName}</div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className={cellMutedClass}>
                           <span className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getStatusBadge(service.status)}`}>
                             {translateStatus(service.status)}
                           </span>
                         </TableCell>
-                        <TableCell className="text-right font-medium">{formatPrice(service.price)}</TableCell>
-                        <TableCell className="whitespace-nowrap">
+                        <TableCell className={`text-right font-medium ${cellMutedClass}`}>{formatPrice(service.price)}</TableCell>
+                        <TableCell className={`whitespace-nowrap ${cellMutedClass}`}>
                           {service.createdAt ? format(new Date(service.createdAt), "dd/MM/yy") : "N/A"}
                         </TableCell>
                       </TableRow>
+                        );
+                      })()
                     ))}
                   </TableBody>
                 </Table>

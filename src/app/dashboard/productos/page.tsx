@@ -482,6 +482,14 @@ export default function ProductsPage() {
   }, []);
 
   const openProductDetail = (productId: string) => {
+    if (!canManageProducts) {
+      toast({
+        title: 'Permiso requerido',
+        description: 'No tienes permisos para ver el detalle del producto (MANAGE_PRODUCTS requerido).',
+        variant: 'destructive',
+      });
+      return;
+    }
     setSelectedProductId(productId);
     setDetailModalOpen(true);
     loadProductDetail(productId);
@@ -540,8 +548,8 @@ export default function ProductsPage() {
         description: 'Los cambios se guardaron correctamente.',
       });
 
-      await loadProductDetail(selectedProductId);
       fetchStoreProducts(page);
+      closeProductDetail();
     } catch (error) {
       console.error('Error updating product detail:', error);
       if (isForbiddenError(error)) {
@@ -879,7 +887,7 @@ export default function ProductsPage() {
             {visibleProducts.map((storeProduct) => (
               <Card
                 key={storeProduct.id}
-                className="h-full flex flex-col py-5 cursor-pointer transition hover:border-primary"
+                className={`h-full flex flex-col py-5 transition hover:border-primary ${canManageProducts ? 'cursor-pointer' : 'cursor-not-allowed opacity-80'}`}
                 onClick={() => openProductDetail(storeProduct.id)}
               >
               <CardHeader>

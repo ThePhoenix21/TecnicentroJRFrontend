@@ -78,13 +78,19 @@ const translateStatus = (status: ServiceStatus | undefined): string => {
 };
 
 export default function ServiceDetailsModal({ serviceId, isOpen, onClose }: ServiceDetailsModalProps) {
-  const { tenantFeatures, tenantFeaturesLoaded } = useAuth();
+  const { tenantFeatures, tenantFeaturesLoaded, hasPermission, isAdmin } = useAuth();
   const [currentService, setCurrentService] = useState<ServiceDetail | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isImageViewerOpen, setIsImageViewerOpen] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [isImageLoading, setIsImageLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+
+  const canDetailServices = isAdmin || hasPermission?.('DETAIL_SERVICES');
+  const isUuid = (value?: string | null) => {
+    if (!value) return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value));
+  };
 
   const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
   const hasImageUpload = !tenantFeaturesLoaded || normalizedTenantFeatures.includes('IMAGEUPLOAD');
@@ -95,6 +101,18 @@ export default function ServiceDetailsModal({ serviceId, isOpen, onClose }: Serv
     if (!isOpen) return;
     if (!serviceId) {
       setCurrentService(null);
+      return;
+    }
+
+    if (!isUuid(serviceId)) {
+      toast.error('No se pudo abrir el detalle del servicio: identificador inválido.');
+      onClose();
+      return;
+    }
+
+    if (!canDetailServices) {
+      toast.error('No tienes permisos para ver el detalle del servicio (DETAIL_SERVICES requerido).');
+      onClose();
       return;
     }
 
@@ -119,7 +137,7 @@ export default function ServiceDetailsModal({ serviceId, isOpen, onClose }: Serv
     };
 
     loadDetail();
-  }, [isOpen, serviceId]);
+  }, [isOpen, serviceId, canDetailServices, onClose]);
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {
@@ -127,17 +145,15 @@ export default function ServiceDetailsModal({ serviceId, isOpen, onClose }: Serv
     }
   };
 
-  if (!currentService) return null;
-
-  const totalPaidAmount = currentService.order?.paymentMethods?.reduce((sum, method) => {
+  const totalPaidAmount = currentService?.order?.paymentMethods?.reduce((sum, method) => {
     return sum + (Number(method?.amount) || 0);
   }, 0) ?? 0;
 
-  const orderTotalAmount = Number(currentService.order?.totalAmount ?? currentService.service?.price ?? 0);
-  const isOrderMarkedPaid = (currentService.order?.status || '').toUpperCase() === 'PAID';
-  const isServiceMarkedPaid = currentService.service?.status === ServiceStatus.PAID;
+  const orderTotalAmount = Number(currentService?.order?.totalAmount ?? currentService?.service?.price ?? 0);
+  const isOrderMarkedPaid = (currentService?.order?.status || '').toUpperCase() === 'PAID';
+  const isServiceMarkedPaid = currentService?.service?.status === ServiceStatus.PAID;
   const hasFullyPaidAmount = orderTotalAmount > 0 ? totalPaidAmount >= orderTotalAmount - 0.009 : totalPaidAmount > 0;
-  const isPaymentCompleted = isServiceMarkedPaid || isOrderMarkedPaid || hasFullyPaidAmount;
+  const isPaymentCompleted = Boolean(currentService) && (isServiceMarkedPaid || isOrderMarkedPaid || hasFullyPaidAmount);
 
   // Función para validar URLs de imágenes
   const isValidImageUrl = (url: string | undefined): boolean => {
@@ -155,7 +171,7 @@ export default function ServiceDetailsModal({ serviceId, isOpen, onClose }: Serv
   };
 
   // Filtrar solo URLs de imágenes válidas
-  const validPhotoUrls: string[] = (currentService.service.photoUrls || []).filter((url: string) =>
+  const validPhotoUrls: string[] = (currentService?.service?.photoUrls || []).filter((url: string) =>
     url && isValidImageUrl(url)
   );
 
@@ -241,7 +257,7 @@ export default function ServiceDetailsModal({ serviceId, isOpen, onClose }: Serv
           </DialogHeader>
 
           <ScrollArea className="flex-1 pr-4 -mr-4 overflow-y-auto min-h-0 max-h-[50vh] sm:max-h-[60vh]">
-            {isLoading ? (
+            {isLoading || !currentService ? (
               <div className="space-y-3 py-2">
                 <Skeleton className="h-6 w-2/3" />
                 <Skeleton className="h-6 w-1/2" />
