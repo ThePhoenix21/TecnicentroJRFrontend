@@ -474,7 +474,7 @@ function ClientesContent() {
                             <div className="space-y-0.5 text-sm">
                               <div>Ventas: <span className="font-semibold">{client.salesCount ?? 0}</span></div>
                               <div className="text-destructive">
-                                Canceladas: <span className="font-semibold">{client.cancelledCount ?? 0}</span>
+                                Anuladas: <span className="font-semibold">{client.cancelledCount ?? 0}</span>
                               </div>
                             </div>
                           </TableCell>
@@ -511,7 +511,7 @@ function ClientesContent() {
                             Ventas: <span className="font-semibold">{client.salesCount ?? 0}</span>
                           </div>
                           <div className="text-destructive">
-                            Canceladas: <span className="font-semibold">{client.cancelledCount ?? 0}</span>
+                            Anuladas: <span className="font-semibold">{client.cancelledCount ?? 0}</span>
                           </div>
                         </div>
                       </div>
@@ -552,7 +552,7 @@ function ClientesContent() {
                         <div className="flex justify-between text-xs">
                           <span>Ventas: <span className="font-semibold">{client.salesCount ?? 0}</span></span>
                           <span className="text-destructive">
-                            Canceladas: <span className="font-semibold">{client.cancelledCount ?? 0}</span>
+                            Anuladas: <span className="font-semibold">{client.cancelledCount ?? 0}</span>
                           </span>
                         </div>
                       </div>

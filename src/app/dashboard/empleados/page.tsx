@@ -88,7 +88,8 @@ const statusLabel: Record<EmployedStatus, string> = {
 };
 
 export default function EmpleadosPage() {
-  const { canViewEmployees, canManageEmployees } = usePermissions();
+  const { canViewEmployees, hasAllPermissions } = usePermissions();
+  const canRecreateEmployee = hasAllPermissions(['RECREATE_EMPLOYEE', 'MANAGE_EMPLOYEES']);
   
   // Verificar permisos de acceso a la vista
   if (!canViewEmployees()) {
@@ -781,6 +782,10 @@ export default function EmpleadosPage() {
   };
 
   const openRecreate = async () => {
+    if (!canRecreateEmployee) {
+      toast.error('No tienes permisos para recrear empleados.');
+      return;
+    }
     setIsRecreateOpen(true);
     setRecreateStep("warning");
     setRecreateResult(null);
@@ -796,6 +801,11 @@ export default function EmpleadosPage() {
 
   const submitRecreate = async () => {
     if (!selectedEmployeeId) return;
+
+    if (!canRecreateEmployee) {
+      toast.error('No tienes permisos para recrear empleados.');
+      return;
+    }
 
     const dto: RecreateEmployedDto = {
       firstName: recreateForm.firstName?.trim(),
@@ -1549,7 +1559,9 @@ export default function EmpleadosPage() {
 
             <div className="border-t bg-background px-6 py-4">
               <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
-                <Button
+                <ProtectedButton
+                  permissions={['RECREATE_EMPLOYEE', 'MANAGE_EMPLOYEES']}
+                  requireAll
                   variant="destructive"
                   onClick={openRecreate}
                   disabled={detailLoading || editSubmitting}
@@ -1557,7 +1569,7 @@ export default function EmpleadosPage() {
                 >
                   <RotateCcw className="h-4 w-4 mr-2" />
                   Recrear empleado
-                </Button>
+                </ProtectedButton>
 
                 <DialogFooter className="gap-2 sm:gap-2">
                   <ProtectedButton

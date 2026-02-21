@@ -755,7 +755,7 @@ export default function ProveedoresPage() {
                       <div className="space-y-2">
                         <label className="text-sm font-medium">Nombre</label>
                         <Input
-                          value={isEditing ? (editForm.name ?? "") : detail.name}
+                          value={isEditing ? (editForm.name ?? "") : (detail.name ?? "")}
                           onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
                           disabled={!isEditing}
                           className={
