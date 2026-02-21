@@ -45,7 +45,7 @@ const getSidebarItems = (
 ) => {
   const baseItems: SidebarItem[] = [
     {
-      name: "Dashboard",
+      name: "Panel de control",
       href: "/dashboard",
       icon: LayoutDashboard,
       requiredTenantFeatures: ["DASHBOARD"],
