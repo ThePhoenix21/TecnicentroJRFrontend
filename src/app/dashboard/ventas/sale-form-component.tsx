@@ -198,6 +198,7 @@ export function SaleForm({
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
+  const overlayPointerDownOutsideRef = useRef(false);
   const hasAutoPrintedRef = useRef(false);
   const pendingPrintWindowRef = useRef<Window | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
@@ -1857,11 +1858,18 @@ export function SaleForm({
   return (
     <div 
       className={`fixed inset-0 bg-black/90 flex items-start md:items-center justify-center z-50 p-2 md:p-4 overflow-y-auto ${(!isOpen && !showServiceSheet) ? 'hidden' : ''}`}
-      onClick={(e) => {
-        // Cerrar el modal solo si se hace clic en el fondo (no en el contenido)
-        if (e.target === e.currentTarget) {
+      onPointerDown={(e) => {
+        overlayPointerDownOutsideRef.current = e.target === e.currentTarget;
+      }}
+      onPointerUp={(e) => {
+        const pointerUpOnOverlay = e.target === e.currentTarget;
+        if (overlayPointerDownOutsideRef.current && pointerUpOnOverlay) {
           onClose();
         }
+        overlayPointerDownOutsideRef.current = false;
+      }}
+      onPointerCancel={() => {
+        overlayPointerDownOutsideRef.current = false;
       }}
     >
       <div className="bg-background border border-muted rounded-3xl shadow-xl w-full max-w-4xl max-h-[95vh] md:max-h-[90vh] flex flex-col">
