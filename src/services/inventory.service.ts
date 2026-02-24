@@ -20,6 +20,10 @@ export const inventoryService = {
   // --- Movimientos ---
   
   async getMovimientos(filters?: InventoryMovementFilters): Promise<InventoryMovement[]> {
+    if (!filters?.storeId) {
+      throw new Error('storeId es requerido para obtener los movimientos de inventario.');
+    }
+
     try {
       const response = await api.get<InventoryMovement[]>('/inventory-movements', {
         params: filters
