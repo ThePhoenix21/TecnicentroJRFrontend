@@ -61,6 +61,7 @@ export interface InventoryMovementsQuery {
   userName?: string;
   fromDate?: string;
   toDate?: string;
+  storeId?: string;
 }
 
 export interface InventoryMovementsListResponse {

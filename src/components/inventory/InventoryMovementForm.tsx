@@ -23,7 +23,7 @@ type StoreProductLookupItem = {
 };
 
 export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps) {
-  const { currentStore, user, isAdmin } = useAuth();
+  const { currentStore, user } = useAuth();
   const { toast } = useToast();
   
   const [products, setProducts] = useState<StoreProductLookupItem[]>([]);
@@ -94,15 +94,6 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
         variant: "destructive",
       });
       return;
-    }
-
-    if (type === 'ADJUST' && !isAdmin) {
-        toast({
-            title: "Acceso denegado",
-            description: "Solo los administradores pueden realizar ajustes de inventario.",
-            variant: "destructive",
-        });
-        return;
     }
 
     setIsSubmitting(true);
@@ -179,9 +170,6 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
               <SelectContent>
                 <SelectItem value="INCOMING">Entrada (Compra/Devolución)</SelectItem>
                 <SelectItem value="OUTGOING">Salida (Consumo/Pérdida)</SelectItem>
-                {isAdmin && (
-                  <SelectItem value="ADJUST">Ajuste (Corrección)</SelectItem>
-                )}
               </SelectContent>
             </Select>
           </div>
@@ -260,16 +248,11 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
             <Label>Cantidad</Label>
             <Input
               type="number"
-              min={type === 'ADJUST' ? undefined : "1"}
+              min="1"
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
-              placeholder={type === 'ADJUST' ? "Ej: -5 (restar) o 5 (sumar)" : "Ej: 10"}
+              placeholder="Ej: 10"
             />
-            {type === 'ADJUST' && (
-                <p className="text-xs text-muted-foreground">
-                    Use valores negativos para reducir stock y positivos para aumentar.
-                </p>
-            )}
           </div>
 
           <div className="space-y-2">

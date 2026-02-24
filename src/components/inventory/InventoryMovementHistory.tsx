@@ -9,6 +9,7 @@ import type {
   ProductLookupItem,
   UserLookupItem,
 } from "@/types/inventory.types";
+import { useAuth } from "@/contexts/auth-context";
 import { uniqueBy } from "@/utils/array";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -40,6 +41,7 @@ interface InventoryMovementHistoryProps {
 export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHistoryProps) {
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const { currentStore } = useAuth();
 
   const [page, setPage] = useState(1);
   const [pageSize] = useState(12);
@@ -73,6 +75,7 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
   const toDateRef = useRef(toDate);
   const pageSizeRef = useRef(pageSize);
   const loadMovementsRef = useRef<((targetPage?: number) => Promise<void>) | null>(null);
+  const storeIdRef = useRef<string | null>(null);
 
   const toUtcRange = (from: string, to: string) => {
     const fromDate = `${from}T00:00:00.000Z`;
@@ -154,15 +157,29 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
   }, [pageSize]);
 
   useEffect(() => {
+    storeIdRef.current = currentStore?.id ?? null;
+  }, [currentStore?.id]);
+
+  useEffect(() => {
     loadMovementsRef.current = async (targetPage?: number) => {
       setIsLoading(true);
       try {
+        const storeId = storeIdRef.current;
+        if (!storeId) {
+          setMovements([]);
+          setTotal(0);
+          setTotalPages(1);
+          setIsLoading(false);
+          return;
+        }
+
         const pageToLoad = targetPage ?? page;
         const from = fromDateRef.current;
         const to = toDateRef.current;
         const range = from && to ? toUtcRange(from, to) : null;
 
         const response = await inventoryService.getInventoryMovements({
+          storeId,
           page: pageToLoad,
           pageSize: pageSizeRef.current,
           name: productNameFilterRef.current.trim() || undefined,
@@ -184,7 +201,7 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
         setIsLoading(false);
       }
     };
-  }, [page]);
+  }, [page, currentStore?.id]);
 
   useEffect(() => {
     const loadUsers = async () => {
@@ -219,7 +236,7 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
   useEffect(() => {
     loadMovements(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshTrigger]);
+  }, [refreshTrigger, currentStore?.id]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -261,6 +278,21 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
       return "-";
     }
   };
+
+  if (!currentStore?.id) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Historial de Movimientos</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Selecciona una tienda para poder consultar los movimientos de inventario.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>

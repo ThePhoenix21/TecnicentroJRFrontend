@@ -55,16 +55,22 @@ export const inventoryService = {
 
   async getInventoryMovements(query: InventoryMovementsQuery = {}): Promise<InventoryMovementsListResponse> {
     try {
+      if (!query.storeId) {
+        throw new Error('storeId es requerido para obtener los movimientos de inventario.');
+      }
+
+      const { storeId, ...rest } = query;
       const params = new URLSearchParams();
 
-      if (query.page) params.set('page', String(query.page));
-      if (query.pageSize) params.set('pageSize', String(query.pageSize));
-      if (query.name) params.set('name', query.name);
-      if (query.type) params.set('type', query.type);
-      if (query.userId) params.set('userId', query.userId);
-      if (query.userName) params.set('userName', query.userName);
-      if (query.fromDate) params.set('fromDate', query.fromDate);
-      if (query.toDate) params.set('toDate', query.toDate);
+      params.set('storeId', storeId);
+      if (rest.page) params.set('page', String(rest.page));
+      if (rest.pageSize) params.set('pageSize', String(rest.pageSize));
+      if (rest.name) params.set('name', rest.name);
+      if (rest.type) params.set('type', rest.type);
+      if (rest.userId) params.set('userId', rest.userId);
+      if (rest.userName) params.set('userName', rest.userName);
+      if (rest.fromDate) params.set('fromDate', rest.fromDate);
+      if (rest.toDate) params.set('toDate', rest.toDate);
 
       const qs = params.toString();
       const url = qs ? `/inventory-movements?${qs}` : '/inventory-movements';
