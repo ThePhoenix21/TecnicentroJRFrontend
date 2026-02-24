@@ -158,6 +158,11 @@ export default function EmpleadosPage() {
   const [availablePermissions, setAvailablePermissions] = useState<string[]>([]);
   const [permissionsLoading, setPermissionsLoading] = useState(false);
 
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [deleteEmployeeId, setDeleteEmployeeId] = useState<string | null>(null);
+  const [deleteReason, setDeleteReason] = useState<string>("");
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+
   const [storeOptions, setStoreOptions] = useState<StoreOption[]>([]);
   const [storesLoading, setStoresLoading] = useState(false);
 
@@ -857,6 +862,39 @@ export default function EmpleadosPage() {
     await loadEmployees();
   };
 
+  const openDeleteConfirmation = (employeeId: string) => {
+    setDeleteEmployeeId(employeeId);
+    setDeleteReason("");
+    setIsDeleteOpen(true);
+  };
+
+  const closeDelete = () => {
+    setIsDeleteOpen(false);
+    setDeleteEmployeeId(null);
+    setDeleteReason("");
+    setDeleteSubmitting(false);
+  };
+
+  const submitDelete = async () => {
+    if (!deleteEmployeeId) return;
+
+    try {
+      setDeleteSubmitting(true);
+      await employedService.softDeleteEmployed(deleteEmployeeId, deleteReason.trim() || undefined);
+      toast.success("Empleado eliminado correctamente");
+      closeDelete();
+      await loadEmployees();
+      if (selectedEmployeeId === deleteEmployeeId) {
+        closeDetail();
+      }
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.response?.data?.message || error?.message || "Error al eliminar empleado");
+    } finally {
+      setDeleteSubmitting(false);
+    }
+  };
+
   const resolveAssigned = (e: EmployedListItem) => {
     const store = e.storeName ?? null;
     const warehouse = e.warehouseName ?? null;
@@ -1250,6 +1288,15 @@ export default function EmpleadosPage() {
                             >
                               <Search className="h-3 w-3" />
                             </Button>
+                            <ProtectedButton
+                              permissions="MANAGE_EMPLOYEES"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openDeleteConfirmation(e.id)}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </ProtectedButton>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -1932,6 +1979,51 @@ export default function EmpleadosPage() {
           <DialogFooter>
             <Button variant="outline" onClick={closeDeleted}>
               Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isDeleteOpen} onOpenChange={(open) => (open ? setIsDeleteOpen(true) : closeDelete())}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Eliminar empleado</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-md border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-red-900 dark:text-red-100">¿Estás seguro de eliminar este empleado?</p>
+                  <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                    Esta acción no se puede deshacer. El empleado será marcado como eliminado y ya no podrá acceder al sistema.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Motivo de eliminación (opcional)</label>
+              <Input
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                placeholder="Ej: Renuncia voluntaria, despido, etc."
+                disabled={deleteSubmitting}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={closeDelete} disabled={deleteSubmitting}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={submitDelete}
+              disabled={deleteSubmitting}
+            >
+              {deleteSubmitting ? "Eliminando..." : "Eliminar empleado"}
             </Button>
           </DialogFooter>
         </DialogContent>

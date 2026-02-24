@@ -50,9 +50,11 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  modal = false,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
+  modal?: boolean
 }) {
   const {
     onPointerDownOutside,
@@ -71,13 +73,15 @@ function DialogContent({
         )}
         onPointerDownOutside={(event) => {
           onPointerDownOutside?.(event)
-          if (!event.defaultPrevented) {
+          // Only prevent default if explicitly modal (backwards compatibility)
+          if (!event.defaultPrevented && modal) {
             event.preventDefault()
           }
         }}
         onInteractOutside={(event) => {
           onInteractOutside?.(event)
-          if (!event.defaultPrevented) {
+          // Only prevent default if explicitly modal (backwards compatibility)
+          if (!event.defaultPrevented && modal) {
             event.preventDefault()
           }
         }}

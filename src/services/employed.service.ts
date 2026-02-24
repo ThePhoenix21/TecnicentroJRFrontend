@@ -111,6 +111,13 @@ class EmployedService {
     return response.data;
   }
 
+  async softDeleteEmployed(employedId: string, reason?: string): Promise<any> {
+    const response = await api.delete(`/employed/${employedId}`, {
+      data: reason ? { reason } : undefined,
+    });
+    return response.data;
+  }
+
   async getDeletedEmployed(): Promise<EmployedDetail[]> {
     const response = await api.get<EmployedDetail[]>('/employed/deleted');
     return response.data;
