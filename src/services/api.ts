@@ -31,6 +31,16 @@ console.log('API Base URL:', getApiBaseUrl());
 // Interceptor de solicitud para agregar token de autenticación
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+      if (config.headers && typeof (config.headers as any).delete === 'function') {
+        (config.headers as any).delete('Content-Type');
+        (config.headers as any).delete('content-type');
+      } else if (config.headers) {
+        delete (config.headers as any)['Content-Type'];
+        delete (config.headers as any)['content-type'];
+      }
+    }
+
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('auth_token');
       if (token) {
@@ -49,7 +59,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response: AxiosResponse) => response,
   (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean; _skipAuthRedirect?: boolean };
     
     if (error.code === 'ECONNABORTED' || !error.response) {
       // Error de timeout o de red - activar pantalla de error de conexión
@@ -60,7 +70,7 @@ api.interceptors.response.use(
       }
     } else if (error.response.status === 401) {
       // Manejar acceso no autorizado
-      if (typeof window !== 'undefined' && !originalRequest?._retry) {
+      if (typeof window !== 'undefined' && !originalRequest?._retry && !originalRequest?._skipAuthRedirect) {
         if (originalRequest) {
           originalRequest._retry = true;
         }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { inventoryService } from "@/services/inventory.service";
+import { usePermissions, PERMISSIONS } from "@/hooks/usePermissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,6 +25,8 @@ interface CreateSessionDialogProps {
 
 export function CreateSessionDialog({ onSessionCreated }: CreateSessionDialogProps) {
   const { currentStore, user, isAdmin } = useAuth();
+  const { can } = usePermissions();
+  const canStartPhysicalInventory = isAdmin || can(PERMISSIONS.START_PHYSICAL_INVENTORY);
   
   // Log para depurar permisos
   console.log("CreateSessionDialog - User Role:", user?.role, "IsAdmin:", isAdmin);
@@ -69,8 +72,8 @@ export function CreateSessionDialog({ onSessionCreated }: CreateSessionDialogPro
     }
   };
 
-  // Solo ADMIN puede crear sesiones
-  if (!isAdmin) return null;
+  // Solo puede crear/gestionar sesiones quien tenga START_PHYSICAL_INVENTORY (o admin)
+  if (!canStartPhysicalInventory) return null;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

@@ -4,7 +4,7 @@ type CanonicalServiceType = 'REPAIR' | 'WARRANTY' | 'MISELANEOUS';
 type ServiceTypeInput = CanonicalServiceType | 'OTHER';
 
 type CanonicalPaymentType = 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'OTRO';
-type PaymentTypeInput = CanonicalPaymentType | 'DATAPHONE' | 'BIZUM';
+export type PaymentTypeInput = CanonicalPaymentType | 'DATAPHONE' | 'BIZUM';
 
 const normalizeServiceType = (type: ServiceTypeInput): CanonicalServiceType => {
   return type === 'OTHER' ? 'MISELANEOUS' : type;
@@ -24,7 +24,7 @@ export interface CreateOrderDto {
   paymentMethod?: string;
   clientId?: string | null;
   total: number;
-  status?: 'PENDING' | 'COMPLETED' | 'CANCELLED';
+  status?: 'PENDING' | 'PAID' | 'COMPLETED' | 'CANCELLED';
 }
 
 export interface OrderItem extends OrderItemDto {
@@ -86,13 +86,61 @@ export interface PaymentMethod {
   createdAt?: string;
 }
 
+export interface OrderLookupItem {
+  value: string;
+  label: string;
+}
+
+export interface OrderListProductItem {
+  name: string;
+  quantity: number;
+}
+
+export interface OrderListServiceItem {
+  name: string;
+  price: number;
+}
+
+export interface OrderListPaymentMethodItem {
+  type: PaymentTypeInput;
+  amount: number;
+}
+
+export interface OrderListItem {
+  id: string;
+  createdAt: string;
+  clientName: string;
+  sellerName: string;
+  products: OrderListProductItem[];
+  services: OrderListServiceItem[];
+  status: string;
+  paymentMethods: OrderListPaymentMethodItem[];
+  refundPaymentMethods?: OrderListPaymentMethodItem[];
+  totalAmount?: number;
+  total?: number;
+  cashSessionId?: string;
+  isFromCurrentCashSession?: boolean;
+}
+
+export interface OrdersListResponse {
+  data: OrderListItem[];
+  total: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface CompleteOrderResponse {
+  success: boolean;
+}
+
 export interface Order {
   id: string;
   orderNumber: string;
   items?: OrderItem[];
   userId: string;
   totalAmount: number;
-  status: "PENDING" | "COMPLETED" | "CANCELLED";
+  status: "PENDING" | "PAID" | "COMPLETED" | "CANCELLED";
   paymentMethod?: string;
   paymentMethods?: PaymentMethod[];
   isPriceModified?: boolean;
@@ -117,8 +165,182 @@ export interface Order {
   };
 }
 
+export interface OrderPaymentMethodsResponse {
+  orderId: string;
+  orderNumber: string;
+  totalAmount: number;
+  totalPaid: number;
+  pendingAmount: number;
+  payments: PaymentMethod[];
+}
+
 export const orderService = {
-  // ✅ ACTUALIZADO: Completar orden (ahora soporta abonos parciales)
+  async listOrders(params: {
+    page?: number;
+    pageSize?: number;
+    clientName?: string;
+    sellerName?: string;
+    orderNumber?: string;
+    status?: string;
+    fromDate?: string;
+    toDate?: string;
+    onlyProducts?: boolean;
+    onlyServices?: boolean;
+    storeId: string;
+    openCashOnly?: boolean;
+  }): Promise<OrdersListResponse> {
+
+    const token = localStorage.getItem("auth_token");
+    
+    try {
+      // SIEMPRE usar /orders/list - storeId es obligatorio
+      if (!params.storeId) {
+        throw new Error('storeId es obligatorio para listar órdenes');
+      }
+      
+      const { storeId, ...otherParams } = params;
+      
+      // Filtrar parámetros válidos para /orders/list
+      const validParams: any = {};
+      if (otherParams.page) validParams.page = otherParams.page;
+      if (otherParams.pageSize) validParams.pageSize = otherParams.pageSize;
+      if (otherParams.openCashOnly !== undefined) validParams.openCashOnly = otherParams.openCashOnly;
+      if (otherParams.clientName) validParams.clientName = otherParams.clientName;
+      if (otherParams.sellerName) validParams.sellerName = otherParams.sellerName;
+      if (otherParams.orderNumber) validParams.orderNumber = otherParams.orderNumber;
+      if (otherParams.status) validParams.status = otherParams.status;
+      if (otherParams.fromDate) validParams.fromDate = otherParams.fromDate;
+      if (otherParams.toDate) validParams.toDate = otherParams.toDate;
+      if (otherParams.onlyProducts !== undefined) validParams.onlyProducts = otherParams.onlyProducts;
+      if (otherParams.onlyServices !== undefined) validParams.onlyServices = otherParams.onlyServices;
+      validParams.storeId = storeId;
+                  
+      // El endpoint /orders/list devuelve OrdersListResponse con paginación
+      const response = await api.get<OrdersListResponse>(`/orders/list`, {
+        params: validParams,
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      });
+      
+      // Si el backend devuelve Order[] en lugar de OrderListItem[], necesitamos convertir
+      const firstOrder = response.data.data?.[0];
+      
+      if (firstOrder && !firstOrder.clientName && (firstOrder as any).client) {
+        // El backend devuelve Order[], necesitamos convertir a OrderListItem[]
+        const convertedData = response.data.data.map((order: any) => {
+          return {
+            id: order.id,
+            createdAt: order.createdAt,
+            clientName: order.client?.name || 'Cliente sin nombre',
+            sellerName: order.user?.name || 'Vendedor sin nombre',
+            products: order.orderProducts?.map((p: any) => ({
+              name: p.product?.name || 'Producto',
+              quantity: p.quantity
+            })) || [],
+            services: order.services?.map((s: any) => ({
+              name: s.name,
+              price: s.price
+            })) || [],
+            status: order.status,
+            paymentMethods: order.paymentMethods?.map((p: any) => ({
+              type: p.type,
+              amount: p.amount
+            })) || [],
+            totalAmount: order.totalAmount,
+            total: order.totalAmount,
+            cashSessionId: order.cashSessionId || order.cashSessionsId || order.cashSession?.id,
+            isFromCurrentCashSession: order.isFromCurrentCashSession,
+          };
+        });
+        
+        return {
+          ...response.data,
+          data: convertedData
+        };
+      }
+      
+      // Backend ya devolvió OrderListItem[] (paginado). Aseguramos cashSessionId por consistencia.
+      return {
+        ...response.data,
+        data: (response.data.data || []).map((item: any) => ({
+          ...item,
+          cashSessionId: item.cashSessionId || item.cashSessionsId || item.cashSession?.id,
+          isFromCurrentCashSession: item.isFromCurrentCashSession,
+        })),
+      };
+    } catch (error) {
+      const status = (error as any)?.response?.status;
+      if (status === 404) {
+        return {
+          data: [],
+          total: 0,
+          totalPages: 1,
+          page: params?.page ?? 1,
+          pageSize: params?.pageSize ?? 10,
+        };
+      }
+      throw error;
+    }
+  },
+
+  async getOrderStatusLookup(): Promise<OrderLookupItem[]> {
+    const token = localStorage.getItem("auth_token");
+    const response = await api.get<OrderLookupItem[]>('orders/lookup-status', {
+      headers: {
+        "Content-Type": "application/json",
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    return response.data;
+  },
+
+  async lookupOrderNumbers(search?: string): Promise<string[]> {
+    const token = localStorage.getItem("auth_token");
+    const response = await api.get<string[]>('orders/lookup-order-numbers', {
+      params: search?.trim() ? { search: search.trim() } : undefined,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    return Array.isArray(response.data) ? response.data : [];
+  },
+
+  async addOrderPayments(orderId: string, payments: Array<{ type: PaymentTypeInput; amount: number }>): Promise<Order> {
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await api.patch<Order>(`orders/${orderId}/payments`, { payments }, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Error al registrar adelanto de pago:", error);
+      throw error;
+    }
+  },
+
+  async completeOrderById(orderId: string): Promise<CompleteOrderResponse> {
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await api.patch<CompleteOrderResponse>(`orders/${orderId}/complete`, {}, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        timeout: 30000,
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Error al completar la orden:", error);
+      throw error;
+    }
+  },
+
   async completeOrder(orderData: {
     orderId: string;
     services: Array<{
@@ -313,11 +535,9 @@ export const orderService = {
 
       return response.data;
     } catch (error) {
-      console.error("Error Creating Order");
+      // Manejo silencioso de errores para evitar mostrar en consola
 
       if (error instanceof Error) {
-        console.error("Error Details:", error.message);
-
         if ('response' in error && error.response) {
           const response = error.response as {
             status?: number;
@@ -328,9 +548,6 @@ export const orderService = {
               statusCode?: number;
             };
           };
-
-          console.error("Response Status:", response.status);
-          console.error("Response Data:", response.data);
 
           // Extraer el mensaje de error del backend
           if (response.data?.message) {
@@ -350,8 +567,6 @@ export const orderService = {
             throw customError;
           }
         }
-      } else {
-        console.error("Unknown error occurred:", error);
       }
 
       throw error;
@@ -409,16 +624,18 @@ export const orderService = {
     }
   },
 
-  // ✅ ACTUALIZADO: Cancelar orden (ya no necesita credenciales)
-  async cancelOrder(id: string): Promise<Order> {
+  // ✅ ACTUALIZADO: Cancelar orden (acepta métodos de reembolso opcionales)
+  async cancelOrder(id: string, paymentMethods?: Array<{ type: PaymentTypeInput; amount: number }>): Promise<Order> {
     try {
       const token = localStorage.getItem("auth_token");
-      const response = await api.patch<Order>(`orders/${id}/cancel`, {}, {
+      const payload = paymentMethods && paymentMethods.length > 0 ? { paymentMethods } : {};
+      const response = await api.patch<Order>(`orders/${id}/cancel`, payload, {
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}` 
-        }
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
       });
+
       return response.data;
     } catch (error) {
       console.error(`Error al cancelar la orden ${id}:`, error);
@@ -464,7 +681,7 @@ export const orderService = {
   async getOrderDetails(id: string): Promise<any> {
     try {
       const token = localStorage.getItem("auth_token");
-      const response = await api.get<any>(`orders/details/${id}`, {
+      const response = await api.get<any>(`/orders/details/${id}`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`
@@ -473,6 +690,22 @@ export const orderService = {
       return response.data;
     } catch (error) {
       console.error(`Error al obtener detalles de la orden ${id}:`, error);
+      throw error;
+    }
+  },
+
+  async getOrderPaymentMethods(orderId: string): Promise<OrderPaymentMethodsResponse> {
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await api.get<OrderPaymentMethodsResponse>(`orders/${orderId}/payment-methods`, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Error al obtener los métodos de pago de la orden ${orderId}:`, error);
       throw error;
     }
   },

@@ -4,10 +4,126 @@ import {
   Product,
   CreateStoreProductRequest,
   StoreProductsResponse,
-  ProductsResponse
+  ProductsResponse,
+  StoreProductStockItem,
+  StoreProductsListResponse,
+  CatalogProductLookupItem,
+  StoreProductDetail,
+  CatalogProductDeletePayload
 } from '@/types/store-product.types';
 
+const isAuthOrForbiddenError = (error: unknown) => {
+  const status = (error as any)?.response?.status;
+  return status === 401 || status === 403;
+};
+
 class StoreProductService {
+  // Obtener productos simples de la tienda para el formulario de ventas
+  async getStoreProductsSimple(storeId: string, options: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+  } = {}): Promise<{data: StoreProduct[], total: number}> {
+    try {
+      // Endpoint: GET /store/products/store/{storeId}/simple?page=1&pageSize=20&search=text
+      const params = new URLSearchParams();
+      if (options.page) params.set('page', options.page.toString());
+      if (options.pageSize) params.set('pageSize', options.pageSize.toString());
+      if (options.search) params.set('search', options.search);
+      
+      console.log('🔍 Intentando endpoint simple:', `/store/products/store/${storeId}/simple?${params}`);
+      const response = await api.get(`/store/products/store/${storeId}/simple?${params}`);
+      return response.data; // El backend devuelve {data: Array, total}
+    } catch (error) {
+      const anyError = error as any;
+      console.error('[StoreProductService.getStoreProductsSimple] Error:', anyError);
+      throw error;
+    }
+
+  }
+
+  async getStoreProductsLookup(params?: { storeId?: string; search?: string }): Promise<Array<{ id: string; name: string }>> {
+    try {
+      const searchParams = new URLSearchParams();
+      if (params?.storeId) searchParams.set('storeId', params.storeId);
+      if (params?.search) searchParams.set('search', params.search);
+      const qs = searchParams.toString();
+      const url = qs ? `/store/products/lookup?${qs}` : '/store/products/lookup';
+      const response = await api.get(url);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error('[StoreProductService.getStoreProductsLookup] Error:', error);
+      throw error;
+    }
+  }
+
+  async getStoreProductsStock(storeId: string): Promise<StoreProductStockItem[]> {
+    try {
+      const params = new URLSearchParams({ storeId });
+      const response = await api.get(`/catalog/products/store-stock?${params.toString()}`);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error('[StoreProductService.getStoreProductsStock] Error:', error);
+      throw error;
+    }
+  }
+
+  async getStoreProductsList(params: {
+    storeId: string;
+    page?: number;
+    pageSize?: number;
+    name?: string;
+    inStock?: boolean;
+  }): Promise<StoreProductsListResponse> {
+    try {
+      const searchParams = new URLSearchParams();
+      searchParams.set('storeId', params.storeId);
+      searchParams.set('page', String(params.page ?? 1));
+      searchParams.set('pageSize', String(params.pageSize ?? 12));
+      if (params.name) searchParams.set('name', params.name);
+      if (typeof params.inStock === 'boolean') searchParams.set('inStock', String(params.inStock));
+
+      const response = await api.get<StoreProductsListResponse>(`/store/products/list?${searchParams.toString()}`);
+      return response.data;
+    } catch (error) {
+      console.error('[StoreProductService.getStoreProductsList] Error:', error);
+      throw error;
+    }
+  }
+
+  async getCatalogProductsLookup(search: string): Promise<CatalogProductLookupItem[]> {
+    try {
+      const params = new URLSearchParams();
+      if (search) params.set('search', search);
+      const qs = params.toString();
+      const url = qs ? `/catalog/products/lookup?${qs}` : '/catalog/products/lookup';
+      const response = await api.get<CatalogProductLookupItem[]>(url);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error('[StoreProductService.getCatalogProductsLookup] Error:', error);
+      throw error;
+    }
+  }
+
+  async getStoreProductDetail(id: string): Promise<StoreProductDetail> {
+    try {
+      const response = await api.get<StoreProductDetail>(`/store/products/findOne/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error('[StoreProductService.getStoreProductDetail] Error:', error);
+      throw error;
+    }
+  }
+
+  async deleteCatalogProduct(productId: string, payload: CatalogProductDeletePayload): Promise<void> {
+    try {
+      await api.delete(`/catalog/products/remove/${productId}`, { data: payload });
+    } catch (error) {
+      console.error('[StoreProductService.deleteCatalogProduct] Error:', error);
+      throw error;
+    }
+  }
+
   // Obtener productos de la tienda actual
   async getStoreProducts(storeId: string, page = 1, limit = 20, search = ''): Promise<{data: StoreProduct[], total: number, page: number, limit: number, totalPages: number}> {
     try {
@@ -22,6 +138,16 @@ class StoreProductService {
       const response = await api.get(`/store/products/store/${storeId}?${params}`);
       return response.data; // El backend devuelve {data: Array, total, page, limit, totalPages}
     } catch (error) {
+      if (isAuthOrForbiddenError(error)) {
+        return {
+          data: [],
+          total: 0,
+          page,
+          limit,
+          totalPages: 1,
+        };
+      }
+
       const anyError = error as any;
       const tokenPresent = typeof window !== 'undefined' ? !!localStorage.getItem('auth_token') : false;
       // Nota: el overlay de Next a veces serializa los objetos como {}. Por eso logueamos

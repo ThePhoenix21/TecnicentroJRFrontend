@@ -15,6 +15,7 @@ import { Edit, Trash2, Users as UsersIcon, ChevronLeft, ChevronRight, X, Buildin
 import { toast } from "sonner";
 import { UserDialog } from "./user-dialog";
 import { userService, type User } from "@/services/user.service";
+import { usePermissions } from "@/hooks/usePermissions";
 
 /**
  * SISTEMA DE GESTIÓN DE USUARIOS CON SOFT DELETE
@@ -44,6 +45,7 @@ export function UserTable({
   storeId = '',
   onSearchChange
 }: UserTableProps) {
+  const { canManageUsers, canDeleteUsers } = usePermissions();
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +56,11 @@ export function UserTable({
   const itemsPerPage = 10;
 
   const handleEditClick = (user: User) => {
+    if (!canManageUsers()) {
+      toast.error('No tienes permisos para editar usuarios (MANAGE_USERS requerido)');
+      return;
+    }
+
     setEditingUser(user);
     setIsDialogOpen(true);
   };
@@ -179,6 +186,11 @@ export function UserTable({
 
 
   const handleDelete = async (userId: string) => {
+    if (!canDeleteUsers()) {
+      toast.error('No tienes permisos para eliminar usuarios (DELETE_USERS requerido)');
+      return;
+    }
+
     if (!confirm("¿Estás seguro de que deseas eliminar este usuario?\n\nEsta acción realizará un soft delete y el usuario pasará a estado 'ELIMINADO'.")) {
       return;
     }
@@ -400,24 +412,29 @@ export function UserTable({
               </TableCell>
               <TableCell>
                 <div className="flex justify-end space-x-1">
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    onClick={() => handleEditClick(user)}
-                    className="h-8 w-8 opacity-0 group-hover:opacity-100"
-                    title="Editar usuario"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDelete(user.id)}
-                    className="h-8 w-8 text-destructive hover:text-destructive/90 opacity-0 group-hover:opacity-100"
-                    title="Desactivar usuario"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {canManageUsers() && (
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={() => handleEditClick(user)}
+                      className="h-8 w-8 opacity-0 group-hover:opacity-100"
+                      title="Editar usuario"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                  )}
+
+                  {canDeleteUsers() && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDelete(user.id)}
+                      className="h-8 w-8 text-destructive hover:text-destructive/90 opacity-0 group-hover:opacity-100"
+                      title="Desactivar usuario"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               </TableCell>
             </TableRow>

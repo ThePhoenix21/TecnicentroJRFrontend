@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { storeProductService } from "@/services/store-product.service";
 import { inventoryService } from "@/services/inventory.service";
-import { StoreProduct } from "@/types/store-product.types";
 import { InventoryMovementType } from "@/types/inventory.types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -12,25 +11,33 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 
 interface InventoryMovementFormProps {
   onSuccess?: () => void;
 }
 
+type StoreProductLookupItem = {
+  id: string;
+  name: string;
+};
+
 export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps) {
-  const { currentStore, user, isAdmin } = useAuth();
+  const { currentStore, user } = useAuth();
   const { toast } = useToast();
   
-  const [products, setProducts] = useState<StoreProduct[]>([]);
+  const [products, setProducts] = useState<StoreProductLookupItem[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form State
   const [selectedProductId, setSelectedProductId] = useState<string>("");
+  const [productQuery, setProductQuery] = useState("");
+  const [showProductSuggestions, setShowProductSuggestions] = useState(false);
   const [type, setType] = useState<InventoryMovementType>("INCOMING");
   const [quantity, setQuantity] = useState<string>("");
   const [description, setDescription] = useState<string>("");
+  const productInputRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (currentStore?.id) {
@@ -41,10 +48,15 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
   const loadProducts = async (storeId: string) => {
     setIsLoadingProducts(true);
     try {
+<<<<<<< HEAD
       // Cargamos una cantidad razonable de productos. 
       // TODO: Implementar búsqueda asíncrona si hay muchos productos
       const response = await storeProductService.getStoreProducts(storeId, 1, 1000);
       setProducts(response.data);
+=======
+      const response = await storeProductService.getStoreProductsLookup({ storeId });
+      setProducts(Array.isArray(response) ? response : []);
+>>>>>>> 2c30ab8bcaac1177bef5b5c5f12dab6a6c39fda6
     } catch (error) {
       console.error("Error loading products:", error);
       toast({
@@ -91,15 +103,6 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
       return;
     }
 
-    if (type === 'ADJUST' && !isAdmin) {
-        toast({
-            title: "Acceso denegado",
-            description: "Solo los administradores pueden realizar ajustes de inventario.",
-            variant: "destructive",
-        });
-        return;
-    }
-
     setIsSubmitting(true);
     try {
       await inventoryService.createMovimiento({
@@ -135,7 +138,25 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
     }
   };
 
-  const selectedProduct = products.find(p => p.id === selectedProductId);
+  const selectedProduct = products.find((p) => p.id === selectedProductId);
+
+  const filteredProducts = products.filter((product) =>
+    product.name.toLowerCase().includes(productQuery.trim().toLowerCase())
+  );
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!productInputRef.current) return;
+      if (!productInputRef.current.contains(event.target as Node)) {
+        setShowProductSuggestions(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   return (
     <Card>
@@ -156,52 +177,89 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
               <SelectContent>
                 <SelectItem value="INCOMING">Entrada (Compra/Devolución)</SelectItem>
                 <SelectItem value="OUTGOING">Salida (Consumo/Pérdida)</SelectItem>
-                {isAdmin && (
-                  <SelectItem value="ADJUST">Ajuste (Corrección)</SelectItem>
-                )}
               </SelectContent>
             </Select>
           </div>
 
           <div className="space-y-2">
             <Label>Producto</Label>
-            <Select 
-                value={selectedProductId} 
-                onValueChange={setSelectedProductId}
+            <div className="relative" ref={productInputRef}>
+              <Search className="absolute left-2 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={productQuery}
+                onChange={(e) => {
+                  setProductQuery(e.target.value);
+                  setShowProductSuggestions(true);
+                  if (!e.target.value) {
+                    setSelectedProductId("");
+                  }
+                }}
+                onFocus={() => setShowProductSuggestions(true)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.stopPropagation();
+                    setShowProductSuggestions(false);
+                    (e.currentTarget as HTMLInputElement).blur();
+                  }
+                }}
+                placeholder={isLoadingProducts ? "Cargando..." : "Buscar producto"}
                 disabled={isLoadingProducts}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={isLoadingProducts ? "Cargando..." : "Seleccionar producto"} />
-              </SelectTrigger>
-              <SelectContent>
-                {products.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.product?.name} (Stock: {p.stock})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {selectedProduct && (
-                <p className="text-xs text-muted-foreground">
-                    Stock actual: <span className="font-medium">{selectedProduct.stock}</span>
-                </p>
-            )}
+                className="pl-8"
+              />
+              {productQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProductQuery("");
+                    setSelectedProductId("");
+                    setShowProductSuggestions(false);
+                  }}
+                  className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground"
+                >
+                  ×
+                </button>
+              )}
+
+              {showProductSuggestions && (
+                <div className="absolute z-20 mt-1 w-full rounded-md border bg-background shadow">
+                  <div className="max-h-64 overflow-auto">
+                    {filteredProducts.length === 0 ? (
+                      <div className="px-3 py-4 text-sm text-muted-foreground">
+                        {productQuery ? "No se encontraron productos" : "Sin productos disponibles"}
+                      </div>
+                    ) : (
+                      filteredProducts.map((product) => (
+                        <button
+                          key={product.id}
+                          type="button"
+                          onClick={() => {
+                            const productId = product.id;
+                            if (!productId) return;
+                            setSelectedProductId(productId);
+                            setProductQuery(product.name);
+                            setShowProductSuggestions(false);
+                          }}
+                          className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted"
+                        >
+                          <span>{product.name}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="space-y-2">
             <Label>Cantidad</Label>
             <Input
               type="number"
-              min={type === 'ADJUST' ? undefined : "1"}
+              min="1"
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
-              placeholder={type === 'ADJUST' ? "Ej: -5 (restar) o 5 (sumar)" : "Ej: 10"}
+              placeholder="Ej: 10"
             />
-            {type === 'ADJUST' && (
-                <p className="text-xs text-muted-foreground">
-                    Use valores negativos para reducir stock y positivos para aumentar.
-                </p>
-            )}
           </div>
 
           <div className="space-y-2">

@@ -36,6 +36,11 @@ export interface User {
   verifyTokenExpires?: string;
 }
 
+export interface UserLookupItem {
+  id: string;
+  name: string;
+}
+
 // DTO para crear usuarios regulares (solo USER) - requiere ADMIN
 export interface CreateUserRegularDto {
   name: string;
@@ -70,8 +75,27 @@ export interface ChangeRoleDto {
   newRole: "ADMIN" | "USER";
 }
 
+// DTO para crear usuario desde empleado
+export interface CreateUserFromEmployedDto {
+  employedId: string;
+  role: "ADMIN" | "USER";
+  storeId?: string;
+  password: string;
+  permissions?: string[];
+}
+
 class UserService {
   private baseUrl = '/users';
+
+  async getUsersLookup(): Promise<UserLookupItem[]> {
+    try {
+      const response = await api.get<UserLookupItem[]>(`${this.baseUrl}/lookup`);
+      return response.data;
+    } catch (error) {
+      this.handleError(error);
+      throw error;
+    }
+  }
 
   async getAllUsers(search?: string): Promise<User[]> {
     try {
@@ -91,6 +115,16 @@ class UserService {
   async getUserById(id: string): Promise<User> {
     try {
       const response = await api.get<User>(`${this.baseUrl}/${id}`);
+      return response.data;
+    } catch (error) {
+      this.handleError(error);
+      throw error;
+    }
+  }
+
+  async createUserFromEmployed(data: CreateUserFromEmployedDto): Promise<User> {
+    try {
+      const response = await api.post<User>(`${this.baseUrl}/from-employed`, data);
       return response.data;
     } catch (error) {
       this.handleError(error);

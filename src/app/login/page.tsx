@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Mail, Lock } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
+import { getFirstAccessibleRouteFromPermissions } from '@/lib/permission-routes';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -43,53 +44,31 @@ export default function LoginPage() {
       if (success) {
         console.log('Login exitoso, determinando redirección...');
         
-        const isAdmin = success.role?.toLowerCase() === 'admin';
         const userStores = success.stores || [];
         
         console.log('Rol del usuario:', success.role);
-        console.log('Es admin:', isAdmin);
         console.log('Tiendas del usuario:', userStores);
 
-        if (isAdmin) {
-          // ADMIN: verificar si necesita seleccionar tienda
-          if (userStores.length === 0) {
-            console.error('El admin no tiene tiendas asignadas');
-            setError('No tienes tiendas asignadas. Contacta al administrador.');
-            return;
-          }
-          
-          if (userStores.length === 1) {
-            // Una sola tienda: seleccionar automáticamente y redirigir al dashboard
-            console.log('Admin tiene una sola tienda, redirigiendo al dashboard');
-            window.location.href = '/dashboard';
-          } else {
-            // Múltiples tiendas: redirigir a selección
-            console.log('Admin tiene múltiples tiendas, redirigiendo a selección');
-            window.location.href = '/store-selection';
-          }
-        } else {
-          // USER: determinar ruta por defecto según permisos
-          const perms = success.permissions || [];
-          const has = (p: string) => perms.includes(p);
-
-          let target = '/dashboard';
-          if (has('VIEW_DASHBOARD')) {
-            target = '/dashboard';
-          } else if (has('VIEW_ORDERS') || has('MANAGE_ORDERS')) {
-            target = '/dashboard/ventas';
-          } else if (has('VIEW_CASH') || has('MANAGE_CASH')) {
-            target = '/dashboard/caja';
-          } else if (has('VIEW_INVENTORY') || has('MANAGE_INVENTORY')) {
-            target = '/dashboard/inventario';
-          } else if (has('VIEW_PRODUCTS') || has('MANAGE_PRODUCTS')) {
-            target = '/dashboard/productos';
-          } else if (has('VIEW_CLIENTS') || has('MANAGE_CLIENTS')) {
-            target = '/dashboard/clientes';
-          }
-
-          console.log('USER redirigiendo a ruta por defecto:', target);
-          window.location.href = target;
+        // Si no hay tiendas, negar acceso aunque el login sea válido
+        if (userStores.length === 0) {
+          console.error('El usuario no tiene tiendas asignadas');
+          setError('No tienes tiendas asignadas. Contacta al administrador.');
+          return;
         }
+
+        // Si hay múltiples tiendas, ir a selección
+        if (userStores.length > 1) {
+          console.log('Usuario con múltiples tiendas, redirigiendo a selección');
+          window.location.href = '/store-selection';
+          return;
+        }
+
+        // Si hay una sola tienda, redirigir directo a la mejor ruta según permisos (sin parpadeo)
+        const targetFromPermissions = getFirstAccessibleRouteFromPermissions(success.permissions);
+        const target = targetFromPermissions || '/dashboard';
+
+        console.log('Usuario con una sola tienda, redirigiendo a:', target);
+        window.location.href = target;
       }
     } catch (error) {
       console.error('Error en el login:', error);

@@ -2,9 +2,25 @@ import React from 'react';
 import { Document, Page, Text, View, StyleSheet, Font, Image } from '@react-pdf/renderer';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { jwtDecode } from 'jwt-decode';
 
-// Registrar la imagen del logo
-const logo = '/icons/logo-jr-g.png';
+interface TenantTokenPayload {
+  tenantLogoUrl?: string;
+}
+
+const resolveTenantLogoUrlFromToken = (): string | undefined => {
+  if (typeof window === 'undefined') return undefined;
+
+  try {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return undefined;
+    const decoded = jwtDecode<TenantTokenPayload>(token);
+    return decoded.tenantLogoUrl || undefined;
+  } catch (error) {
+    console.error('Error al obtener tenantLogoUrl del token:', error);
+    return undefined;
+  }
+};
 
 // Registrar fuentes
 Font.register({
@@ -14,6 +30,8 @@ Font.register({
     { src: 'https://cdnjs.cloudflare.com/ajax/libs/ink/3.1.10/fonts/Roboto/roboto-bold-webfont.ttf', fontWeight: 700 },
   ],
 });
+
+const tenantLogoUrl = resolveTenantLogoUrlFromToken();
 
 const styles = StyleSheet.create({
   page: {
@@ -186,10 +204,12 @@ const SaleReceipt: React.FC<SaleReceiptProps> = ({ saleData, businessInfo }) => 
             <View style={styles.logoContainer}>
               {/* Logo temporalmente comentado para debugging */}
               {/* eslint-disable-next-line jsx-a11y/alt-text */}
-              <Image
-                src={logo}
-                style={styles.logo}
-              /> 
+              {!!tenantLogoUrl && (
+                <Image
+                  src={tenantLogoUrl}
+                  style={styles.logo}
+                />
+              )}
               <View style={[styles.headerInfo, { flex: 1, marginLeft: 0 }]}>
                 <View style={styles.header}>
                   <Text style={styles.title}>{businessInfo.name}</Text>

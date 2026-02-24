@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
+import { getFirstAccessibleRouteFromPermissions } from '@/lib/permission-routes';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Building, Store, ArrowRight, LogOut } from 'lucide-react';
@@ -31,25 +32,7 @@ export default function StoreSelectionPage() {
     console.log('Tiendas:', user.stores);
 
     if (user.role?.toLowerCase() !== 'admin') {
-      // Si es USER, redirigir a la primera sección permitida por sus permisos
-      const perms = user.permissions || [];
-      const has = (p: string) => perms.includes(p);
-
-      let target = '/dashboard';
-      if (has('VIEW_DASHBOARD')) {
-        target = '/dashboard';
-      } else if (has('VIEW_ORDERS') || has('MANAGE_ORDERS')) {
-        target = '/dashboard/ventas';
-      } else if (has('VIEW_CASH') || has('MANAGE_CASH')) {
-        target = '/dashboard/caja';
-      } else if (has('VIEW_INVENTORY') || has('MANAGE_INVENTORY')) {
-        target = '/dashboard/inventario';
-      } else if (has('VIEW_PRODUCTS') || has('MANAGE_PRODUCTS')) {
-        target = '/dashboard/productos';
-      } else if (has('VIEW_CLIENTS') || has('MANAGE_CLIENTS')) {
-        target = '/dashboard/clientes';
-      }
-
+      const target = getFirstAccessibleRouteFromPermissions(user.permissions) || '/dashboard';
       console.log('No es admin, redirigiendo a ruta por defecto de USER:', target);
       router.push(target);
       return;
@@ -59,7 +42,8 @@ export default function StoreSelectionPage() {
     if (user.stores && user.stores.length === 1) {
       console.log('Admin tiene una sola tienda, seleccionando automáticamente');
       selectStore(user.stores[0]);
-      router.push('/dashboard');
+      const target = getFirstAccessibleRouteFromPermissions(user.permissions) || '/dashboard';
+      router.push(target);
       return;
     }
 
@@ -106,8 +90,9 @@ export default function StoreSelectionPage() {
       console.log('🏪 Store seleccionada antes de selectStore:', store);
       selectStore(store);
       console.log('✅ Store seleccionada después de selectStore');
-      console.log('📍 Redirigiendo al dashboard...');
-      router.push('/dashboard');
+      const target = getFirstAccessibleRouteFromPermissions(user?.permissions) || '/dashboard';
+      console.log('📍 Redirigiendo a ruta permitida después de seleccionar tienda:', target);
+      router.push(target);
     } catch (error) {
       console.error('❌ Error al seleccionar tienda:', error);
     } finally {

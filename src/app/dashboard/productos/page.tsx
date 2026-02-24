@@ -1,20 +1,33 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { storeProductService } from '@/services/store-product.service';
 import { inventoryService } from '@/services/inventory.service';
-import { StoreProduct, Product, CreateStoreProductRequest } from '@/types/store-product.types';
+import { storeService } from '@/services/store.service';
+import { StoreProduct, CreateStoreProductRequest, StoreProductListItem, StoreProductDetail } from '@/types/store-product.types';
+import { StoreLookupItem } from '@/types/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ActiveFilters } from '@/components/ui/active-filters';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Plus, Search, Edit, Trash2, X, Info, Package, History } from 'lucide-react';
+import { Plus, Search, X, Info, Package, Loader2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/contexts/auth-context';
 import { ProductHistory } from '@/components/inventory/ProductHistory';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { usePermissions, PERMISSIONS } from '@/hooks/usePermissions';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 interface StoreProductFormData {
   name: string;
@@ -27,15 +40,54 @@ interface StoreProductFormData {
 }
 
 export default function ProductsPage() {
-  const [storeProducts, setStoreProducts] = useState<StoreProduct[]>([]);
-  const [filteredStoreProducts, setFilteredStoreProducts] = useState<StoreProduct[]>([]);
+  const [storeProducts, setStoreProducts] = useState<StoreProductListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [hideOutOfStock, setHideOutOfStock] = useState(false);
+  const [selectedStoreId, setSelectedStoreId] = useState('');
+  const [storeQuery, setStoreQuery] = useState('');
+  const [showStoreSuggestions, setShowStoreSuggestions] = useState(false);
+  const [storesLookup, setStoresLookup] = useState<StoreLookupItem[]>([]);
+
+  const [nameFilter, setNameFilter] = useState('');
+  const [nameQuery, setNameQuery] = useState('');
+  const [showNameSuggestions, setShowNameSuggestions] = useState(false);
+  const [nameSuggestions, setNameSuggestions] = useState<Array<{ id: string; name: string }>>([]);
+  const [nameLookupLoading, setNameLookupLoading] = useState(false);
+  const nameInputWrapperRef = useRef<HTMLDivElement | null>(null);
+  const filteredNameSuggestions = useMemo(() => {
+    const query = nameQuery.trim().toLowerCase();
+    if (!query) return [];
+    return nameSuggestions.filter((item) => item.name?.toLowerCase().includes(query));
+  }, [nameQuery, nameSuggestions]);
+
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const PAGE_SIZE = 12;
+
+  const [hideOutOfStock, setHideOutOfStock] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentStoreProduct, setCurrentStoreProduct] = useState<StoreProduct | null>(null);
   const [originalStock, setOriginalStock] = useState<number | null>(null); // Nuevo estado
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [productDetail, setProductDetail] = useState<StoreProductDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailForm, setDetailForm] = useState({
+    name: '',
+    description: '',
+    price: '',
+    buyCost: '',
+    basePrice: '',
+    stockThreshold: '',
+  });
+  const [isUpdatingDetail, setIsUpdatingDetail] = useState(false);
+  const [isDeletingStoreProduct, setIsDeletingStoreProduct] = useState(false);
+  const [isDeletingCatalogProduct, setIsDeletingCatalogProduct] = useState(false);
+  const [catalogDeleteCredentials, setCatalogDeleteCredentials] = useState({ email: '', password: '' });
+  const [showCatalogDeleteForm, setShowCatalogDeleteForm] = useState(false);
+
   const [formData, setFormData] = useState<StoreProductFormData>({
     name: '',
     description: '',
@@ -46,33 +98,67 @@ export default function ProductsPage() {
     stockThreshold: 1,
   });
 
+  const filtersInitializedRef = useRef(false);
+
   // Inicializar hooks
   const router = useRouter();
   const { toast } = useToast();
   const { user, currentStore, isAuthenticated, isAdmin, hasPermission } = useAuth();
 
-  const canViewProducts = isAdmin || hasPermission?.("VIEW_PRODUCTS") || hasPermission?.("MANAGE_PRODUCTS");
-  const canViewInventory = isAdmin || hasPermission?.("VIEW_INVENTORY") || hasPermission?.("MANAGE_INVENTORY") || hasPermission?.("inventory.read") || hasPermission?.("inventory.manage");
-  const canManageProducts = isAdmin || hasPermission?.("MANAGE_PRODUCTS");
-  const canManagePrices = isAdmin || hasPermission?.("MANAGE_PRICES");
+  const { can } = usePermissions();
 
-  const fetchStoreProducts = useCallback(async () => {
-    if (!currentStore) {
-      console.log('❌ No hay currentStore, abortando fetchStoreProducts');
+  const canViewProducts = can(PERMISSIONS.VIEW_PRODUCTS);
+  const canViewProductPrices = can(PERMISSIONS.VIEW_PRODUCT_PRICES);
+  const canViewProductCost = can(PERMISSIONS.VIEW_PRODUCT_COST);
+  const canManageProducts = can(PERMISSIONS.MANAGE_PRODUCTS);
+  const canManagePrices = can(PERMISSIONS.MANAGE_PRICES);
+  const canDeleteProducts = can(PERMISSIONS.DELETE_PRODUCTS);
+
+  const canCreateProducts = canViewProducts && canManageProducts;
+
+  const canManageInventory = isAdmin || hasPermission?.("MANAGE_INVENTORY") || hasPermission?.("inventory.manage");
+
+  const isForbiddenError = (error: unknown) => {
+    const anyError = error as any;
+    return anyError?.response?.status === 403;
+  };
+
+  useEffect(() => {
+    if (currentStore?.id && !selectedStoreId) {
+      setSelectedStoreId(currentStore.id);
+      setStoreQuery(currentStore.name);
+    }
+  }, [currentStore?.id, currentStore?.name, selectedStoreId]);
+
+  useEffect(() => {
+    const loadStores = async () => {
+      try {
+        const stores = await storeService.getStoresLookup();
+        setStoresLookup(Array.isArray(stores) ? stores : []);
+      } catch (error) {
+        console.error('Error loading stores lookup:', error);
+      }
+    };
+
+    loadStores();
+  }, []);
+
+  const fetchStoreProducts = useCallback(async (targetPage = 1) => {
+    const storeId = selectedStoreId || currentStore?.id;
+    if (!storeId) {
+      console.log('❌ No hay storeId seleccionado, abortando fetchStoreProducts');
       return;
     }
 
-    if (!canViewProducts || !canViewInventory) {
-      console.log('⛔ Sin permisos suficientes para ver productos de tienda (requiere VIEW_INVENTORY), abortando fetchStoreProducts');
+    if (!canViewProducts) {
       setStoreProducts([]);
-      setFilteredStoreProducts([]);
       return;
     }
-    
-    console.log('🚀 Iniciando fetchStoreProducts para tienda:', currentStore.id);
+    console.log('🚀 Iniciando fetchStoreProducts para tienda:', storeId);
     
     try {
       setLoading(true);
+<<<<<<< HEAD
       const response = await storeProductService.getStoreProducts(currentStore.id, 1, 1000, searchTerm);
       console.log('📦 Datos recibidos de storeProductService:', response);
       
@@ -83,71 +169,148 @@ export default function ProductsPage() {
       
       setStoreProducts(productsArray);
       setFilteredStoreProducts(productsArray);
+=======
+      const response = await storeProductService.getStoreProductsList({
+        storeId,
+        page: targetPage,
+        pageSize: PAGE_SIZE,
+        name: nameFilter.trim() || undefined,
+        inStock: hideOutOfStock ? true : undefined,
+      });
+
+      setStoreProducts(Array.isArray(response.data) ? response.data : []);
+      setTotal(response.total || 0);
+      setTotalPages(response.totalPages || 1);
+      setPage(response.page || targetPage);
+>>>>>>> 2c30ab8bcaac1177bef5b5c5f12dab6a6c39fda6
     } catch (error) {
       console.error('❌ Error fetching store products:', error);
       setStoreProducts([]);
-      setFilteredStoreProducts([]);
-      toast({
-        title: 'Error',
-        description: 'No se pudieron cargar los productos',
-        variant: 'destructive',
-      });
+      setTotal(0);
+      setTotalPages(1);
+      if (isForbiddenError(error)) {
+        toast({
+          title: 'Sin permisos',
+          description: 'No tienes permisos para ver productos.',
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: 'No se pudieron cargar los productos',
+          variant: 'destructive',
+        });
+      }
     } finally {
       setLoading(false);
       console.log('🏁 fetchStoreProducts finalizado');
     }
-  }, [currentStore?.id, searchTerm, toast, canViewProducts, canViewInventory]);
+  }, [selectedStoreId, currentStore?.id, nameFilter, hideOutOfStock, toast, canViewProducts]);
+
+  const fetchStoreProductsRef = useRef(fetchStoreProducts);
+
+  useEffect(() => {
+    fetchStoreProductsRef.current = fetchStoreProducts;
+  }, [fetchStoreProducts]);
 
   useEffect(() => {
     if (!isAuthenticated) {
       router.push('/login');
+    }
+  }, [isAuthenticated, router]);
+
+  const filtersKey = useMemo(() => {
+    return [nameFilter, hideOutOfStock].join('|');
+  }, [nameFilter, hideOutOfStock]);
+
+  const clearFilters = () => {
+    setNameFilter('');
+    setNameQuery('');
+    setShowNameSuggestions(false);
+    setHideOutOfStock(true);
+    // Forzar recarga después de limpiar filtros
+    setTimeout(() => {
+      fetchStoreProductsRef.current?.();
+    }, 0);
+  };
+
+  const activeStoreId = selectedStoreId || currentStore?.id || '';
+  const hasFetchedInitialRef = useRef(false);
+  const lastStoreIdRef = useRef<string>('');
+
+  useEffect(() => {
+    if (!isAuthenticated || !activeStoreId) {
       return;
     }
-    if (currentStore) {
-      fetchStoreProducts();
+
+    if (lastStoreIdRef.current === activeStoreId && hasFetchedInitialRef.current) {
+      return;
     }
-  }, [isAuthenticated, router, currentStore?.id]);
+
+    lastStoreIdRef.current = activeStoreId;
+    hasFetchedInitialRef.current = true;
+    filtersInitializedRef.current = true;
+    fetchStoreProductsRef.current?.(1);
+  }, [isAuthenticated, activeStoreId]);
+
+  const loadProductLookup = useCallback(async () => {
+    try {
+      setNameLookupLoading(true);
+      const lookup = await storeProductService.getCatalogProductsLookup('');
+      setNameSuggestions(Array.isArray(lookup) ? lookup : []);
+    } catch (error) {
+      console.error('Error loading product name lookup:', error);
+      setNameSuggestions([]);
+    } finally {
+      setNameLookupLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let filtered = storeProducts;
-    
-    // Aplicar filtro de búsqueda
-    if (searchTerm.trim()) {
-      filtered = filtered.filter((storeProduct) =>
-        storeProduct.product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (storeProduct.product.description && storeProduct.product.description.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
-    }
-    
-    // Aplicar filtro de stock
-    if (hideOutOfStock) {
-      filtered = filtered.filter((storeProduct) => storeProduct.stock > 0);
-    }
-    
-    setFilteredStoreProducts(filtered);
-  }, [searchTerm, storeProducts, hideOutOfStock]);
+    loadProductLookup();
+  }, [loadProductLookup]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (isAuthenticated && currentStore) {
-        fetchStoreProducts();
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!nameInputWrapperRef.current) return;
+      if (!nameInputWrapperRef.current.contains(event.target as Node)) {
+        setShowNameSuggestions(false);
       }
-    }, 500);
+    };
 
-    return () => clearTimeout(timer);
-  }, [searchTerm, isAuthenticated, currentStore?.id]);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (nameFilter.trim()) {
+      setPage(1);
+      fetchStoreProductsRef.current?.(1);
+    }
+  }, [nameFilter]);
+
+  useEffect(() => {
+    setPage(1);
+    fetchStoreProductsRef.current?.(1);
+  }, [hideOutOfStock]);
 
   // Debug: verificar estado actual
   useEffect(() => {
     console.log('🔍 Estado de productos:', {
       loading,
       storeProductsCount: storeProducts.length,
-      filteredStoreProductsCount: filteredStoreProducts.length,
+      total,
+      page,
+      totalPages,
       isAuthenticated,
       currentStoreId: currentStore?.id,
-      searchTerm
+      selectedStoreId,
+      nameFilter
     });
-  }, [loading, storeProducts.length, filteredStoreProducts.length, isAuthenticated, currentStore?.id, searchTerm]);
+  }, [loading, storeProducts.length, total, page, totalPages, isAuthenticated, currentStore?.id, selectedStoreId, nameFilter]);
+
+  const visibleProducts = useMemo(() => {
+    return storeProducts;
+  }, [storeProducts]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -160,6 +323,24 @@ export default function ProductsPage() {
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentStore) return;
+
+    if (!isEditing) {
+      if (!canCreateProducts) {
+        toast({
+          title: 'Sin permisos',
+          description: 'No tienes permisos para crear productos.',
+        });
+        return;
+      }
+    } else {
+      if (!canManageProducts && !canManagePrices) {
+        toast({
+          title: 'Sin permisos',
+          description: 'No tienes permisos para editar productos.',
+        });
+        return;
+      }
+    }
 
     // Validar que no se reduzca el stock en edición
     if (isEditing && originalStock !== null && formData.stock < originalStock) {
@@ -177,29 +358,33 @@ export default function ProductsPage() {
       if (isEditing && currentStoreProduct) {
         // Edición: enviar solo los campos que se van a actualizar
         let updateData: any;
-        
-        if (isAdmin) {
-          // ADMIN puede editar todo
-          updateData = {
-            name: formData.name,
-            description: formData.description,
-            buyCost: formData.buyCost,
-            basePrice: formData.basePrice,
-            price: formData.price,
-            stock: formData.stock,
-            stockThreshold: formData.stockThreshold,
-          };
-        } else {
-          // USER: control fino por permisos
-          updateData = {
-            stock: formData.stock,
-            stockThreshold: formData.stockThreshold,
-          };
 
-          // Solo usuarios con MANAGE_PRICES pueden modificar el precio
-          if (canManagePrices) {
-            updateData.price = formData.price;
+        // Reglas actuales:
+        // - description nunca se envía
+        // - MANAGE_PRODUCTS: solo permite editar name
+        // - MANAGE_PRICES: permite editar price
+        // - buyCost/basePrice requieren MANAGE_PRICES + VIEW_PRODUCT_COST
+        updateData = {};
+
+        if (canManageProducts) {
+          updateData.name = formData.name;
+          updateData.description = formData.description;
+          updateData.stockThreshold = formData.stockThreshold;
+        }
+
+        if (canManagePrices) {
+          updateData.price = formData.price;
+
+          updateData.basePrice = formData.basePrice;
+
+          if (canViewProductCost) {
+            updateData.buyCost = formData.buyCost;
           }
+        }
+
+        // Stock/threshold se mantienen bajo permisos de inventario (si aplica)
+        if (canManageInventory) {
+          updateData.stock = formData.stock;
         }
 
         console.log('🔍 IDs para actualizar:', {
@@ -216,34 +401,28 @@ export default function ProductsPage() {
         });
       } else {
         // Creación: siempre crear producto nuevo
-        if (isAdmin) {
-          // ADMIN crea con todos los campos
-          productData = {
-            createNewProduct: true,
-            name: formData.name,
-            description: formData.description,
-            buyCost: formData.buyCost,
-            basePrice: formData.basePrice,
-            storeId: currentStore.id,
-            price: formData.price,
-            stock: formData.stock,
-            stockThreshold: formData.stockThreshold,
-          };
-        } else {
-          // USER crea con campos limitados; precio solo si tiene MANAGE_PRICES
-          productData = {
-            createNewProduct: true,
-            name: formData.name,
-            description: formData.description,
-            storeId: currentStore.id,
-            stock: formData.stock,
-            stockThreshold: formData.stockThreshold,
-          } as CreateStoreProductRequest;
-
-          if (canManagePrices) {
-            (productData as any).price = formData.price;
-          }
+        // Reglas actuales:
+        // - VIEW_PRODUCTS + MANAGE_PRODUCTS para crear y setear datos básicos
+        // - MANAGE_PRICES para setear price/basePrice
+        // - MANAGE_PRICES + VIEW_PRODUCT_COST para setear buyCost
+        if (!canCreateProducts) {
+          toast({
+            title: 'Sin permisos',
+            description: 'No tienes permisos para crear productos.',
+          });
+          return;
         }
+        productData = {
+          createNewProduct: true,
+          name: formData.name,
+          description: formData.description,
+          storeId: currentStore.id,
+          stockThreshold: formData.stockThreshold,
+          stock: formData.stock,
+          ...(canManagePrices ? { price: formData.price } : {}),
+          ...(canManagePrices ? { basePrice: formData.basePrice } : {}),
+          ...(canManagePrices && canViewProductCost ? { buyCost: formData.buyCost } : {}),
+        } as CreateStoreProductRequest;
 
         const response = await storeProductService.createStoreProduct(productData);
         console.log('📦 Producto creado (respuesta backend):', response);
@@ -255,6 +434,9 @@ export default function ProductsPage() {
           title: 'Producto creado',
           description: 'El producto se ha creado correctamente',
         });
+
+        // Refrescar el lookup para que el nuevo producto aparezca en las sugerencias
+        await loadProductLookup();
       }
 
       await fetchStoreProducts();
@@ -262,13 +444,244 @@ export default function ProductsPage() {
       setIsModalOpen(false);
     } catch (error) {
       console.error('Error al guardar producto:', error);
+      if (isForbiddenError(error)) {
+        toast({
+          title: 'Sin permisos',
+          description: 'No tienes permisos para realizar esta acción.',
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: 'No se pudo guardar el producto',
+          variant: 'destructive',
+        });
+      }
+    }
+  }, [currentStore, isEditing, currentStoreProduct, formData, fetchStoreProducts, toast, loadProductLookup, canCreateProducts, canManageProducts, canManagePrices, canViewProductCost, canManageInventory]);
+
+  const loadProductDetail = useCallback(async (productId: string) => {
+    setDetailLoading(true);
+    setDetailError(null);
+    try {
+      const formatValue = (value: unknown) => {
+        if (value === null || value === undefined) return '';
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? numeric.toString() : String(value);
+      };
+      const detail = await storeProductService.getStoreProductDetail(productId);
+      const resolvedStockThreshold = typeof detail.stockThreshold === 'number'
+        ? detail.stockThreshold
+        : undefined;
+      const normalizedDetail: StoreProductDetail = {
+        ...detail,
+        stockThreshold: resolvedStockThreshold,
+        productId: detail.productId ?? detail.product?.id,
+      };
+      setProductDetail(normalizedDetail);
+      setDetailForm({
+        name: detail.product?.name || '',
+        description: detail.product?.description || '',
+        price: formatValue(detail.price),
+        buyCost: formatValue(detail.product?.buyCost),
+        basePrice: formatValue(detail.product?.basePrice),
+        stockThreshold: formatValue(resolvedStockThreshold),
+      });
+    } catch (error) {
+      console.error('Error loading product detail:', error);
+      setDetailError('No se pudo cargar el detalle del producto.');
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
+  const openProductDetail = (productId: string) => {
+    if (!canManageProducts) {
       toast({
-        title: 'Error',
-        description: 'No se pudo guardar el producto',
+        title: 'Permiso requerido',
+        description: 'No tienes permisos para ver el detalle del producto (MANAGE_PRODUCTS requerido).',
         variant: 'destructive',
       });
+      return;
     }
-  }, [currentStore, isEditing, currentStoreProduct, formData, isAdmin, fetchStoreProducts, toast]);
+    setSelectedProductId(productId);
+    setDetailModalOpen(true);
+    loadProductDetail(productId);
+  };
+
+  const closeProductDetail = () => {
+    if (isUpdatingDetail || isDeletingStoreProduct || isDeletingCatalogProduct) return;
+    setDetailModalOpen(false);
+    setSelectedProductId(null);
+    setProductDetail(null);
+    setDetailForm({ name: '', description: '', price: '', buyCost: '', basePrice: '', stockThreshold: '' });
+    setDetailError(null);
+    setCatalogDeleteCredentials({ email: '', password: '' });
+    setShowCatalogDeleteForm(false);
+  };
+
+  const handleDetailFormChange = (field: keyof typeof detailForm, value: string) => {
+    setDetailForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const isValidNumberInputValue = (value: string) => {
+    return value === '' || /^-?\d*(\.\d*)?$/.test(value);
+  };
+
+  const handleUpdateDetail = async () => {
+    if (!selectedProductId) return;
+    setIsUpdatingDetail(true);
+    try {
+      if (!canManageProducts && !canManagePrices) {
+        toast({
+          title: 'Sin permisos',
+          description: 'No tienes permisos para editar este producto.',
+        });
+        return;
+      }
+
+      const payload: any = {};
+      if (canManageProducts) {
+        payload.name = detailForm.name;
+        payload.description = detailForm.description;
+        if (detailForm.stockThreshold !== '') {
+          payload.stockThreshold = Number(detailForm.stockThreshold);
+        }
+      }
+      if (canManagePrices) {
+        if (detailForm.price !== '') payload.price = Number(detailForm.price);
+        if (detailForm.basePrice !== '') payload.basePrice = Number(detailForm.basePrice);
+        if (canViewProductCost) {
+          if (detailForm.buyCost !== '') payload.buyCost = Number(detailForm.buyCost);
+        }
+      }
+      await storeProductService.updateStoreProduct(selectedProductId, payload);
+
+      toast({
+        title: 'Producto actualizado',
+        description: 'Los cambios se guardaron correctamente.',
+      });
+
+      fetchStoreProducts(page);
+      closeProductDetail();
+    } catch (error) {
+      console.error('Error updating product detail:', error);
+      if (isForbiddenError(error)) {
+        toast({
+          title: 'Sin permisos',
+          description: 'No tienes permisos para actualizar este producto.',
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: 'No se pudo actualizar el producto.',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setIsUpdatingDetail(false);
+    }
+  };
+
+  const handleDeleteStoreProductDetail = async () => {
+    if (!selectedProductId) return;
+    if (!canDeleteProducts) {
+      toast({
+        title: 'Sin permisos',
+        description: 'No tienes permisos para eliminar productos.',
+      });
+      return;
+    }
+    const shouldDelete = window.confirm(
+      'Se recomienda dejar el stock en 0 antes de eliminar un producto de la tienda.\n¿Deseas continuar igualmente?'
+    );
+    if (!shouldDelete) return;
+
+    setIsDeletingStoreProduct(true);
+    try {
+      await storeProductService.deleteStoreProduct(selectedProductId);
+      toast({
+        title: 'Producto eliminado',
+        description: 'Se eliminó el producto de esta tienda.',
+      });
+      closeProductDetail();
+      fetchStoreProducts(page);
+    } catch (error) {
+      console.error('Error deleting store product:', error);
+      if (isForbiddenError(error)) {
+        toast({
+          title: 'Sin permisos',
+          description: 'No tienes permisos para eliminar este producto.',
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: 'No se pudo eliminar el producto de la tienda.',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setIsDeletingStoreProduct(false);
+    }
+  };
+
+  const handleDeleteCatalogProductDetail = async () => {
+    if (!canDeleteProducts) {
+      toast({
+        title: 'Sin permisos',
+        description: 'No tienes permisos para eliminar productos.',
+      });
+      return;
+    }
+    const catalogProductId = productDetail?.productId ?? productDetail?.product?.id;
+    if (!catalogProductId) {
+      toast({
+        title: 'Acción no disponible',
+        description: 'El identificador del producto en catálogo no está disponible.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!catalogDeleteCredentials.email || !catalogDeleteCredentials.password) {
+      toast({
+        title: 'Datos incompletos',
+        description: 'Ingresa el correo y contraseña para confirmar la eliminación del catálogo.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const shouldDelete = window.confirm(
+      'Eliminar del catálogo borrará el producto en todas las tiendas. Se recomienda dejar stock en 0 antes de continuar.\n¿Deseas eliminarlo definitivamente?'
+    );
+    if (!shouldDelete) return;
+
+    setIsDeletingCatalogProduct(true);
+    try {
+      await storeProductService.deleteCatalogProduct(catalogProductId, catalogDeleteCredentials);
+      toast({
+        title: 'Producto eliminado del catálogo',
+        description: 'El producto se eliminó de todas las tiendas.',
+      });
+      closeProductDetail();
+      fetchStoreProducts(1);
+    } catch (error) {
+      console.error('Error deleting catalog product:', error);
+      if (isForbiddenError(error)) {
+        toast({
+          title: 'Sin permisos',
+          description: 'No tienes permisos para eliminar este producto del catálogo.',
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: 'No se pudo eliminar el producto del catálogo.',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setIsDeletingCatalogProduct(false);
+    }
+  };
 
   const handleEdit = useCallback((storeProduct: StoreProduct) => {
     setCurrentStoreProduct(storeProduct);
@@ -278,33 +691,13 @@ export default function ProductsPage() {
       description: storeProduct.product.description || '',
       buyCost: storeProduct.product.buyCost || 0,
       basePrice: storeProduct.product.basePrice || 0,
-      price: storeProduct.price,
+      price: storeProduct.price || 0,
       stock: storeProduct.stock,
       stockThreshold: storeProduct.stockThreshold,
     });
     setIsEditing(true);
     setIsModalOpen(true);
   }, []);
-
-  const handleDelete = useCallback(async (id: string) => {
-    if (window.confirm('¿Estás seguro de que deseas eliminar este producto de la tienda?')) {
-      try {
-        await storeProductService.deleteStoreProduct(id);
-        toast({
-          title: 'Éxito',
-          description: 'Producto eliminado correctamente',
-        });
-        fetchStoreProducts();
-      } catch (error) {
-        console.error('Error deleting product:', error);
-        toast({
-          title: 'Error',
-          description: 'No se pudo eliminar el producto',
-          variant: 'destructive',
-        });
-      }
-    }
-  }, [toast, fetchStoreProducts]);
 
   const openNewProductModal = () => {
     setCurrentStoreProduct(null);
@@ -359,7 +752,7 @@ export default function ProductsPage() {
           <h1 className="text-3xl font-bold">Productos</h1>
           <p className="text-muted-foreground">{currentStore.name}</p>
         </div>
-        {canManageProducts && (
+        {canCreateProducts && (
           <Button onClick={openNewProductModal}>
             <Plus className="mr-2 h-4 w-4" />
             Nuevo Producto
@@ -367,36 +760,107 @@ export default function ProductsPage() {
         )}
       </div>
 
-      <div className="mb-6">
-        <div className="relative mb-4">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-          <Input
-            type="text"
-            placeholder="Buscar por nombre o descripción..."
-            className="pl-10 pr-10"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          {searchTerm && (
-            <button
-              type="button"
-              onClick={() => setSearchTerm('')}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-        
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Info className="h-3.5 w-3.5" />
-            <span>
-              Mostrando {filteredStoreProducts.length} de {storeProducts.length} productos
-              {searchTerm.trim() && ` (filtrados por "${searchTerm}")`}
-              {hideOutOfStock && ' (sin stock oculto)'}
-            </span>
+      <div className="mb-6 space-y-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          
+          <div className="space-y-2">
+            <Label>Producto</Label>
+            <div className="relative" ref={nameInputWrapperRef}>
+              <Search className="absolute left-2 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={nameQuery}
+                onChange={(e) => {
+                  setNameQuery(e.target.value);
+                  if (e.target.value.trim()) {
+                    setShowNameSuggestions(true);
+                  } else {
+                    setShowNameSuggestions(false);
+                  }
+                }}
+                onFocus={() => {
+                  if (nameQuery.trim()) {
+                    setShowNameSuggestions(true);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    setNameFilter(nameQuery);
+                    setShowNameSuggestions(false);
+                  }
+                  if (e.key === 'Escape') {
+                    e.stopPropagation();
+                    setShowNameSuggestions(false);
+                    (e.currentTarget as HTMLInputElement).blur();
+                  }
+                }}
+                placeholder={nameLookupLoading ? 'Buscando...' : 'Buscar producto...'}
+                className="pl-8"
+              />
+              {nameQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNameQuery('');
+                    setNameFilter('');
+                    setShowNameSuggestions(false);
+                  }}
+                  className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground"
+                >
+                  ×
+                </button>
+              )}
+
+              {showNameSuggestions && nameQuery.trim() && (
+                <div className="absolute z-20 mt-1 w-full rounded-md border bg-background shadow">
+                  <div className="max-h-64 overflow-auto">
+                    {filteredNameSuggestions.length === 0 ? (
+                      <div className="px-3 py-4 text-sm text-muted-foreground">
+                        {nameQuery ? 'No se encontraron productos' : 'Escribe para buscar'}
+                      </div>
+                    ) : (
+                      filteredNameSuggestions.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setNameQuery(item.name);
+                            setNameFilter(item.name);
+                            setShowNameSuggestions(false);
+                          }}
+                          className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted"
+                        >
+                          <span>{item.name}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
+        </div>
+      </div>
+
+      <ActiveFilters 
+        hasActiveFilters={!!(nameFilter || !hideOutOfStock)}
+        onClearFilters={clearFilters}
+      />
+
+      {/* Add click outside handler */}
+      <div 
+        className="fixed inset-0 z-10" 
+        style={{ display: showNameSuggestions ? 'block' : 'none' }}
+        onClick={() => setShowNameSuggestions(false)}
+      />
+
+      <div className="mb-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <span>
+            Mostrando {visibleProducts.length} de {total} productos
+            {nameFilter.trim() && ` (filtrados por "${nameFilter}")`}
+            {hideOutOfStock && ' (sin stock oculto)'}
+          </span>
           
           <div className="flex items-center space-x-2">
             <Checkbox
@@ -418,12 +882,12 @@ export default function ProductsPage() {
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
         </div>
-      ) : filteredStoreProducts.length === 0 ? (
+      ) : visibleProducts.length === 0 ? (
         <div className="text-center py-12">
           <Package className="mx-auto h-12 w-12 text-gray-400 mb-4" />
           <p className="text-gray-500">
-            {searchTerm.trim()
-              ? `No se encontraron productos que coincidan con "${searchTerm}"`
+            {nameFilter.trim()
+              ? `No se encontraron productos que coincidan con "${nameFilter}"`
               : hideOutOfStock
                 ? "No hay productos con stock en esta tienda"
                 : "No hay productos en esta tienda"
@@ -431,46 +895,33 @@ export default function ProductsPage() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredStoreProducts.map((storeProduct) => (
-            <Card key={storeProduct.id} className="h-full flex flex-col">
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {visibleProducts.map((storeProduct) => (
+              <Card
+                key={storeProduct.id}
+                className={`h-full flex flex-col py-5 transition hover:border-primary ${canManageProducts ? 'cursor-pointer' : 'cursor-not-allowed opacity-80'}`}
+                onClick={() => openProductDetail(storeProduct.id)}
+              >
               <CardHeader>
                 <div className="flex justify-between items-start">
-                  <CardTitle className="text-lg">{storeProduct.product.name}</CardTitle>
-                  {canManageProducts && (
-                    <div className="flex space-x-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEdit(storeProduct)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                    {/*desctivado temporalmente
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDelete(storeProduct.id)}
-                    >
-                      <Trash2 className="h-4 w-4 text-red-500" />
-                    </Button>
-                    */}
-                    </div>
-                  )}
+                  <CardTitle className="text-base">{storeProduct.name}</CardTitle>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-2xl font-bold text-primary">
-                    S/ {storeProduct.price.toFixed(2)}
-                  </p>
+                  {(canViewProductPrices || canManagePrices) && typeof storeProduct.price === 'number' && (
+                    <p className="text-xl font-bold text-primary">
+                      S/ {storeProduct.price.toFixed(2)}
+                    </p>
+                  )}
                   <div className="flex items-center gap-4 text-sm">
                     <span className={`font-medium ${
-                      storeProduct.stock <= storeProduct.stockThreshold 
-                        ? 'text-red-600' 
+                      storeProduct.stock <= 0
+                        ? 'text-red-600'
                         : 'text-green-600'
                     }`}>
                       {storeProduct.stock} unidades
                     </span>
-                    {storeProduct.stock <= storeProduct.stockThreshold && (
+                    {storeProduct.stock <= 0 && (
                       <span className="text-red-600 text-xs">
                         ⚠️ Stock bajo
                       </span>
@@ -479,15 +930,48 @@ export default function ProductsPage() {
                 </div>
               </CardHeader>
               <CardContent className="flex-grow">                
-                {isAdmin && storeProduct.product.buyCost && (
+                {canViewProductCost && (storeProduct.buyCost !== undefined) && (storeProduct.price !== undefined) && (
                   <div className="text-xs text-muted-foreground space-y-1">
-                    <p>Costo: S/ {storeProduct.product.buyCost.toFixed(2)}</p>
-                    <p>Ganancia: S/ {(storeProduct.price - storeProduct.product.buyCost).toFixed(2)}</p>
+                    <p>Costo: S/ {(storeProduct.buyCost || 0).toFixed(2)}</p>
+                    <p>Ganancia: S/ {((storeProduct.price || 0) - (storeProduct.buyCost || 0)).toFixed(2)}</p>
                   </div>
                 )}
               </CardContent>
             </Card>
-          ))}
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              Página {page} de {totalPages}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                disabled={page <= 1 || loading}
+                onClick={() => {
+                  const next = page - 1;
+                  if (next < 1) return;
+                  setPage(next);
+                  fetchStoreProducts(next);
+                }}
+              >
+                Anterior
+              </Button>
+              <Button
+                variant="outline"
+                disabled={page >= totalPages || loading}
+                onClick={() => {
+                  const next = page + 1;
+                  if (next > totalPages) return;
+                  setPage(next);
+                  fetchStoreProducts(next);
+                }}
+              >
+                Siguiente
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -524,7 +1008,7 @@ export default function ProductsPage() {
                     value={formData.name}
                     onChange={handleInputChange}
                     required
-                    disabled={isEditing && !isAdmin} // Solo ADMIN puede editar nombre en edición
+                    disabled={!canCreateProducts}
                   />
                 </div>
 
@@ -538,68 +1022,66 @@ export default function ProductsPage() {
                     onChange={handleInputChange}
                     className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     rows={3}
-                    disabled={isEditing && !isAdmin} // Solo ADMIN puede editar descripción en edición
+                    disabled={!canCreateProducts}
                   />
                 </div>
 
-                {/* Campos solo para ADMIN */}
-                {isAdmin && (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">
-                        Costo de compra <span className="text-destructive">*</span>
-                      </label>
-                      <Input
-                        type="number"
-                        name="buyCost"
-                        value={formData.buyCost}
-                        onChange={handleInputChange}
-                        min="0"
-                        step="0.01"
-                        required
-                        disabled={isEditing && !isAdmin} // Solo ADMIN puede editar costo
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium mb-2">
-                        Precio base <span className="text-destructive">*</span>
-                      </label>
-                      <Input
-                        type="number"
-                        name="basePrice"
-                        value={formData.basePrice}
-                        onChange={handleInputChange}
-                        min="0"
-                        step="0.01"
-                        required
-                        disabled={isEditing && !isAdmin} // Solo ADMIN puede editar precio base
-                      />
-                    </div>
-                  </>
-                )}
-
-                {/* Campos visibles para todos */}
+                {/* Campos de precios: solo editables con MANAGE_PRICES. VIEW_PRODUCT_PRICES NO es requerido para crear/editar precios aqu. */}
                 <div>
                   <label className="block text-sm font-medium mb-2">
                     Precio de venta <span className="text-destructive">*</span>
                   </label>
+                  <>
+                    <Input
+                      type="number"
+                      name="price"
+                      value={formData.price}
+                      onChange={handleInputChange}
+                      min="0"
+                      step="0.01"
+                      required={canManagePrices}
+                      disabled={!canManagePrices}
+                    />
+                    {!canManagePrices && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        No tienes permisos para establecer precios.
+                      </p>
+                    )}
+                  </>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Precio base
+                  </label>
                   <Input
                     type="number"
-                    name="price"
-                    value={formData.price}
+                    name="basePrice"
+                    value={formData.basePrice}
                     onChange={handleInputChange}
                     min="0"
                     step="0.01"
-                    required={canManagePrices}
                     disabled={!canManagePrices}
                   />
-                  {!canManagePrices && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      No tienes permisos para modificar precios.
-                    </p>
-                  )}
                 </div>
+
+                {/* Costo: solo si puede verlo y adems tiene MANAGE_PRICES */}
+                {canViewProductCost && (
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Costo de compra
+                    </label>
+                    <Input
+                      type="number"
+                      name="buyCost"
+                      value={formData.buyCost}
+                      onChange={handleInputChange}
+                      min="0"
+                      step="0.01"
+                      disabled={!canManagePrices}
+                    />
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium mb-2">
@@ -613,10 +1095,11 @@ export default function ProductsPage() {
                     min={isEditing && originalStock !== null ? originalStock : 0}
                     placeholder="0"
                     required
+                    disabled={isEditing ? !canManageInventory : !canCreateProducts}
                   />
                   {isEditing && originalStock !== null && (
                     <p className="text-xs text-muted-foreground mt-1">
-                      Solo se permite aumentar el stock. Para reducirlo, use la sección de Inventario.
+                      Solo se permite aumentar el stock. Para reducirlo, use la seccin de Inventario.
                     </p>
                   )}
                 </div>
@@ -633,6 +1116,7 @@ export default function ProductsPage() {
                     min="1"
                     placeholder="1"
                     required
+                    disabled={!canCreateProducts}
                   />
                 </div>
               </div>
@@ -652,6 +1136,223 @@ export default function ProductsPage() {
           </div>
         </div>
       )}
+
+      <Dialog open={detailModalOpen} onOpenChange={(open) => {
+        if (!open) closeProductDetail();
+      }}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Detalle del producto</DialogTitle>
+            <DialogDescription>
+              Revisa la información del producto en la tienda y realiza ajustes si es necesario.
+            </DialogDescription>
+          </DialogHeader>
+
+          {detailLoading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : detailError ? (
+            <p className="text-sm text-destructive">{detailError}</p>
+          ) : productDetail ? (
+            <div className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label>Nombre</Label>
+                  <Input
+                    value={detailForm.name}
+                    onChange={(e) => handleDetailFormChange('name', e.target.value)}
+                    disabled={isUpdatingDetail || !canManageProducts}
+                  />
+                </div>
+                <div>
+                  <Label>Precio (venta)</Label>                  
+                  {canViewProductPrices ? (
+                    <Input
+                      type="number"
+                      value={detailForm.price}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        if (!isValidNumberInputValue(next)) return;
+                        handleDetailFormChange('price', next);
+                      }}
+                      disabled={isUpdatingDetail || !canManagePrices}
+                    />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">-</p>
+                  )}
+                </div>
+                <div>
+                  <Label>Costo</Label>
+                  {canViewProductCost ? (
+                    <Input
+                      type="number"
+                      value={detailForm.buyCost}
+                      onChange={(e) => handleDetailFormChange('buyCost', e.target.value)}
+                      disabled={isUpdatingDetail || !canManagePrices}
+                    />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">-</p>
+                  )}
+                </div>
+                <div>
+                  <Label>Precio base</Label>
+                  {canViewProductPrices ? (
+                    <Input
+                      type="number"
+                      value={detailForm.basePrice}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        if (!isValidNumberInputValue(next)) return;
+                        handleDetailFormChange('basePrice', next);
+                      }}
+                      disabled={isUpdatingDetail || !canManagePrices}
+                    />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">-</p>
+                  )}
+                </div>
+                <div className="md:col-span-2">
+                  <Label>Descripción</Label>
+                  <textarea
+                    value={detailForm.description}
+                    onChange={(e) => handleDetailFormChange('description', e.target.value)}
+                    className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    disabled={isUpdatingDetail || !canManageProducts}
+                  />
+                </div>
+                <div>
+                  <Label>Alerta de stock</Label>
+                  <Input
+                    type="number"
+                    value={detailForm.stockThreshold}
+                    onChange={(e) => handleDetailFormChange('stockThreshold', e.target.value)}
+                    disabled={isUpdatingDetail || !canManageProducts}
+                    min="1"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="rounded-md border p-4 text-sm md:col-span-2">
+                  <p className="font-semibold mb-1">Información en tienda</p>
+                  <p>Tienda: {productDetail.store?.name ?? '—'}</p>
+                  <p>Dirección: {productDetail.store?.address ?? '—'}</p>
+                  <p>Teléfono: {productDetail.store?.phone ?? '—'}</p>
+                  <p>Stock actual: {productDetail.stock}</p>
+                  <p>Responsable: {productDetail.user?.name ?? '—'}</p>
+                </div>
+                <div className="rounded-md border p-4 text-sm space-y-3 flex flex-col h-full">
+                  <p className="font-semibold">Acciones</p>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={handleUpdateDetail}
+                    disabled={isUpdatingDetail || (!canManageProducts && !canManagePrices)}
+                  >
+                    {isUpdatingDetail ? 'Guardando...' : 'Guardar cambios'}
+                  </Button>
+                  {canDeleteProducts && (
+                    <Button
+                      variant="destructive"
+                      className="w-full"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteStoreProductDetail();
+                      }}
+                      disabled={isDeletingStoreProduct}
+                    >
+                      {isDeletingStoreProduct ? 'Eliminando...' : 'Eliminar de esta tienda'}
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-md border p-4 space-y-3">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="font-semibold">Eliminar del catálogo</p>
+                    <p className="text-xs text-muted-foreground">
+                      Esta acción eliminará el producto de todas las tiendas. Se recomienda dejar el stock en 0 antes de continuar.
+                    </p>
+                  </div>
+                  {!showCatalogDeleteForm && canDeleteProducts && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCatalogDeleteCredentials({ email: '', password: '' });
+                        setShowCatalogDeleteForm(true);
+                      }}
+                      disabled={isDeletingCatalogProduct}
+                    >
+                      Eliminar del catálogo
+                    </Button>
+                  )}
+                </div>
+
+                {showCatalogDeleteForm && (
+                  <div className="space-y-3">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <Label>Correo de confirmación</Label>
+                        <Input
+                          type="email"
+                          value={catalogDeleteCredentials.email}
+                          onChange={(e) => setCatalogDeleteCredentials((prev) => ({ ...prev, email: e.target.value }))}
+                          disabled={isDeletingCatalogProduct}
+                        />
+                      </div>
+                      <div>
+                        <Label>Contraseña</Label>
+                        <Input
+                          type="password"
+                          value={catalogDeleteCredentials.password}
+                          onChange={(e) => setCatalogDeleteCredentials((prev) => ({ ...prev, password: e.target.value }))}
+                          disabled={isDeletingCatalogProduct}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-3">
+                      <Button
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowCatalogDeleteForm(false);
+                          setCatalogDeleteCredentials({ email: '', password: '' });
+                        }}
+                        disabled={isDeletingCatalogProduct}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteCatalogProductDetail();
+                        }}
+                        disabled={isDeletingCatalogProduct}
+                      >
+                        {isDeletingCatalogProduct ? 'Eliminando del catálogo...' : 'Confirmar eliminación'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeProductDetail} disabled={isUpdatingDetail || isDeletingStoreProduct || isDeletingCatalogProduct}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
+

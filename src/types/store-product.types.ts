@@ -63,3 +63,61 @@ export interface ProductsResponse {
   page: number;
   limit: number;
 }
+
+export interface StoreProductListItem {
+  id: string;
+  name: string;
+  price: number;
+  stock: number;
+  buyCost?: number;
+  basePrice?: number;
+}
+
+export interface StoreProductsListResponse {
+  data: StoreProductListItem[];
+  total: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface CatalogProductLookupItem {
+  id: string;
+  name: string;
+}
+
+export interface StoreProductDetail {
+  id: string;
+  productId?: string;
+  price: number;
+  stock: number;
+  stockThreshold?: number;
+  product: {
+    id?: string;
+    name: string;
+    description?: string;
+    basePrice?: number;
+    buyCost?: number;
+  };
+  store?: {
+    name: string;
+    address?: string;
+    phone?: string;
+  };
+  user?: {
+    name: string;
+  };
+}
+
+export interface CatalogProductDeletePayload {
+  email: string;
+  password: string;
+}
+
+export interface StoreProductStockItem {
+  id?: string;
+  storeProductId?: string;
+  productId?: string;
+  name: string;
+  stock: number;
+}

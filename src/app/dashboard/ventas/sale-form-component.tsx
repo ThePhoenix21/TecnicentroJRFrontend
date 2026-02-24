@@ -28,6 +28,7 @@ import { PDFViewer, pdf, PDFDownloadLink, PDFDownloadLinkProps } from "@react-pd
 import ReceiptThermalPDF from './ReceiptThermalPDF';
 import { clientService } from '@/services/client.service';
 import { cashSessionService } from "@/services/cash-session.service";
+import { orderService } from "@/services/order.service";
 import { formatCurrency } from "@/lib/utils";
 
 // Definir el tipo para los props del PDFDownloadLink
@@ -47,7 +48,8 @@ enum PaymentType {
   PLIN = 'PLIN',
   DATAPHONE = 'DATAPHONE',
   BIZUM = 'BIZUM',
-  OTRO = 'OTRO'
+  OTRO = 'OTRO',
+  MISELANEOUS = 'MISELANEOUS' // Agregado para servicios forzados
 }
 
 type PaymentTypeValue = (typeof PaymentType)[keyof typeof PaymentType];
@@ -136,6 +138,7 @@ type Service = {
   name: string;
   description?: string;
   price: number;
+  type: 'MISELANEOUS'; // Forzar siempre MISELANEOUS
   duration?: number;
   isActive: boolean;
   createdAt: string;
@@ -163,7 +166,7 @@ export function SaleForm({
   products,
   services,
 }: SaleFormProps) {
-  const { currentStore, tenantFeatures, tenantFeaturesLoaded, tenantDefaultService, tenantDefaultServiceLoaded, canIssuePdf } = useAuth();
+  const { currentStore, tenantFeatures, tenantFeaturesLoaded, tenantDefaultService, tenantDefaultServiceLoaded, canIssuePdf, hasPermission } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState<CartItem[]>([]);
@@ -195,6 +198,9 @@ export function SaleForm({
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
+  const overlayPointerDownOutsideRef = useRef(false);
+  const hasAutoPrintedRef = useRef(false);
+  const pendingPrintWindowRef = useRef<Window | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
   const [orderResponse, setOrderResponse] = useState<any>(null);
@@ -269,6 +275,9 @@ export function SaleForm({
       amount: 0
     }]
   });
+
+  // Lock type selection when there are items in cart
+  const isTypeLocked = selectedItems.length > 0;
 
   useEffect(() => {
     if (!tenantFeaturesLoaded) return;
@@ -463,6 +472,7 @@ export function SaleForm({
     setOrderNumber(null);
     setOrderError(null); // Limpiar errores de orden
     setOrderResponse(null); // Limpiar respuesta de orden
+    hasAutoPrintedRef.current = false;
     // Reset newItem form
     setNewItem({
       id: "",
@@ -661,7 +671,7 @@ export function SaleForm({
           let unitPrice = 0;
 
           if (prev.price) {
-            const customPrice = parseFloat(prev.price);
+            const customPrice = Number(parseFloat(prev.price));
             if (!isNaN(customPrice) && customPrice >= 0) {
               unitPrice = customPrice;
             }
@@ -729,7 +739,7 @@ export function SaleForm({
       isNaN(parseInt(newItem.quantity as string, 10)) ? 1 : parseInt(newItem.quantity as string, 10)
     );
 
-    const price = parseFloat(newItem.price) || 0;
+    const price = Number(parseFloat(newItem.price)) || 0;
     const images = newItem.images || [];
     const notes = newItem.notes || "";
 
@@ -941,7 +951,7 @@ export function SaleForm({
         id: item.id || `temp-${Date.now()}-${Math.random()
           .toString(36)
           .substr(2, 9)}`,
-        price: item.price, // Mantener siempre el precio original
+        price: Number(item.price), // Mantener siempre el precio original
         quantity: quantityToAdd,
         type,
         notes: type === "service" ? notes : "",
@@ -950,8 +960,8 @@ export function SaleForm({
           productId: item.productId || item.id,
           storeProductId: item.productId || item.id,
           // Guardar el precio personalizado si es diferente al precio base
-          ...(customPrice !== undefined && customPrice > 0 && customPrice !== item.price && {
-            customPrice: customPrice
+          ...(customPrice !== undefined && customPrice > 0 && Number(customPrice) !== Number(item.price) && {
+            customPrice: Number(customPrice)
           })
         }),
         ...(type === "service" && { images }),
@@ -1044,7 +1054,15 @@ export function SaleForm({
   };
 
   // Manejar envío del formulario
-  const handleSubmit = async (paymentMethodsOverride?: PaymentMethod[]) => {
+  const handleSubmit = async (paymentMethodsOverride?: PaymentMethod[], printWindow?: Window | null) => {
+    console.log('[SaleForm][debug] handleSubmit invoked - hasOverride:', !!paymentMethodsOverride, 'isOrderPaymentsModalOpen:', isOrderPaymentsModalOpen);
+    console.trace('[SaleForm][debug] handleSubmit call stack');
+
+    if (!paymentMethodsOverride) {
+      setIsOrderPaymentsModalOpen(true);
+      return;
+    }
+
     if (selectedItems.length === 0) {
       toast.error("No hay ítems en la venta");
       return;
@@ -1085,19 +1103,19 @@ export function SaleForm({
       const productsData = selectedItems
         .filter((item) => item.type === "product")
         .map((item) => {
-          const hasCustomPrice = item.customPrice !== undefined && item.customPrice > 0 && item.customPrice !== item.price;
-          const finalPrice = hasCustomPrice ? item.customPrice! : item.price;
+          const hasCustomPrice = item.customPrice !== undefined && Number(item.customPrice) > 0 && Number(item.customPrice) !== Number(item.price);
+          const finalPrice = hasCustomPrice ? Number(item.customPrice) : Number(item.price);
           
           // Usar los métodos de pago del formulario
           const payments = item.paymentMethods.map(pm => ({
-            type: pm.type,
+            type: pm.type as 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'DATAPHONE' | 'BIZUM' | 'OTRO',
             amount: pm.amount
           }));
 
           return {
             productId: item.storeProductId || item.productId || item.id, // Usar storeProductId si existe
             quantity: item.quantity,
-            ...(hasCustomPrice ? { customPrice: finalPrice } : { price: item.price }),
+            ...(hasCustomPrice ? { customPrice: finalPrice } : { price: Number(item.price) }),
             payments
           };
         });
@@ -1124,14 +1142,14 @@ export function SaleForm({
 
             // Usar los métodos de pago del formulario
             const payments = item.paymentMethods.map(pm => ({
-              type: pm.type,
+              type: pm.type as 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'DATAPHONE' | 'BIZUM' | 'OTRO',
               amount: pm.amount
             }));
 
             return {
               name: item.name?.trim() || 'Defauld_Service',              
-              price: typeof item.price === "string" ? parseFloat(item.price) : item.price,
-              type: (item.serviceType || (tenantDefaultServiceLoaded ? tenantDefaultService : "REPAIR")),
+              price: Number(typeof item.price === "string" ? parseFloat(item.price) : item.price),
+              type: 'MISELANEOUS' as const, // Forzar siempre MISELANEOUS
               description: item.notes,
               photoUrls,
               payments
@@ -1148,9 +1166,8 @@ export function SaleForm({
       // Generar DNI único para ventas de productos si no se ingresó
       let finalDni = customerData.documentNumber?.trim();
       if (!finalDni && hasProducts && !hasServices) {
-        // Generar DNI único con timestamp para evitar colisiones
-        const timestamp = Date.now().toString().slice(-6);
-        finalDni = `00${timestamp}`;
+        // Usar DNI por defecto fijo ya que no hay colisiones en el backend
+        finalDni = "00000000";
       }
 
       // Usar los datos del cliente si hay servicios o productos, de lo contrario usar los valores por defecto
@@ -1182,7 +1199,7 @@ export function SaleForm({
         return;
       }
 
-      const totalAmount = orderPaymentMethodsToUse.reduce((sum, pm) => sum + pm.amount, 0);
+      const totalAmount = Number(orderPaymentMethodsToUse.reduce((sum, pm) => sum + pm.amount, 0));
 
       // Validar que haya una sesión de caja activa
       if (!currentCashSession) {
@@ -1193,45 +1210,92 @@ export function SaleForm({
       const saleData = {
         clientInfo,
         products: productsData,
-        services: servicesData,
-        paymentMethods: orderPaymentMethodsToUse,
+        services: servicesData.map(service => ({
+          ...service,
+          type: 'MISELANEOUS' as 'MISELANEOUS' // Forzar siempre MISELANEOUS con casting explícito
+        })),
+        paymentMethods: orderPaymentMethodsToUse.map(pm => ({
+          type: pm.type as 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'DATAPHONE' | 'BIZUM' | 'OTRO',
+          amount: pm.amount
+        })),
         totalAmount, // Agregar el monto total confirmado
         cashSessionId: currentCashSession, // Usar sesión de caja real
       };
 
       const result = await onSubmit(saleData);
 
-      if (result.success) {
-        // Guardar la respuesta completa del backend para el PDF
-        console.log("este es el resultado: ", result);
-        setOrderResponse(result.orderData || result);
-        setOrderNumber(result.orderNumber || null);
+      console.log('[SaleForm][debug] onSubmit result:', result);
 
-        if (canIssuePdf) {
-          // Mostrar el PDF solo después de que la venta se concrete exitosamente
-          console.log(" Venta completada - mostrando hoja de servicio");
+      const isSuccess = Boolean((result as any)?.success);
+      const resolvedOrderData = (result as any)?.orderData ?? (result as any)?.data ?? result;
+      const resolvedOrderId = (result as any)?.orderId ?? (resolvedOrderData as any)?.id ?? (resolvedOrderData as any)?.orderId;
+      const resolvedOrderNumber = (result as any)?.orderNumber ?? (resolvedOrderData as any)?.orderNumber;
+
+      console.log('[SaleForm][debug] resolved submit payload:', {
+        isSuccess,
+        resolvedOrderId,
+        resolvedOrderNumber,
+        hasResolvedOrderData: !!resolvedOrderData,
+      });
+
+      if (isSuccess) {
+        setOrderId(resolvedOrderId ?? null);
+        setOrderNumber(resolvedOrderNumber || null);
+
+        const canFetchOrderDetails =
+          hasPermission('MANAGE_ORDERS') &&
+          hasPermission('DETAIL_ORDERS') &&
+          hasPermission('VIEW_OWN_ORDERS_HISTORY');
+
+        if (canIssuePdf && canFetchOrderDetails) {
+          const idToFetch = String(resolvedOrderId ?? (resolvedOrderData as any)?.orderId ?? '');
+          const details = idToFetch ? await orderService.getOrderDetails(idToFetch) : resolvedOrderData;
+
+          setOrderResponse(details);
+          console.log('[SaleForm][debug] opening ServiceSheet PDF modal');
           setShowServiceSheet(true);
 
-          // El formulario se mantiene intacto hasta que el usuario cierre el PDF
-          console.log(" Hoja de servicio se mostrará - el usuario decidirá cuándo cerrar");
+          // Cerrar modal de nueva venta (dejando el comprobante abierto)
+          onClose();
+
+          if (!hasAutoPrintedRef.current) {
+            hasAutoPrintedRef.current = true;
+            // Create print window only after successful sale
+            const printWindow = window.open('about:blank', '_blank');
+            await printThermalLikeOrderDetailsDialog(details, printWindow);
+          }
         } else {
+          setOrderResponse(resolvedOrderData);
           resetSaleState();
           onClose();
         }
       }
     } catch (error) {
-      console.error("Error al procesar la venta:", error);
-
       // Extraer mensaje de error y código si están disponibles
       let errorMessage = error instanceof Error ? error.message : "Error al registrar la venta";
       let errorCode = error && typeof error === 'object' && 'code' in error ? String(error.code) : undefined;
 
+      // Manejar específicamente el error de email duplicado con DNI diferente
+      if (errorMessage.includes('El correo electrónico ya está registrado con un DNI diferente')) {
+        errorMessage = 'Este correo electrónico ya está registrado con otro DNI. Por favor, use un correo diferente o verifique el DNI ingresado.';
+        errorCode = 'EMAIL_DNI_MISMATCH';
+      }
       // Manejar específicamente el error de DNI duplicado
-      if (errorMessage.includes('Unique constraint failed on the fields: (`dni`)') ||
+      else if (errorMessage.includes('Unique constraint failed on the fields: (`dni`)') ||
         errorMessage.includes('duplicate key') ||
         errorCode === 'DNI_ALREADY_EXISTS') {
         errorMessage = 'El DNI 00000000 esta reservado para clientes por defecto. Ingrese un DNI diferente o deje el campo vacío para generar uno automáticamente.';
         errorCode = 'DNI_ALREADY_EXISTS';
+      }
+      // Manejar errores de validación comunes
+      else if (errorMessage.includes('validation') || errorMessage.includes('required')) {
+        errorMessage = 'Por favor, complete todos los campos obligatorios correctamente.';
+        errorCode = 'VALIDATION_ERROR';
+      }
+      // Manejar errores de conexión
+      else if (errorMessage.includes('network') || errorMessage.includes('connection')) {
+        errorMessage = 'Error de conexión. Por favor, verifique su conexión a internet e intente nuevamente.';
+        errorCode = 'CONNECTION_ERROR';
       }
 
       // Guardar el error en el estado para mostrarlo en la UI
@@ -1584,9 +1648,6 @@ export function SaleForm({
     </div>
   );
 
-  // Registrar la imagen del logo
-  const logo = '/icons/logo-jr-g.png';
-
   // Registrar fuentes
   Font.register({
     family: 'Helvetica',
@@ -1745,8 +1806,72 @@ export function SaleForm({
     return 'dni'; // Valor por defecto
   };
 
+  const printThermalLikeOrderDetailsDialog = useCallback(async (details: any, printWindow?: Window | null) => {
+    if (!details) return;
+
+    try {
+      const blob = await pdf(
+        <ReceiptThermalPDF
+          saleData={details}
+          businessInfo={businessInfo}
+          isCompleted={false}
+        />
+      ).toBlob();
+
+      const url = URL.createObjectURL(blob);
+      const resolvedPrintWindow = printWindow ?? window.open(url, '_blank');
+
+      if (resolvedPrintWindow) {
+        if (printWindow) {
+          try {
+            resolvedPrintWindow.location.href = url;
+          } catch {
+            // Si falla por políticas del navegador, se intentará igualmente con onload
+          }
+        }
+
+        // Esperar a que cargue el PDF antes de imprimir (patrón usado en Caja)
+        setTimeout(() => {
+          resolvedPrintWindow.print();
+          resolvedPrintWindow.onafterprint = () => {
+            resolvedPrintWindow.close();
+            URL.revokeObjectURL(url);
+          };
+        }, 1000);
+      } else {
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${details?.orderNumber || 'comprobante-venta'}-termico.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.error("Ventana emergente bloqueada. El PDF se descargó en su lugar.");
+      }
+    } catch (error) {
+      console.error("Error al generar PDF para impresión:", error);
+      toast.error("Error al generar el PDF para impresión");
+    }
+  }, [businessInfo]);
+
   return (
-    <div className={`fixed inset-0 bg-black/90 flex items-start md:items-center justify-center z-50 p-2 md:p-4 overflow-y-auto ${!isOpen ? 'hidden' : ''}`}>
+    <div 
+      className={`fixed inset-0 bg-black/90 flex items-start md:items-center justify-center z-50 p-2 md:p-4 overflow-y-auto ${(!isOpen && !showServiceSheet) ? 'hidden' : ''}`}
+      onPointerDown={(e) => {
+        overlayPointerDownOutsideRef.current = e.target === e.currentTarget;
+      }}
+      onPointerUp={(e) => {
+        const pointerUpOnOverlay = e.target === e.currentTarget;
+        if (overlayPointerDownOutsideRef.current && pointerUpOnOverlay) {
+          onClose();
+        }
+        overlayPointerDownOutsideRef.current = false;
+      }}
+      onPointerCancel={() => {
+        overlayPointerDownOutsideRef.current = false;
+      }}
+    >
       <div className="bg-background border border-muted rounded-3xl shadow-xl w-full max-w-4xl max-h-[95vh] md:max-h-[90vh] flex flex-col">
         <div className="flex justify-between items-center p-3 md:p-4 border-b rounded-t-3xl sticky top-0 bg-background z-10">
           <h2 className="text-lg md:text-xl font-semibold">Nueva Venta</h2>
@@ -1763,19 +1888,13 @@ export function SaleForm({
           </div>
         </div>
 
-        {/* Referencia para la impresión - ya no se usa, se mantiene para compatibilidad */}
-        <div ref={receiptRef} className="hidden" />
-
         {/* Diálogo de hoja de servicio */}
         <Dialog open={showServiceSheet} onOpenChange={(open) => {
           if (!open) {
-            console.log(" Usuario cerró hoja de servicio - reseteando formulario y cerrando modal padre");
-            resetSaleState(); // Reset completo cuando el usuario cierra la hoja de servicio
-            setShowServiceSheet(false);
-            onClose(); // Cerrar el modal padre
+            resetSaleState();
           }
         }}>
-          <DialogContent className="w-[98vw] max-w-[98vw] h-[98vh] max-h-[98vh] flex flex-col p-0 overflow-hidden">
+          <DialogContent className="w-[98vw] max-w-[98vw] h-[98vh] max-h-[98vh] flex flex-col p-0 overflow-hidden z-[60]">
             <DialogHeader className="px-6 pt-4 pb-2 border-b">
               <div className="flex justify-between items-center">
                 <DialogTitle className="text-2xl font-bold">
@@ -1895,8 +2014,8 @@ export function SaleForm({
                     name="type"
                     value={newItem.type}
                     onChange={handleNewItemChange}
-                    className="w-full p-2 bg-muted border rounded"
-                    disabled={!(canSellProducts && canSellServices)}
+                    className={`w-full p-2 bg-muted border rounded ${isTypeLocked ? 'text-gray-500' : ''}`}
+                    disabled={!(canSellProducts && canSellServices) || isTypeLocked}
                     required
                   >
                     {canSellProducts && <option value="product">Producto</option>}
@@ -1937,22 +2056,39 @@ export function SaleForm({
                           }
                         })()
                       }
-                      required={newItem.type === 'product'}
                     />
                     {isDropdownOpen && newItem.type === "product" && (
                       <div className="absolute z-10 w-full mt-1 bg-card text-card-foreground border rounded-md shadow-lg max-h-60 overflow-auto dark:bg-gray-800 dark:border-gray-700">
-                        {filteredItems().map((item) => (
-                          <div
-                            key={item.id}
-                            className="px-4 py-2 hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors duration-200 dark:hover:bg-gray-700"
-                            onClick={() => handleItemSelect(item)}
-                          >
-                            <div className="font-medium">{item.name}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {formatCurrency(item.price)}
+                        {filteredItems().map((item) => {
+                          const isProduct = "stock" in item;
+                          const stock = isProduct ? (item as any).stock : 0;
+                          const hasStock = isProduct && stock > 0;
+                          
+                          return (
+                            <div
+                              key={item.id}
+                              className={`px-4 py-2 hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors duration-200 dark:hover:bg-gray-700 ${
+                                isProduct && !hasStock ? 'border-l-4 border-red-500 bg-red-50' : ''
+                              }`}
+                              onClick={() => handleItemSelect(item)}
+                            >
+                              <div className="font-medium flex items-center justify-between">
+                                <span>{item.name}</span>
+                                {isProduct && !hasStock && (
+                                  <span className="text-xs text-red-600 font-semibold">SIN STOCK</span>
+                                )}
+                              </div>
+                              <div className="text-sm text-muted-foreground flex items-center justify-between">
+                                <span>{formatCurrency(item.price)}</span>
+                                {isProduct && (
+                                  <span className={`text-xs ${hasStock ? 'text-green-600' : 'text-red-600'}`}>
+                                    Stock: {stock}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                         {filteredItems().length === 0 && (
                           <div className="p-2 text-gray-500">
                             No se encontraron productos
@@ -1985,7 +2121,7 @@ export function SaleForm({
                       let unitPrice = 0;
 
                       if (newItem.price) {
-                        const customPrice = parseFloat(newItem.price as string);
+                        const customPrice = Number(parseFloat(newItem.price as string));
                         if (!isNaN(customPrice) && customPrice >= 0) {
                           unitPrice = customPrice;
                         }
@@ -1998,7 +2134,7 @@ export function SaleForm({
                       expectedTotal = unitPrice * quantityNumber;
                     } else {
                       // Para servicios: usar el precio ingresado y la cantidad (1 para servicio)
-                      const unitPrice = parseFloat(newItem.price as string) || 0;
+                      const unitPrice = Number(parseFloat(newItem.price as string)) || 0;
                       const qty = showQuantity ? quantityNumber : 1;
                       expectedTotal = unitPrice * qty;
                     }
@@ -2060,17 +2196,17 @@ export function SaleForm({
 
                 {newItem.type === "service" && (
                   <>
-                    <div className="space-y-2">
+                    {/* Tipo de servicio oculto - siempre MISELANEOUS */}
+                    <div className="space-y-2 hidden">
                       <label className="text-sm font-medium">Tipo de servicio</label>
                       <select
                         name="serviceType"
-                        value={newItem.serviceType || (tenantDefaultServiceLoaded ? tenantDefaultService : "REPAIR")}
+                        value="MISELANEOUS"
                         onChange={handleNewItemChange}
                         className="w-full p-2 bg-muted border rounded"
                         required
+                        disabled
                       >
-                        <option value="REPAIR">Reparación</option>
-                        <option value="WARRANTY">Garantía</option>
                         <option value="MISELANEOUS">Misceláneo</option>
                       </select>
                     </div>
@@ -2147,7 +2283,8 @@ export function SaleForm({
                                 }}
                                 className="text-sm text-primary hover:underline flex items-center cursor-pointer"
                               >
-                                <Plus className="w-3 h-3" /> Agregar más
+                                <Plus className="w-3 h-3" />
+                                Agregar más
                               </div>
                             </div>
 
@@ -2283,7 +2420,7 @@ export function SaleForm({
                                       }
                                       className="w-20 px-1 border rounded text-sm text-right"
                                       min="0"
-                                      step="0.01"
+                                      step="0.1"
                                     />
                                   </>
                                 ) : (
@@ -2454,7 +2591,7 @@ export function SaleForm({
                                       e.stopPropagation();
                                       setForceSubmit(true);
                                       setShowUploadError(false);
-                                      handleSubmit();
+                                      setIsOrderPaymentsModalOpen(true);
                                     }}
                                   >
                                     Continuar sin imágenes
@@ -2566,12 +2703,14 @@ export function SaleForm({
                               ? orderPaymentMethods
                               : [{ id: "1", type: PaymentType.EFECTIVO, amount: 0 }];
 
-                            const shouldPrefill = baseMethods.every((m) => m.amount === 0);
+                            const hasProducts = selectedItems.some((item) => item.type === "product");
+                            const initialAmount = hasProducts ? orderTotal : 0;
 
                             setOrderPaymentMethodsDraft(
-                              shouldPrefill
-                                ? baseMethods.map((m, idx) => (idx === 0 ? { ...m, amount: orderTotal } : m))
-                                : baseMethods
+                              baseMethods.map((m, idx) => ({
+                                ...m,
+                                amount: idx === 0 ? initialAmount : 0,
+                              }))
                             );
 
                             setIsOrderPaymentsModalOpen(true);

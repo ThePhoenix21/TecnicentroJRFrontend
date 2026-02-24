@@ -1,5 +1,5 @@
 import { api } from './api';
-import { CashSession } from '@/types/cash.types';
+import { CashSession, CashClosingPrintResponse } from '@/types/cash.types';
 
 export interface CreateCashSessionRequest {
   storeId: string;
@@ -10,6 +10,23 @@ export interface CloseCashSessionRequest {
   email: string;
   password: string;
   declaredAmount?: number;
+}
+
+export interface GetClosedCashSessionsRequest {
+  storeId?: string;
+  from?: string;
+  to?: string;
+  openedByName?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface GetClosedCashSessionsResponse {
+  data: CashSession[];
+  total: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
 }
 
 export class CashSessionService {
@@ -30,6 +47,32 @@ export class CashSessionService {
     }
   }
 
+  // ✅ Obtener sesiones de caja cerradas por tienda (con filtros y paginación)
+  async getClosedCashSessionsByStore(payload: GetClosedCashSessionsRequest): Promise<GetClosedCashSessionsResponse> {
+    try {
+      const token = localStorage.getItem("auth_token");
+      
+      // Construir query params para GET
+      const queryParams = new URLSearchParams();
+      if (payload.storeId) queryParams.set('storeId', payload.storeId);
+      if (payload.from) queryParams.set('from', payload.from);
+      if (payload.to) queryParams.set('to', payload.to);
+      if (payload.openedByName) queryParams.set('openedByName', payload.openedByName);
+      if (payload.page) queryParams.set('page', payload.page.toString());
+      if (payload.pageSize) queryParams.set('pageSize', payload.pageSize.toString());
+      
+      const response = await api.get(`/cash-session/store/closed?${queryParams.toString()}`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error al obtener sesiones de caja cerradas:', error);
+      throw error;
+    }
+  }
 
   // ✅ Obtener sesiones de caja por tienda (con paginación)
   async getCashSessionsByStore(storeId: string, page: number = 1, limit: number = 20): Promise<any> {
@@ -80,8 +123,12 @@ export class CashSessionService {
         }
       });
       return response.data;
-    } catch (error) {
-      console.error('Error al crear sesión de caja:', error);
+    } catch (error: any) {
+      // 409 es un caso de negocio esperado (sesión abierta en otra tienda)
+      // y se maneja en la UI con un modal específico.
+      if (error?.response?.status !== 409) {
+        console.error('Error al crear sesión de caja:', error);
+      }
       throw error;
     }
   }
@@ -140,7 +187,23 @@ export class CashSessionService {
       throw error;
     }
   }
-}
 
+  // ✅ Obtener datos listos para impresión del cierre de caja
+  async getCashClosingPrint(sessionId: string): Promise<CashClosingPrintResponse> {
+    try {
+      const token = localStorage.getItem("auth_token");
+      const response = await api.get(`/cash-session/${sessionId}/closing-print`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}` 
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error al obtener datos de impresión de cierre de caja:', error);
+      throw error;
+    }
+  }
+}
 
 export const cashSessionService = new CashSessionService();

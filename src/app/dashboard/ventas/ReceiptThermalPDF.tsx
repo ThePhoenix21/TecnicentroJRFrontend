@@ -2,9 +2,25 @@ import React from 'react';
 import { Document, Page, Text, View, StyleSheet, Font, Image } from '@react-pdf/renderer';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { jwtDecode } from 'jwt-decode';
 
-// Logo import
-const logo = '/icons/logo-jr-g.png';
+interface TenantTokenPayload {
+  tenantLogoUrl?: string;
+}
+
+const resolveTenantLogoUrlFromToken = (): string | undefined => {
+  if (typeof window === 'undefined') return undefined;
+
+  try {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return undefined;
+    const decoded = jwtDecode<TenantTokenPayload>(token);
+    return decoded.tenantLogoUrl || undefined;
+  } catch (error) {
+    console.error('Error al obtener tenantLogoUrl del token:', error);
+    return undefined;
+  }
+};
 
 // Register font for better text rendering
 Font.register({
@@ -77,7 +93,7 @@ const styles = StyleSheet.create({
   divider: {
     borderBottomWidth: 1,
     borderBottomColor: '#000',
-    borderBottomStyle: 'solid',
+    borderBottomStyle: 'dashed',
     marginVertical: 4,
   },
   row: {
@@ -180,12 +196,23 @@ const formatDate = (date: Date = new Date()): string[] => {
 
 const ReceiptThermalPDF: React.FC<ReceiptThermalPDFProps> = ({ saleData, businessInfo, isCompleted = true }) => {
   const now = new Date(); 
-  
+  const parseAmount = (value: unknown, fallback = 0): number => {
+    if (value === null || value === undefined || value === '') return fallback;
+    const numeric = typeof value === 'string' ? parseFloat(value) : Number(value);
+    return Number.isFinite(numeric) ? numeric : fallback;
+  };
+
   // Detectar si la respuesta tiene productos y/o servicios
   const productos = saleData.productos || [];
   const servicios = saleData.servicios || [];
 
-  const adelanto = saleData.adelantos;
+  const adelanto = parseAmount(
+    saleData.adelantos ??
+    saleData.adelanto ??
+    saleData.advance ??
+    saleData.deposit ??
+    saleData.deposito
+  );
 
   // El backend devuelve client o cliente según el caso
   const rawClient = saleData.client || saleData.cliente || {};
@@ -203,26 +230,85 @@ const ReceiptThermalPDF: React.FC<ReceiptThermalPDFProps> = ({ saleData, busines
 
   // Calcular totales reales iterando sobre los items para considerar descuentos
   const totalProductos = productos.reduce((sum: number, item: any) => {
-    const precio = item.precioUnitario || item.price || 0;
-    const cantidad = item.cantidad || item.quantity || 1;
-    const descuento = item.descuento || 0;
+    const precio = parseAmount(item.precioUnitario ?? item.price);
+    const cantidad = parseAmount(item.cantidad ?? item.quantity, 1);
+    const descuento = parseAmount(item.descuento);
     return sum + (precio * cantidad) - descuento;
   }, 0);
 
   const totalServicios = servicios.reduce((sum: number, item: any) => {
-    return sum + (item.precio || item.price || 0);
+    return sum + parseAmount(item.precio ?? item.price);
   }, 0);
 
   const subtotalCalculado = totalProductos + totalServicios;
 
+  const paymentMethodsSource =
+    saleData.paymentMethods ??
+    saleData.metodosPago ??
+    saleData.metodos_pago ??
+    saleData.payments ??
+    saleData.pagos ??
+    saleData.order?.paymentMethods ??
+    saleData.order?.payments ??
+    [];
+
+  const rawPaymentMethods = Array.isArray(paymentMethodsSource)
+    ? paymentMethodsSource
+    : (paymentMethodsSource && typeof paymentMethodsSource === 'object')
+      ? Object.values(paymentMethodsSource)
+      : [];
+
+  const totalPaidFromMethods = rawPaymentMethods.reduce((sum: number, method: any) => {
+    return sum + parseAmount(method?.amount);
+  }, 0);
+
+  const totalPaidDirect = parseAmount(
+    saleData.totalPaid ??
+    saleData.totalPagado ??
+    saleData.pagado ??
+    saleData.order?.totalPaid ??
+    saleData.order?.totalPagado ??
+    saleData.order?.pagado
+  );
+
+  const totalPaidForOrder =
+    totalPaidFromMethods > 0
+      ? totalPaidFromMethods
+      : totalPaidDirect > 0
+        ? totalPaidDirect
+        : adelanto;
+
+  const pendingFromApi = parseAmount(
+    saleData.pendingAmount ??
+    saleData.pending ??
+    saleData.totalPending ??
+    saleData.montoPendiente ??
+    saleData.saldo ??
+    saleData.order?.pendingAmount ??
+    saleData.order?.saldo
+  );
+
+  const pendingForOrder = pendingFromApi > 0
+    ? pendingFromApi
+    : Math.max(subtotalCalculado - totalPaidForOrder, 0);
+
+  const shouldShowServiceSummary = hasServicios && totalServicios > 0;
+  const servicePaidAmount = shouldShowServiceSummary ? Math.min(totalPaidForOrder, totalServicios) : 0;
+  const servicePendingAmount = shouldShowServiceSummary ? Math.max(totalServicios - totalPaidForOrder, 0) : 0;
+
   // Cálculos para el resumen financiero
-  const showAdelanto = adelanto && !isCompleted;
+  const showAdelanto = adelanto > 0 && !isCompleted;
   const totalLabel = (!isCompleted && hasServicios) ? "Pendiente:" : "TOTAL:";
   
   // Lógica de visualización del monto final:
   const totalDisplayAmount = (!isCompleted && hasServicios) 
-    ? (subtotalCalculado - (adelanto || 0)) 
+    ? pendingForOrder 
     : subtotalCalculado;
+
+  const tenantLogoUrl = resolveTenantLogoUrlFromToken();
+  const receiptCode = saleData.orderNumber
+    || (typeof saleData.orderId === 'string' ? saleData.orderId.substring(0, 8).toUpperCase() : undefined)
+    || (typeof saleData.id === 'string' ? saleData.id.substring(0, 8).toUpperCase() : '');
 
   return (
     <Document>
@@ -231,10 +317,7 @@ const ReceiptThermalPDF: React.FC<ReceiptThermalPDFProps> = ({ saleData, busines
           {/* Encabezado del negocio */}
           <View style={styles.header}>
             <View style={styles.logoContainer}>
-              <Image 
-                src={logo} 
-                style={styles.logo}
-              />
+              {!!tenantLogoUrl && <Image src={tenantLogoUrl} style={styles.logo} />}
             </View>
             <Text style={styles.businessName}>{businessInfo.name}</Text>
             <Text style={styles.businessInfo}>{businessInfo.address}</Text>
@@ -255,9 +338,9 @@ const ReceiptThermalPDF: React.FC<ReceiptThermalPDFProps> = ({ saleData, busines
           {
             (!isCompleted && hasServicios) ? <Text style={styles.title}>ORDEN DE TRABAJO</Text> : <Text style={styles.title}>NOTA DE VENTA</Text>
           }          
-          <Text style={styles.subtitle}>
-            {saleData.orderNumber || saleData.orderId.substring(0, 8).toUpperCase()}
-          </Text>
+          {receiptCode ? (
+            <Text style={styles.subtitle}>{receiptCode}</Text>
+          ) : null}
 
           <View style={styles.divider} />
 
@@ -332,8 +415,8 @@ const ReceiptThermalPDF: React.FC<ReceiptThermalPDFProps> = ({ saleData, busines
                 <Text style={[styles.textBold, { width: 40, textAlign: 'right' }]}>Importe</Text>
               </View>
               {productos.map((item: any, index: number) => {
-                const cantidad = item.cantidad || item.quantity || 1;
-                const unitPrice = item.precioUnitario || item.price || 0;
+                const cantidad = parseAmount(item.cantidad ?? item.quantity, 1);
+                const unitPrice = parseAmount(item.precioUnitario ?? item.price);
                 const total = unitPrice * cantidad;
 
                 return (
@@ -378,7 +461,7 @@ const ReceiptThermalPDF: React.FC<ReceiptThermalPDFProps> = ({ saleData, busines
                       {item.nombre || item.name}
                     </Text>
                     <Text style={styles.itemPrice}>
-                      {formatCurrency(item.precio || item.price || 0)}
+                      {formatCurrency(parseAmount(item.precio ?? item.price))}
                     </Text>
                   </View>
                   {item.descripcion && (
@@ -399,10 +482,22 @@ const ReceiptThermalPDF: React.FC<ReceiptThermalPDFProps> = ({ saleData, busines
               <Text>Subtotal:</Text>
               <Text>{formatCurrency(subtotalCalculado)}</Text>
             </View>
+
+            {shouldShowServiceSummary && !isCompleted && (
+              <View style={{ marginTop: 4 }}>
+                <Text style={[styles.textBold, { marginBottom: 2 }]}>Historial de pagos</Text>
+                <View style={styles.row}>
+                  <Text>Pago realizado / Adelanto:</Text>
+                  <Text>{formatCurrency(servicePaidAmount)}</Text>
+                </View>                
+              </View>
+            )}
+
             {showAdelanto && <View style={styles.row}>
-              <Text style={{ marginTop: 4 }}>adelanto:</Text>
+              <Text style={{ marginTop: 4 }}>Adelanto registrado:</Text>
               <Text style={{ marginTop: 4 }}>{formatCurrency(adelanto)}</Text>
             </View>}
+
             <View style={[styles.row, styles.textBold, { marginTop: 4 }]}>
               <Text>{totalLabel}</Text>
               <Text>

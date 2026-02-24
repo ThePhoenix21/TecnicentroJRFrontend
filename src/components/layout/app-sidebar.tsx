@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -15,9 +15,12 @@ import {
   Building,
   DollarSign,
   ClipboardCheck,
+  Warehouse,
+  LifeBuoy,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from '@/contexts/auth-context';
+import { usePermissions } from '@/hooks/usePermissions';
 import { AuthStore } from '@/contexts/auth-context';
 import {
   Select,
@@ -31,121 +34,110 @@ type SidebarItem = {
   name: string;
   href: string;
   icon: React.ComponentType<any>;
-  roles: string[];
   requiredPermissions?: string[];
   requiredTenantFeatures?: string[];
 };
 
 const getSidebarItems = (
-  userRole: string,
-  hasPermission?: (permission: string) => boolean,
+  hasPermission: (permission: string) => boolean,
   tenantFeatures?: string[],
   tenantFeaturesLoaded?: boolean
 ) => {
   const baseItems: SidebarItem[] = [
     {
-      name: "Dashboard",
+      name: "Panel de control",
       href: "/dashboard",
       icon: LayoutDashboard,
-      roles: ["ADMIN", "USER"],
       requiredTenantFeatures: ["DASHBOARD"],
-      requiredPermissions: [
-        // Permisos antiguos
-        "dashboard.view",
-        // Permisos nuevos
-        "VIEW_DASHBOARD",
-      ],
+      requiredPermissions: ["VIEW_DASHBOARD"],
     },
     {
       name: "Tiendas",
       href: "/dashboard/tiendas",
       icon: Building,
-      roles: ["ADMIN"],
       requiredTenantFeatures: ["STORE", "STORES"],
+      requiredPermissions: ["VIEW_STORES"],
     },
     {
       name: "Caja",
       href: "/dashboard/caja",
       icon: DollarSign,
-      roles: ["ADMIN", "USER"],
       requiredTenantFeatures: ["CASH"],
-      requiredPermissions: [
-        // Caja (ver y gestionar)
-        "VIEW_CASH",
-        "MANAGE_CASH",
-      ],
+      requiredPermissions: ["VIEW_CASH"],
     },
     {
       name: "Ventas",
       href: "/dashboard/ventas",
       icon: ShoppingCart,
-      roles: ["ADMIN", "USER"],
       requiredTenantFeatures: ["SALES", "ORDERS", "SALESOFPRODUCTS", "SALESOFSERVICES"],
-      requiredPermissions: [
-        // Ventas / Órdenes (ver y gestionar)
-        "VIEW_ORDERS",
-        "MANAGE_ORDERS",
-      ],
+      requiredPermissions: ["VIEW_ORDERS"],
     },
     {
       name: "Servicios",
       href: "/dashboard/servicios",
       icon: FileText,
-      roles: ["ADMIN", "USER"],
       requiredTenantFeatures: ["SERVICES"],
-      requiredPermissions: [
-        // Servicios (ver/gestionar)
-        "services.read", // compatibilidad antigua
-        "VIEW_SERVICES",
-        "MANAGE_SERVICES",
-      ],
+      requiredPermissions: ["VIEW_SERVICES", "VIEW_ALL_SERVICES"],
     },
     {
       name: "Productos",
       href: "/dashboard/productos",
       icon: Package,
-      roles: ["ADMIN", "USER"],
       requiredTenantFeatures: ["PRODUCTS"],
-      requiredPermissions: [
-        // Productos (ver/gestionar)
-        "products.read",
-        "VIEW_PRODUCTS",
-        "MANAGE_PRODUCTS",
-      ],
+      requiredPermissions: ["VIEW_PRODUCTS"],
     },
     {
       name: "Inventario",
       href: "/dashboard/inventario",
       icon: ClipboardCheck,
-      roles: ["ADMIN", "USER"],
       requiredTenantFeatures: ["INVENTORY"],
-      requiredPermissions: [
-        // Inventario (ver/gestionar)
-        "inventory.read",
-        "VIEW_INVENTORY",
-        "MANAGE_INVENTORY",
-      ],
+      requiredPermissions: ["VIEW_INVENTORY"],
+    },
+    {
+      name: "Soporte Técnico",
+      href: "/dashboard/support",
+      icon: LifeBuoy,
+      requiredPermissions: ["VIEW_SUPPORT"],
+    },
+    {
+      name: "Almacenes",
+      href: "/dashboard/warehouses",
+      icon: Warehouse,
+      requiredTenantFeatures: ["INVENTORY"],
+      requiredPermissions: ["VIEW_WAREHOUSES"],
     },
     {
       name: "Clientes",
       href: "/dashboard/clientes",
       icon: Users,
-      roles: ["ADMIN", "USER"],
       requiredTenantFeatures: ["CLIENTS"],
-      requiredPermissions: [
-        // Clientes (ver/gestionar)
-        "clients.read",
-        "VIEW_CLIENTS",
-        "MANAGE_CLIENTS",
-      ],
+      requiredPermissions: ["VIEW_CLIENTS"],
     },
     {
-      name: "Configuración",
+      name: "Empleados",
+      href: "/dashboard/empleados",
+      icon: Users,
+      requiredPermissions: ["VIEW_EMPLOYEES"],
+    },
+    {
+      name: "Proveedores",
+      href: "/dashboard/proveedores",
+      icon: Users,
+      requiredPermissions: ["VIEW_SUPPLIERS"],
+    },
+    {
+      name: "Órdenes de suministro",
+      href: "/dashboard/ordenes-suministro",
+      icon: ClipboardCheck,
+      requiredTenantFeatures: ["INVENTORY"],
+      requiredPermissions: ["VIEW_SUPPLY_ORDERS"],
+    },
+    {
+      name: "Usuarios",
       href: "/dashboard/configuracion/usuarios",
       icon: Users,
-      roles: ["ADMIN"],
       requiredTenantFeatures: ["CONFIG", "SETTINGS"],
-      // Acceso solo por rol ADMIN; no depende de permisos específicos
+      requiredPermissions: ["VIEW_USERS"],
     },
   ];
 
@@ -157,39 +149,32 @@ const getSidebarItems = (
     return required.some((f) => normalizedTenantFeatures.includes(String(f).toUpperCase()));
   };
 
-  // Filtrado por rol + permisos
+  // Filtrado solo por permisos y tenant features
   return baseItems.filter((item) => {
-    // 1) Rol
-    if (!item.roles.includes(userRole)) return false;
-
-    // 1.1) Tenant features (aplica para ADMIN y USER)
+    // 1) Tenant features
     if (!hasTenantFeature(item.requiredTenantFeatures)) return false;
 
-    // 2) Admin ve todo lo que su rol permite
-    if (userRole === 'ADMIN') return true;
-
-    // 3) Si no se definieron permisos específicos, basta con el rol
+    // 2) Si no se definieron permisos específicos, mostrar el item
     if (!item.requiredPermissions || item.requiredPermissions.length === 0) {
       return true;
     }
 
-    // 4) Si no tenemos hasPermission (por seguridad), dejar pasar
-    if (!hasPermission) return true;
-
-    // 5) USER: al menos uno de los permisos requeridos debe cumplirse
+    // 3) Verificar permisos: al menos uno de los permisos requeridos debe cumplirse
     return item.requiredPermissions.some((perm) => hasPermission(perm));
   });
 };
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { user, logout, currentStore, hasPermission, selectStore, isAdmin, tenantFeatures, tenantFeaturesLoaded } = useAuth();
-  const userRole = (user?.role || 'USER').toUpperCase();
-  const sidebarItems = getSidebarItems(userRole || 'USER', hasPermission, tenantFeatures, tenantFeaturesLoaded);
+  const router = useRouter();
+  const { user, logout, currentStore, hasPermission, selectStore, tenantFeatures, tenantFeaturesLoaded } = useAuth();
+  const { hasPermission: hasPermissionHook, canManageUsers } = usePermissions();
+  const sidebarItems = getSidebarItems(hasPermissionHook, tenantFeatures, tenantFeaturesLoaded);
+
+  const canSelectStore = (user?.stores?.length || 0) > 1;
 
   console.log('🔍 Sidebar Debug:', {
     user,
-    userRole,
     sidebarItems,
     currentStore,
     storeName: currentStore?.name,
@@ -211,13 +196,14 @@ export function AppSidebar() {
               <Building className="h-5 w-5 text-primary" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Tienda</p>
-                {isAdmin ? (
+                {canSelectStore ? (
                   <Select
                     value={currentStore.id}
                     onValueChange={(storeId) => {
                       const nextStore = user?.stores?.find((s) => s.id === storeId);
                       if (nextStore) {
                         selectStore(nextStore as AuthStore);
+                        router.refresh();
                       }
                     }}
                   >

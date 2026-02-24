@@ -40,3 +40,8 @@ export interface StoreResponse {
 export interface StoreListResponse {
   stores: Store[];
 }
+
+export interface StoreLookupItem {
+  id: string;
+  name: string;
+}

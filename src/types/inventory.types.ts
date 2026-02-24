@@ -1,8 +1,8 @@
-export type InventoryMovementType = 'INCOMING' | 'OUTGOING' | 'ADJUST' | 'SALE';
+export type InventoryMovementType = 'INCOMING' | 'OUTGOING' | 'ADJUST' | 'SALE' | 'RETURN';
 
 export interface InventoryMovement {
   id: string;
-  storeProductId: string;
+  storeProductId?: string;
   storeProduct?: {
     id: string;
     product: {
@@ -11,7 +11,7 @@ export interface InventoryMovement {
     };
     stock: number;
   };
-  storeId: string;
+  storeId?: string;
   store?: {
     name: string;
   };
@@ -20,7 +20,7 @@ export interface InventoryMovement {
   previousStock?: number; // Si el backend lo devuelve
   newStock?: number;      // Si el backend lo devuelve
   description?: string;
-  date: string; // Corresponde al campo @default(now()) del backend
+  date?: string; // Corresponde al campo @default(now()) del backend
   createdAt?: string; // Mantenemos opcional por compatibilidad si se agrega luego
   createdById?: string; // El backend devuelve userId, pero mantenemos esto por si hay mapeo
   userId?: string;      // Agregamos userId directo del modelo
@@ -32,6 +32,10 @@ export interface InventoryMovement {
     name: string;
     email: string;
   };
+
+  // Formato simplificado (historial): { date, name, userName }
+  name?: string;
+  userName?: string;
 }
 
 export interface CreateInventoryMovementDTO {
@@ -46,6 +50,36 @@ export interface InventoryMovementFilters {
   storeProductId?: string;
   startDate?: string;
   endDate?: string;
+}
+
+export interface InventoryMovementsQuery {
+  page?: number;
+  pageSize?: number;
+  name?: string;
+  type?: InventoryMovementType;
+  userId?: string;
+  userName?: string;
+  fromDate?: string;
+  toDate?: string;
+  storeId?: string;
+}
+
+export interface InventoryMovementsListResponse {
+  data: InventoryMovement[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface ProductLookupItem {
+  id: string;
+  name: string;
+}
+
+export interface UserLookupItem {
+  id: string;
+  name: string;
 }
 
 export interface InventoryStats {
@@ -67,6 +101,24 @@ export interface InventoryStats {
     threshold: number;
     status: 'NORMAL' | 'LOW' | 'CRITICAL';
   }>;
+}
+
+export interface InventorySummaryPeriod {
+  from: string;
+  to: string;
+}
+
+export interface InventorySummaryTotals {
+  incoming: number;
+  outgoing: number;
+  sales: number;
+  adjustmentsNet: number;
+}
+
+export interface InventorySummaryResponse {
+  period: InventorySummaryPeriod;
+  storeId: string;
+  totals: InventorySummaryTotals;
 }
 
 // Interfaces para Inventario Físico

@@ -1,17 +1,59 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { ArrowRight, MoveHorizontal, ClipboardCheck, BarChart3 } from "lucide-react";
-import Link from "next/link";
+import { useMemo, useState } from "react";
+import { MoveHorizontal, ClipboardCheck, BarChart3 } from "lucide-react";
+
 import { useAuth } from "@/contexts/auth-context";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import dynamic from "next/dynamic";
+
+const InventoryMovements = dynamic(() => import("./movimientos/page"), {
+  ssr: false,
+});
+
+const InventoryFisico = dynamic(() => import("./conteo-fisico/page"), {
+  ssr: false,
+});
+
+const InventoryReportes = dynamic(() => import("./reportes/page"), {
+  ssr: false,
+});
 
 export default function InventoryDashboard() {
   const { hasPermission } = useAuth();
+  const [activeTab, setActiveTab] = useState("movimientos");
 
   const canViewInventory = hasPermission("VIEW_INVENTORY") || hasPermission("inventory.read");
-  const canManageInventory = hasPermission("MANAGE_INVENTORY") || hasPermission("inventory.manage");
+  const canStartPhysicalInventory = hasPermission("START_PHYSICAL_INVENTORY");
 
-  // Si no puede ni siquiera ver el inventario, mostrar mensaje de acceso restringido
+  const availableTabs = useMemo(() => {
+    const tabs = [
+      {
+        value: "movimientos",
+        label: "Movimientos",
+        description: "Historial y registro de entradas/salidas",
+        icon: MoveHorizontal,
+        disabled: false,
+      },
+      {
+        value: "fisico",
+        label: "Inventario Físico",
+        description: "Conteos y ajustes mensuales",
+        icon: ClipboardCheck,
+        disabled: false,
+      },
+      {
+        value: "reportes",
+        label: "Reportes",
+        description: "Estadísticas y productos críticos",
+        icon: BarChart3,
+        disabled: false,
+      },
+    ];
+
+    return tabs;
+  }, [canStartPhysicalInventory]);
+
   if (!canViewInventory) {
     return (
       <div className="p-6">
@@ -23,67 +65,44 @@ export default function InventoryDashboard() {
     );
   }
 
-  const modules = [
-    // Movimientos: visible para cualquiera que pueda ver inventario (solo lectura si no tiene MANAGE_INVENTORY)
-    {
-      title: "Movimientos",
-      description: "Ver historial de entradas, salidas y ajustes de stock.",
-      icon: MoveHorizontal,
-      href: "/dashboard/inventario/movimientos",
-      color: "text-blue-500",
-      bgColor: "bg-blue-500/10",
-    },
-    // Inventario Físico: solo visible si puede gestionar inventario
-    ...(canManageInventory
-      ? [
-          {
-            title: "Inventario Físico",
-            description: "Realizar conteo mensual y ajustes.",
-            icon: ClipboardCheck,
-            href: "/dashboard/inventario/conteo-fisico",
-            color: "text-green-500",
-            bgColor: "bg-green-500/10",
-          },
-        ]
-      : []),
-    // Reportes: visible con solo VIEW_INVENTORY
-    {
-      title: "Reportes",
-      description: "Visualizar estadísticas y productos críticos.",
-      icon: BarChart3,
-      href: "/dashboard/inventario/reportes",
-      color: "text-orange-500",
-      bgColor: "bg-orange-500/10",
-    },
-  ];
-
   return (
-    <div className="space-y-6 p-6">
-      <div>
+    <div className="space-y-6 p-4 sm:p-6">
+      <div className="space-y-1">
+        <p className="text-sm text-muted-foreground uppercase tracking-wide">Inventario</p>
         <h1 className="text-3xl font-bold tracking-tight">Gestión de Inventario</h1>
-        <p className="text-muted-foreground">Administra el stock, movimientos y auditorías de tu tienda.</p>
+        <p className="text-muted-foreground">
+          Administra y monitorea los movimientos, conteos y reportes de stock.
+        </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {modules.map((module) => (
-          <Link key={module.href} href={module.href}>
-            <Card className="hover:bg-accent/50 transition-colors cursor-pointer h-full border-2 hover:border-primary/20">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <div className={`p-2 rounded-lg ${module.bgColor}`}>
-                    <module.icon className={`h-6 w-6 ${module.color}`} />
-                  </div>
-                  <ArrowRight className="h-5 w-5 text-muted-foreground" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <CardTitle className="text-xl mb-2">{module.title}</CardTitle>
-                <CardDescription>{module.description}</CardDescription>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
-      </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="w-full justify-start overflow-x-auto">
+          {availableTabs.map((tab) => (
+            <TabsTrigger key={tab.value} value={tab.value} disabled={tab.disabled} className="flex items-center gap-2">
+              <tab.icon className="h-4 w-4" />
+              <span>{tab.label}</span>
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        <TabsContent value="movimientos" className="mt-0">
+          <div className="rounded-xl border bg-card shadow-sm">
+            <InventoryMovements />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="fisico" className="mt-0">
+          <div className="rounded-xl border bg-card shadow-sm">
+            <InventoryFisico />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="reportes" className="mt-0">
+          <div className="rounded-xl border bg-card shadow-sm">
+            <InventoryReportes />
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

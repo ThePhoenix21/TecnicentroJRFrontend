@@ -30,8 +30,6 @@ const clientFormSchema = z.object({
   name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
   email: z.string().email('Correo electrónico inválido').optional().or(z.literal('')),
   phone: z.string().min(6, 'El teléfono debe tener al menos 6 caracteres').optional().or(z.literal('')),
-  dni: z.string().min(6, 'El DNI debe tener al menos 6 caracteres').optional().or(z.literal('')),
-  ruc: z.string().optional(),
   address: z.string().optional(),
 });
 
@@ -53,8 +51,6 @@ export function EditClientModal({ isOpen, onClose, client, onClientUpdated }: Ed
       name: '',
       email: '',
       phone: '',
-      dni: '',
-      ruc: '',
       address: '',
     },
   });
@@ -66,8 +62,6 @@ export function EditClientModal({ isOpen, onClose, client, onClientUpdated }: Ed
         name: client.name || '',
         email: client.email || '',
         phone: client.phone || '',
-        dni: client.dni || '',
-        ruc: client.ruc || '',
         address: client.address || '',
       });
     }
@@ -146,36 +140,6 @@ export function EditClientModal({ isOpen, onClose, client, onClientUpdated }: Ed
                     <FormLabel>Teléfono</FormLabel>
                     <FormControl>
                       <Input placeholder="+1234567890" {...field} value={field.value || ''} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="dni"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>DNI</FormLabel>
-                    <FormControl>
-                      <Input placeholder="12345678" {...field} value={field.value || ''} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="ruc"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>RUC (opcional)</FormLabel>
-                    <FormControl>
-                      <Input placeholder="12345678901" {...field} value={field.value || ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

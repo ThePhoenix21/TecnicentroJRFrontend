@@ -1,15 +1,21 @@
-// src/app/dashboard/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { startOfWeek } from "date-fns";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AlertCircle, RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
+import { toast } from "sonner";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/contexts/auth-context";
+import { formatCurrency } from "@/lib/utils";
+import { useDashboard } from "@/hooks/useDashboard";
+import { useAnalytics } from "@/hooks/useAnalytics";
+import type { AnalyticsQueryParams, PaymentType } from "@/types/analytics.types";
+import type { DashboardQueryParams } from "@/types/dashboard.types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -18,1096 +24,807 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { 
-  RefreshCw, 
-  AlertCircle,
-  DollarSign,
-  Package,
-  Wrench,
-  Users
-} from "lucide-react";
-import { toast } from "sonner";
-import { formatCurrency } from "@/lib/utils";
-import { useAuth } from "@/contexts/auth-context";
-import { dashboardService, DashboardStats } from "@/services/dashboard.service";
-import {
-  analyticsService,
-  type AnalyticsIncomeResponse,
-  type AnalyticsExpensesResponse,
-  type NetProfitResponse,
-  type PaymentMethodSummary,
-} from "@/services/analytics.service";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-type StatCardProps = {
+type TabValue = "dashboard" | "analytics";
+
+type ChartRow = Record<string, unknown>;
+
+type GenericChart = {
+  type: "line" | "pie" | "bar";
+  xKey?: string;
+  yKeys?: string[];
+  yLabels?: string[];
+  series: ChartRow[];
+};
+
+function toInputDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getThisMonthRange() {
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  const start = new Date(today.getFullYear(), today.getMonth(), 1);
+  return { from: toInputDate(start), to: toInputDate(tomorrow) };
+}
+
+function toNumber(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function toStringSafe(value: unknown, fallback = "-"): string {
+  if (typeof value === "string" && value.trim().length > 0) return value;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return fallback;
+}
+
+function deltaClass(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "text-muted-foreground";
+  return value >= 0 ? "text-emerald-600" : "text-red-600";
+}
+
+function deltaBadgeVariant(value: number | null | undefined): "secondary" | "destructive" {
+  return value !== null && value !== undefined && value < 0 ? "destructive" : "secondary";
+}
+
+function DeltaPctBadge({ value }: { value: number | null | undefined }) {
+  const Icon = value !== null && value !== undefined && value < 0 ? TrendingDown : TrendingUp;
+  return (
+    <Badge variant={deltaBadgeVariant(value)} className={deltaClass(value)}>
+      <Icon className="mr-1 h-3 w-3" />
+      {value === null || value === undefined ? "N/A" : `${value.toFixed(2)}%`}
+    </Badge>
+  );
+}
+
+function StatCard({
+  title,
+  value,
+  description,
+  loading,
+}: {
   title: string;
   value: string | number;
   description?: string;
-  icon: React.ReactNode;
   loading?: boolean;
-};
-
-const StatCard = ({ title, value, description, icon, loading = false }: StatCardProps) => {
-  if (loading) {
-    return (
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-6 w-6" />
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-8 w-24 mb-2" />
-          <Skeleton className="h-4 w-32" />
-        </CardContent>
-      </Card>
-    );
-  }
-
+}) {
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <div className="h-6 w-6 text-muted-foreground">{icon}</div>
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        {description && (
-          <p className="text-xs text-muted-foreground">{description}</p>
+        {loading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-20" />
+            <Skeleton className="h-4 w-40" />
+          </div>
+        ) : (
+          <>
+            <p className="text-2xl font-bold">{value}</p>
+            {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
+          </>
         )}
       </CardContent>
     </Card>
   );
-};
+}
 
-export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+function DynamicLineChart({ chart }: { chart: GenericChart }) {
+  const xKey = chart.xKey ?? "date";
+  const yKeys = chart.yKeys ?? [];
+  const yLabels = chart.yLabels ?? yKeys;
+  const series = chart.series;
+  const maxValue = Math.max(
+    1,
+    ...series.flatMap((row) => yKeys.map((key) => toNumber(row[key])))
+  );
 
-  const [activeMainTab, setActiveMainTab] = useState<"overview" | "analytics">("overview");
-
-  const [analyticsFrom, setAnalyticsFrom] = useState<string>("");
-  const [analyticsTo, setAnalyticsTo] = useState<string>("");
-  const [serviceProfitPercent, setServiceProfitPercent] = useState<number>(50);
-
-  const [analysisType, setAnalysisType] = useState<"net-profit" | "income" | "expenses">("net-profit");
-  const [analyticsLoading, setAnalyticsLoading] = useState(false);
-  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
-  const [netProfitData, setNetProfitData] = useState<NetProfitResponse | null>(null);
-  const [incomeData, setIncomeData] = useState<AnalyticsIncomeResponse | null>(null);
-  const [expensesData, setExpensesData] = useState<AnalyticsExpensesResponse | null>(null);
-  const [paymentMethodsSummary, setPaymentMethodsSummary] = useState<PaymentMethodSummary | null>(null);
-  const [paymentMethodsSummaryForbidden, setPaymentMethodsSummaryForbidden] = useState(false);
-
-  const { currentStore, tenantFeatures, tenantFeaturesLoaded, isAdmin } = useAuth();
-
-  const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
-  const hasCash = !tenantFeaturesLoaded || normalizedTenantFeatures.includes("CASH");
-  const hasClients = !tenantFeaturesLoaded || normalizedTenantFeatures.includes("CLIENTS");
-  const hasProducts = !tenantFeaturesLoaded || normalizedTenantFeatures.includes("PRODUCTS");
-  const hasServices = !tenantFeaturesLoaded || normalizedTenantFeatures.includes("SERVICES");
-  const hasNamedServices = !tenantFeaturesLoaded || normalizedTenantFeatures.includes("NAMEDSERVICES");
-
-  const toLocalDateInputValue = (date: Date) => {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  };
-
-  const setRangeToday = () => {
-    const today = new Date();
-    const v = toLocalDateInputValue(today);
-    setAnalyticsFrom(v);
-    setAnalyticsTo(v);
-  };
-
-  const setRangeThisWeek = () => {
-    const today = new Date();
-    const start = startOfWeek(today, { weekStartsOn: 1 });
-    setAnalyticsFrom(toLocalDateInputValue(start));
-    setAnalyticsTo(toLocalDateInputValue(today));
-  };
-
-  const setRangeThisMonth = () => {
-    const today = new Date();
-    const start = new Date(today.getFullYear(), today.getMonth(), 1);
-    setAnalyticsFrom(toLocalDateInputValue(start));
-    setAnalyticsTo(toLocalDateInputValue(today));
-  };
-
-  const topRecurringNamedServices = useMemo(() => {
-    const rankings: any = (incomeData as any)?.rankings;
-    const rows = ((rankings?.TotalUsersServices ?? incomeData?.rankings?.topUsersServices ?? []) as any[]);
-    const byName = new Map<string, { name: string; description?: string; totalAmount: number }>();
-
-    for (const r of rows) {
-      const name = (r?.Name ?? r?.name) as string | undefined;
-      if (!name) continue;
-
-      const amount = Number(r?.Amount ?? r?.amount ?? r?.totalAmount ?? r?.total ?? 0) || 0;
-      const description = (r?.Description ?? r?.description) as string | undefined;
-
-      const prev = byName.get(name);
-      if (!prev) {
-        byName.set(name, {
-          name,
-          description,
-          totalAmount: amount,
-        });
-      } else {
-        byName.set(name, {
-          ...prev,
-          description: prev.description || description,
-          totalAmount: prev.totalAmount + amount,
-        });
-      }
-    }
-
-    return Array.from(byName.values()).sort((a, b) => b.totalAmount - a.totalAmount);
-  }, [incomeData]);
-
-  const topUsersServicesAggregated = useMemo(() => {
-    const rankings: any = (incomeData as any)?.rankings;
-    const rows = ((rankings?.TotalUsersServices ?? incomeData?.rankings?.topUsersServices ?? []) as any[]);
-    const byUser = new Map<string, { userId: string; userName?: string; totalAmount: number }>();
-
-    const debug = {
-      rowsLen: rows.length,
-      skippedNoKey: 0,
-      sampleRawRows: rows.slice(0, 3),
-      sampleComputed: [] as Array<{
-        userIdRaw: any;
-        userKey: string;
-        userName: any;
-        totalAmount: number;
-      }>,
-    };
-
-    for (const r of rows) {
-      const userIdRaw = r?.userId ?? r?.UserId ?? r?.user_id ?? r?.userid;
-
-      const userNameRaw = r?.userName ?? r?.UserName ?? r?.user_name ?? r?.username;
-
-      const userKey = String(userIdRaw ?? userNameRaw ?? "").trim();
-      if (!userKey) {
-        debug.skippedNoKey++;
-        continue;
-      }
-
-      const totalAmount = Number(r?.Amount ?? r?.amount ?? r?.totalAmount ?? r?.total ?? r?.totalIncome ?? r?.total_income ?? 0) || 0;
-
-      const userName = userNameRaw;
-
-      if (debug.sampleComputed.length < 5) {
-        debug.sampleComputed.push({ userIdRaw, userKey, userName, totalAmount });
-      }
-
-      const prev = byUser.get(userKey);
-      if (!prev) {
-        byUser.set(userKey, { userId: String(userIdRaw ?? userKey), userName, totalAmount });
-      } else {
-        byUser.set(userKey, {
-          userId: prev.userId,
-          userName: prev.userName || userName,
-          totalAmount: prev.totalAmount + totalAmount,
-        });
-      }
-    }
-
-    const aggregated = Array.from(byUser.values()).sort((a, b) => b.totalAmount - a.totalAmount);
-
-    if (process.env.NODE_ENV !== "production") {
-      console.groupCollapsed("[analytics][income] topUsersServicesAggregated debug");
-      console.log("rowsLen", debug.rowsLen);
-      console.log("skippedNoKey", debug.skippedNoKey);
-      console.log("sampleRawRows", debug.sampleRawRows);
-      console.log("sampleComputed (first 5)", debug.sampleComputed);
-      console.log("aggregatedLen", aggregated.length);
-      console.log("aggregated (first 10)", aggregated.slice(0, 10));
-      console.groupEnd();
-    }
-
-    return aggregated;
-  }, [incomeData]);
-
-  const fetchDashboardData = async () => {
-    if (!currentStore) {
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-      console.log('🚀 Iniciando fetchDashboardData con servicio unificado...');
-
-      const dashboardData = await dashboardService.getDashboardStats(currentStore.id);
-      
-      setStats(dashboardData);
-      setLastUpdated(new Date());
-      toast.success('Datos actualizados correctamente');
-
-    } catch (err) {
-      console.error('❌ Error en fetchDashboardData:', err);
-      setError('No se pudieron cargar los datos del dashboard. Por favor, intente de nuevo.');
-      toast.error('Error al cargar los datos del dashboard');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRefresh = () => {
-    fetchDashboardData();
-  };
-
-  const isValidDateRange = (from: string, to: string) => {
-    if (!from || !to) return false;
-    const fromDate = new Date(from);
-    const toDate = new Date(to);
-    if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) return false;
-    return fromDate.getTime() <= toDate.getTime();
-  };
-
-  const fetchAnalyticsData = async () => {
-    if (!currentStore) return;
-    if (!isValidDateRange(analyticsFrom, analyticsTo)) return;
-
-    try {
-      setAnalyticsLoading(true);
-      setAnalyticsError(null);
-
-      if (analysisType !== "income") {
-        setPaymentMethodsSummary(null);
-        setPaymentMethodsSummaryForbidden(false);
-      }
-
-      if (analysisType === "net-profit") {
-        const data = await analyticsService.getNetProfit({ from: analyticsFrom, to: analyticsTo });
-        setNetProfitData(data);
-      }
-
-      if (analysisType === "income") {
-        const [incomeRes, paymentMethodsRes] = await Promise.all([
-          analyticsService.getIncome({ from: analyticsFrom, to: analyticsTo }),
-          isAdmin
-            ? analyticsService
-                .getPaymentMethodsSummary({ from: analyticsFrom, to: analyticsTo })
-                .then((r) => ({ ok: true as const, data: r }))
-                .catch((e: any) => ({ ok: false as const, error: e }))
-            : Promise.resolve({ ok: false as const, error: { response: { status: 403 } } }),
-        ]);
-
-        setIncomeData(incomeRes);
-
-        if (isAdmin) {
-          if (paymentMethodsRes.ok) {
-            setPaymentMethodsSummary(paymentMethodsRes.data);
-            setPaymentMethodsSummaryForbidden(false);
-          } else {
-            const status = paymentMethodsRes.error?.response?.status;
-            if (status === 403) {
-              setPaymentMethodsSummary(null);
-              setPaymentMethodsSummaryForbidden(true);
-            } else {
-              // No bloqueamos todo el análisis si este endpoint falla: solo ocultamos el bloque.
-              setPaymentMethodsSummary(null);
-              setPaymentMethodsSummaryForbidden(false);
-            }
-          }
-        } else {
-          setPaymentMethodsSummary(null);
-          setPaymentMethodsSummaryForbidden(true);
-        }
-      }
-
-      if (analysisType === "expenses") {
-        const data = await analyticsService.getExpenses({ from: analyticsFrom, to: analyticsTo });
-        setExpensesData(data);
-      }
-    } catch (err) {
-      console.error("❌ Error en fetchAnalyticsData:", err);
-      setAnalyticsError("No se pudieron cargar los datos de análisis. Por favor, intente de nuevo.");
-    } finally {
-      setAnalyticsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchDashboardData();
-  }, [currentStore]);
-
-  useEffect(() => {
-    fetchAnalyticsData();
-  }, [currentStore, analysisType, analyticsFrom, analyticsTo]);
-
-  useEffect(() => {
-    if (process.env.NODE_ENV === "production") return;
-    if (analysisType !== "income") return;
-    if (!incomeData) return;
-
-    const anyIncome: any = incomeData as any;
-    const rankings: any = anyIncome?.rankings;
-
-    console.groupCollapsed("[analytics][income] incomeData shape debug");
-    console.log("incomeData keys", anyIncome ? Object.keys(anyIncome) : anyIncome);
-    console.log("rankings keys", rankings ? Object.keys(rankings) : rankings);
-    console.log("rankings", rankings);
-    console.log("rankings.topUsersServices len", (rankings?.topUsersServices || []).length);
-    console.log("rankings.topUsersProducts len", (rankings?.topUsersProducts || []).length);
-    console.log("possible alt paths", {
-      topUsersServices: anyIncome?.topUsersServices,
-      rankingsTopUsersServices: rankings?.topUsersServices,
-      dataRankingsTopUsersServices: anyIncome?.data?.rankings?.topUsersServices,
-      resultRankingsTopUsersServices: anyIncome?.result?.rankings?.topUsersServices,
-    });
-    console.groupEnd();
-  }, [analysisType, incomeData]);
-
-  useEffect(() => {
-    if (!hasCash && (analysisType === "income" || analysisType === "expenses")) {
-      setAnalysisType("net-profit");
-    }
-  }, [hasCash, analysisType]);
-
-  useEffect(() => {
-    if (activeMainTab !== 'analytics') return;
-    if (analyticsFrom && analyticsTo) return;
-    setRangeThisMonth();
-  }, [activeMainTab]);
-
-  useEffect(() => {
-    if (activeMainTab !== 'analytics') return;
-    if (!hasCash) return;
-    if (analysisType !== 'net-profit') return;
-    setAnalysisType('income');
-  }, [activeMainTab, hasCash, analysisType]);
-
-  if (error) {
-    return (
-      <div className="p-6">
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-        <div className="mt-4">
-          <Button onClick={handleRefresh} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Reintentar
-          </Button>
-        </div>
-      </div>
-    );
+  if (series.length === 0 || yKeys.length === 0) {
+    return <p className="text-sm text-muted-foreground">No hay datos para el gráfico.</p>;
   }
 
   return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        {series.map((row, index) => (
+          <div key={`${toStringSafe(row[xKey], String(index))}-${index}`}>
+            <p className="mb-1 text-xs text-muted-foreground">{toStringSafe(row[xKey])}</p>
+            <div className="space-y-1">
+              {yKeys.map((key, keyIndex) => {
+                const value = toNumber(row[key]);
+                const width = Math.max(3, (value / maxValue) * 100);
+                const label = yLabels[keyIndex] || key;
+                return (
+                  <div key={`${key}-${index}`} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium">{label}</span>
+                      <span>{label === "Ingreso total" ? formatCurrency(value) : value.toLocaleString("es-PE")}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-muted">
+                      <div
+                        className={keyIndex % 2 === 0 ? "h-2 rounded-full bg-primary" : "h-2 rounded-full bg-cyan-600"}
+                        style={{ width: `${width}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function getPieLabel(row: ChartRow): string {
+  return (
+    toStringSafe(row.label, "") ||
+    toStringSafe(row.type, "") ||
+    toStringSafe(row.name, "") ||
+    "Sin etiqueta"
+  );
+}
+
+function getPieValue(row: ChartRow): number {
+  return toNumber(row.value ?? row.total ?? row.quantity ?? row.count);
+}
+
+function DynamicPieChart({ chart }: { chart: GenericChart }) {
+  const normalized = chart.series.map((row) => ({
+    label: getPieLabel(row),
+    value: getPieValue(row),
+  }));
+  const total = normalized.reduce((acc, item) => acc + item.value, 0);
+
+  if (normalized.length === 0 || total <= 0) {
+    return <p className="text-sm text-muted-foreground">No hay datos para el gráfico.</p>;
+  }
+
+  const colors = ["#0ca12dff", "#170bc5ff", "#c501dfff", "#84cc16", "#f59e0b", "#ef4444", "#8b5cf6", "#a5c522ff"];
+  let cursor = 0;
+  const gradientParts = normalized.map((item, index) => {
+    const start = cursor;
+    const slice = (item.value / total) * 100;
+    cursor += slice;
+    return `${colors[index % colors.length]} ${start}% ${cursor}%`;
+  });
+
+  return (
+    <div className="grid gap-4 md:grid-cols-[180px_1fr]">
+      <div className="mx-auto h-40 w-40 rounded-full" style={{ background: `conic-gradient(${gradientParts.join(", ")})` }} />
+      <div className="space-y-2">
+        {normalized.map((item, index) => (
+          <div key={item.label} className="flex items-center justify-between gap-2 text-sm">
+            <div className="flex items-center gap-2">
+              <span
+                className="inline-block h-3 w-3 rounded-full"
+                style={{ backgroundColor: colors[index % colors.length] }}
+              />
+              <span>{item.label}</span>
+            </div>
+            <div className="text-right">
+              <p className="font-medium">{formatCurrency(item.value)}</p>
+              <p className="text-xs text-muted-foreground">{((item.value / total) * 100).toFixed(1)}%</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DynamicBarChart({ chart }: { chart: GenericChart }) {
+  const xKey = chart.xKey ?? "name";
+  const yKey = chart.yKeys?.[0];
+
+  if (!yKey || chart.series.length === 0) {
+    return <p className="text-sm text-muted-foreground">No hay datos para el gráfico.</p>;
+  }
+
+  const maxValue = Math.max(1, ...chart.series.map((row) => toNumber(row[yKey])));
+
+  return (
+    <div className="space-y-2">
+      {chart.series.map((row, index) => {
+        const value = toNumber(row[yKey]);
+        const width = Math.max(4, (value / maxValue) * 100);
+        return (
+          <div key={`${toStringSafe(row[xKey], String(index))}-${index}`}>
+            <div className="mb-1 flex items-center justify-between text-sm">
+              <span>{toStringSafe(row[xKey])}</span>
+              <span className="font-medium">{yKey === 'totalAmount' ? formatCurrency(value) : value.toLocaleString("es-PE")}</span>
+            </div>
+            <div className="h-3 rounded-full bg-muted">
+              <div className="h-3 rounded-full bg-emerald-600" style={{ width: `${width}%` }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function DynamicChart({ chart }: { chart: GenericChart }) {
+  if (chart.type === "line") return <DynamicLineChart chart={chart} />;
+  if (chart.type === "pie") return <DynamicPieChart chart={chart} />;
+  if (chart.type === "bar") return <DynamicBarChart chart={chart} />;
+  return <p className="text-sm text-muted-foreground">Tipo de gráfico no soportado.</p>;
+}
+
+function ComparisonCard({
+  title,
+  deltaValue,
+  deltaPctValue,
+  formatter,
+}: {
+  title: string;
+  deltaValue: number | null | undefined;
+  deltaPctValue: number | null | undefined;
+  formatter?: (v: number) => string;
+}) {
+  const safeDelta = deltaValue ?? 0;
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className={`text-2xl font-bold ${deltaClass(deltaValue)}`}>
+          {formatter ? formatter(safeDelta) : safeDelta.toLocaleString("es-PE")}
+        </p>
+        <DeltaPctBadge value={deltaPctValue} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function EndpointErrorAlerts({
+  errors,
+}: {
+  errors: Array<{ key: string; title: string; message: string }>;
+}) {
+  if (errors.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      {errors.map((entry) => (
+        <Alert key={entry.key} variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>{entry.title}</AlertTitle>
+          <AlertDescription>{entry.message}</AlertDescription>
+        </Alert>
+      ))}
+    </div>
+  );
+}
+
+export default function DashboardPage() {
+  const { currentStore, hasPermission } = useAuth();
+  const dashboard = useDashboard();
+  const analytics = useAnalytics();
+  const {
+    summary,
+    charts,
+    loading: dashboardLoading,
+    summaryError,
+    chartsError,
+    fetchDashboard,
+  } = dashboard;
+  const {
+    overview,
+    incomeTimeseries,
+    income,
+    netProfit,
+    expenses,
+    paymentMethodsSummary,
+    userRankings,
+    overviewLoading,
+    incomeTimeseriesLoading,
+    incomeLoading,
+    netProfitLoading,
+    expensesLoading,
+    paymentMethodsLoading,
+    userRankingsLoading,
+    loading: analyticsLoading,
+    overviewError,
+    incomeError,
+    netProfitError,
+    expensesError,
+    paymentMethodsError,
+    userRankingsError,
+    fetchAnalytics,
+  } = analytics;
+
+  const [activeTab, setActiveTab] = useState<TabValue>("dashboard");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [compareFrom, setCompareFrom] = useState("");
+  const [compareTo, setCompareTo] = useState("");
+
+  useEffect(() => {
+    const range = getThisMonthRange();
+    setFrom(range.from);
+    setTo(range.to);
+  }, []);
+
+  const commonParams = useMemo(() => {
+    const params: AnalyticsQueryParams = {
+      from,
+      to,
+      storeId: currentStore?.id,
+    };
+    if (compareFrom) params.compareFrom = compareFrom;
+    if (compareTo) params.compareTo = compareTo;
+    return params;
+  }, [from, to, currentStore?.id, compareFrom, compareTo]);
+
+  const loadDashboard = useCallback(async () => {
+    if (!currentStore?.id) return;
+    try {
+      const params: DashboardQueryParams = { ...commonParams, storeId: currentStore.id };
+      await fetchDashboard(params);
+    } catch {
+      toast.error("No se pudo cargar Panel de control.");
+    }
+  }, [currentStore?.id, fetchDashboard, commonParams]);
+
+  const loadAnalytics = useCallback(async () => {
+    if (!hasPermission('VIEW_ANALYTICS')) return;
+    if (!currentStore?.id) return;
+    try {
+      await fetchAnalytics(commonParams);
+    } catch {
+      toast.error("No se pudieron cargar Análíticas.");
+    }
+  }, [fetchAnalytics, commonParams, currentStore?.id, hasPermission]);
+
+  useEffect(() => {
+    if (!from || !to || !currentStore?.id) return;
+    void loadDashboard();
+    void loadAnalytics();
+  }, [from, to, currentStore?.id, loadDashboard, loadAnalytics]);
+
+  const canRefresh = Boolean(from && to && currentStore?.id);
+  const dashboardErrors = [
+    summaryError
+      ? { key: "summary", title: "Error en /dashboard/summary", message: summaryError.message }
+      : null,
+    chartsError
+      ? { key: "charts", title: "Error en /dashboard/charts", message: chartsError.message }
+      : null,
+  ].filter((item): item is { key: string; title: string; message: string } => item !== null);
+
+  const analyticsErrors = [
+    overviewError
+      ? { key: "overview", title: "Error en /analytics/overview", message: overviewError.status === 403 ? "No tienes permisos para ver analytics" : overviewError.message }
+      : null,
+    incomeError
+      ? { key: "income", title: "Error en /analytics/income", message: incomeError.status === 403 ? "No tienes permisos para ver analytics" : incomeError.message }
+      : null,
+    netProfitError
+      ? { key: "net-profit", title: "Error en /analytics/net-profit", message: netProfitError.status === 403 ? "No tienes permisos para ver analytics" : netProfitError.message }
+      : null,
+    expensesError
+      ? { key: "expenses", title: "Error en /analytics/expenses", message: expensesError.status === 403 ? "No tienes permisos para ver analytics" : expensesError.message }
+      : null,
+    paymentMethodsError
+      ? { key: "payment-methods", title: "Error en /analytics/payment-methods-summary", message: paymentMethodsError.status === 403 ? "No tienes permisos para ver analytics" : paymentMethodsError.message }
+      : null,
+    userRankingsError
+      ? { key: "user-rankings", title: "Error en /analytics/user-rankings", message: userRankingsError.status === 403 ? "No tienes permisos para ver analytics" : userRankingsError.message }
+      : null,
+  ].filter((item): item is { key: string; title: string; message: string } => item !== null);
+
+  
+  
+
+  const salesTrendChart: GenericChart | null = charts
+    ? {
+        type: charts.charts.salesTrend.type,
+        xKey: charts.charts.salesTrend.xKey,
+        yKeys: charts.charts.salesTrend.yKeys,
+        yLabels: ["Ingreso total", "Cantidad de ventas"],
+        series: charts.charts.salesTrend.series,
+      }
+    : null;
+
+  const paymentMethodsChart: GenericChart | null = charts
+    ? {
+        type: charts.charts.paymentMethods.type,
+        series: charts.charts.paymentMethods.series.map((item) => ({
+          label: item.type as PaymentType,
+          value: item.total,
+          count: item.count,
+        })),
+      }
+    : null;
+
+  const topProductsChart: GenericChart | null = charts
+    ? {
+        type: charts.charts.topProducts.type,
+        xKey: charts.charts.topProducts.xKey,
+        yKeys: charts.charts.topProducts.yKeys,
+        series: charts.charts.topProducts.series,
+      }
+    : null;
+
+  const topServicesChart: GenericChart | null = charts
+    ? {
+        type: charts.charts.topServices.type,
+        xKey: charts.charts.topServices.xKey,
+        yKeys: charts.charts.topServices.yKeys,
+        series: charts.charts.topServices.series,
+      }
+    : null;
+
+  const analyticsIncomeTrend: GenericChart | null = overview
+    ? {
+        type: overview.charts.incomeTrend.chart.type,
+        xKey: overview.charts.incomeTrend.chart.xKey,
+        yKeys: overview.charts.incomeTrend.chart.yKeys,
+        series: overview.charts.incomeTrend.series,
+      }
+    : incomeTimeseries
+      ? {
+          type: incomeTimeseries.chart.type,
+          xKey: incomeTimeseries.chart.xKey,
+          yKeys: incomeTimeseries.chart.yKeys,
+          series: incomeTimeseries.series,
+        }
+      : null;
+
+  const analyticsPaymentsChart: GenericChart | null = overview
+    ? {
+        type: overview.charts.paymentMethods.chart.type,
+        series: overview.charts.paymentMethods.chart.series,
+      }
+    : paymentMethodsSummary
+      ? {
+          type: paymentMethodsSummary.chart.type,
+          series: paymentMethodsSummary.chart.series,
+        }
+      : null;
+
+  const servicesRankingChart: GenericChart | null = userRankings
+    ? {
+        type: userRankings.charts.servicesRanking.type,
+        xKey: userRankings.charts.servicesRanking.xKey,
+        yKeys: userRankings.charts.servicesRanking.yKeys,
+        series: userRankings.charts.servicesRanking.series,
+      }
+    : null;
+
+  const productsRankingChart: GenericChart | null = userRankings
+    ? {
+        type: userRankings.charts.productsRanking.type,
+        xKey: userRankings.charts.productsRanking.xKey,
+        yKeys: userRankings.charts.productsRanking.yKeys,
+        series: userRankings.charts.productsRanking.series,
+      }
+    : null;
+
+  const allLoading = dashboardLoading || analyticsLoading;
+
+  return (
     <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Panel de Control</h1>
-          {lastUpdated && (
-            <p className="text-sm text-muted-foreground">
-              Última actualización: {lastUpdated.toLocaleTimeString()}
-            </p>
-          )}
+          <h1 className="text-3xl font-bold">Panel de control</h1>
+          <p className="text-sm text-muted-foreground">Datos en tiempo real desde contrato oficial.</p>
         </div>
-        <Button onClick={handleRefresh} disabled={loading} variant="outline">
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          Actualizar
-        </Button>
       </div>
 
-      <Tabs
-        defaultValue="overview"
-        value={activeMainTab}
-        onValueChange={(v) => setActiveMainTab(v as "overview" | "analytics")}
-        className="space-y-4"
-      >
+      {!currentStore?.id ? (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Selecciona una tienda</AlertTitle>
+          <AlertDescription>Debes seleccionar una tienda para cargar panel de control y analíticas.</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabValue)} className="space-y-4">
         <TabsList>
-          <TabsTrigger value="overview">Resumen</TabsTrigger>
-          <TabsTrigger value="analytics">
-            Análisis
-          </TabsTrigger>
+          <TabsTrigger value="dashboard">Panel de control</TabsTrigger>
+          {hasPermission('VIEW_ANALYTICS') && <TabsTrigger value="analytics">Análisis</TabsTrigger>}
         </TabsList>
-        
-        <TabsContent value="overview" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+
+        <div className="flex gap-2 items-end">
+          <div>
+            <label className="text-sm font-medium">Desde</label>
+            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Hasta</label>
+            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+          </div>
+          {/* <Input type="date" value={compareFrom} onChange={(e) => setCompareFrom(e.target.value)} />
+          <Input type="date" value={compareTo} onChange={(e) => setCompareTo(e.target.value)} /> */}
+          <div>
+            <label className="text-sm font-medium invisible">Actualizar</label>
+            <Button
+              variant="outline"
+              onClick={() => {
+                void loadDashboard();
+                void loadAnalytics();
+              }}
+              disabled={!canRefresh || allLoading}
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${allLoading ? "animate-spin" : ""}`} />
+              Actualizar
+            </Button>
+          </div>
+        </div>
+
+        <TabsContent value="dashboard" className="space-y-4">
+          <EndpointErrorAlerts errors={dashboardErrors} />
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <StatCard
-              title="Ventas Totales"
-              value={loading ? '...' : formatCurrency(stats?.salesSummary?.total || 0)}
-              description={`${stats?.salesSummary?.count || 0} ventas`}
-              icon={<DollarSign className="h-4 w-4" />}
-              loading={loading}
+              title="Total de ganancia en ventas"
+              value={formatCurrency(summary?.kpis.salesTotal ?? 0)}
+              description={`Ventas: ${(summary?.kpis.salesCount ?? 0).toLocaleString("es-PE")}`}
+              loading={dashboardLoading}
             />
-
-            {hasClients && (
-              <StatCard
-                title="Clientes"
-                value={loading ? '...' : stats?.clientsSummary?.total || 0}
-                description={`${stats?.clientsSummary?.newThisMonth || 0} nuevos este mes`}
-                icon={<Users className="h-4 w-4" />}
-                loading={loading}
-              />
-            )}
-
-            {hasProducts && (
-              <StatCard
-                title="Productos"
-                value={loading ? '...' : stats?.productsSummary?.total || 0}
-                description={`${stats?.productsSummary?.lowStock || 0} con bajo stock`}
-                icon={<Package className="h-4 w-4" />}
-                loading={loading}
-              />
-            )}
-
-            {hasServices && (
-              <StatCard
-                title="Servicios"
-                value={loading ? '...' : stats?.servicesSummary?.total || 0}
-                description={`${stats?.servicesSummary?.mostPopular || 'Ninguno'}`}
-                icon={<Wrench className="h-4 w-4" />}
-                loading={loading}
-              />
-            )}
+            <StatCard
+              title="Ticket Promedio"
+              value={formatCurrency(summary?.kpis.salesAverage ?? 0)}
+              description="Promedio por venta"
+              loading={dashboardLoading}
+            />
+            <StatCard
+              title="Clientes"
+              value={(summary?.kpis.clientsTotal ?? 0).toLocaleString("es-PE")}
+              description={`Nuevos: ${(summary?.kpis.newClientsThisMonth ?? 0).toLocaleString("es-PE")}`}
+              loading={dashboardLoading}
+            />
+            <StatCard
+              title="Productos con bajo stock"
+              value={(summary?.kpis.productsLowStock ?? 0).toLocaleString("es-PE")}
+              description="Necesitan reposición"
+              loading={dashboardLoading}
+            />
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-            <Card className="col-span-4">
+          <div className="grid gap-4 lg:grid-cols-12">
+            <Card className="lg:col-span-7">
               <CardHeader>
-                <div className="flex justify-between items-center">
-                  <CardTitle>Ventas Recientes</CardTitle>
-                  <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={loading}>
-                    <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                    Actualizar
-                  </Button>
-                </div>
+                <CardTitle>Gráfico principal: Ventas</CardTitle>
               </CardHeader>
-              <CardContent>
-                {loading ? (
-                  <div className="space-y-4">
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <div key={i} className="flex items-center space-x-4 p-4 border rounded-lg">
-                        <Skeleton className="h-12 w-12 rounded-full" />
-                        <div className="space-y-2 flex-1">
-                          <Skeleton className="h-4 w-3/4" />
-                          <Skeleton className="h-3 w-1/2" />
-                        </div>
-                        <Skeleton className="h-4 w-16" />
-                      </div>
-                    ))}
-                  </div>
-                ) : stats?.recentSales && stats.recentSales.length > 0 ? (
-                  <div className="space-y-4">
-                    {stats.recentSales.map((sale) => (
-                      <div key={sale.id} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="flex items-center space-x-4">
-                          <div className="p-2 rounded-full bg-primary/10">
-                            <DollarSign className="h-6 w-6 text-primary" />
-                          </div>
-                          <div>
-                            <p className="font-medium">Venta #{sale.id.substring(0, 6)}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {sale.customerName} • {sale.itemsCount} {sale.itemsCount === 1 ? 'item' : 'items'}
-                              {sale.userName && sale.userName !== 'Usuario' && (
-                                <span className="ml-2">• <span className="font-medium">{sale.userName}</span></span>
-                              )}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-medium">{formatCurrency(sale.amount)}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(sale.createdAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No hay ventas recientes
-                  </div>
-                )}
-              </CardContent>
+              <CardContent>{salesTrendChart ? <DynamicChart chart={salesTrendChart} /> : <Skeleton className="h-56" />}</CardContent>
             </Card>
 
-            {hasProducts && (
-              <Card className="col-span-3">
-                <CardHeader>
-                  <CardTitle>Productos Destacados</CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    {loading ? 'Cargando...' : `Top ${Math.min(5, stats?.topProducts?.length || 0)} productos`}
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  {loading ? (
-                    <div className="space-y-4">
-                      {[1, 2, 3, 4, 5].map((i) => (
-                        <div key={i} className="flex items-center space-x-4">
-                          <Skeleton className="h-12 w-12 rounded-md" />
-                          <div className="space-y-2 flex-1">
-                            <Skeleton className="h-4 w-3/4" />
-                            <Skeleton className="h-3 w-1/2" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : stats?.topProducts && stats.topProducts.length > 0 ? (
-                    <div className="space-y-4">
-                      {stats.topProducts.slice(0, 5).map((product, index) => (
-                        <div key={index} className="flex items-center justify-between">
-                          <div className="flex items-center space-x-4">
-                            <div className="p-2 rounded-md bg-primary/10">
-                              <Package className="h-5 w-5 text-primary" />
-                            </div>
-                            <div>
-                              <p className="font-medium">{product.name}</p>
-                            </div>
-                          </div>
-                          <Badge variant="secondary">{formatCurrency(product.value)}</Badge>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      No hay productos destacados
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+            <Card className="lg:col-span-5">
+              <CardHeader>
+                <CardTitle>Métodos de pago</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {paymentMethodsChart ? <DynamicChart chart={paymentMethodsChart} /> : <Skeleton className="h-56" />}
+              </CardContent>
+            </Card>
           </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Top productos</CardTitle>
+            </CardHeader>
+            <CardContent>{topProductsChart ? <DynamicChart chart={topProductsChart} /> : <Skeleton className="h-56" />}</CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Top servicios</CardTitle>
+            </CardHeader>
+            <CardContent>{topServicesChart ? <DynamicChart chart={topServicesChart} /> : <Skeleton className="h-56" />}</CardContent>
+          </Card>
+
+          {/* {summary?.comparison ? (
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold">Bloque comparativo</h3>
+              <div className="grid gap-4 md:grid-cols-3">
+                <ComparisonCard
+                  title="Delta Total"
+                  deltaValue={summary.comparison.delta.total}
+                  deltaPctValue={summary.comparison.deltaPct.total}
+                  formatter={(v) => formatCurrency(v)}
+                />
+                <ComparisonCard
+                  title="Delta Cantidad"
+                  deltaValue={summary.comparison.delta.count}
+                  deltaPctValue={summary.comparison.deltaPct.count}
+                />
+                <ComparisonCard
+                  title="Delta Promedio"
+                  deltaValue={summary.comparison.delta.average}
+                  deltaPctValue={summary.comparison.deltaPct.average}
+                  formatter={(v) => formatCurrency(v)}
+                />
+              </div>
+            </div>
+          ) : null} */}
         </TabsContent>
 
         <TabsContent value="analytics" className="space-y-4">
+          <EndpointErrorAlerts errors={analyticsErrors} />
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+              title="Ingreso Total"
+              value={formatCurrency(overview?.kpis.totalIncome ?? 0)}
+              loading={analyticsLoading}
+            />
+            <StatCard
+              title="Egresos Totales"
+              value={formatCurrency(overview?.kpis.totalExpenses ?? 0)}
+              loading={analyticsLoading}
+            />
+            <StatCard
+              title="Ganancia Neta"
+              value={formatCurrency(overview?.kpis.netProfit ?? 0)}
+              loading={analyticsLoading}
+            />
+            <StatCard
+              title="Transacciones"
+              value={(overview?.kpis.transactions ?? 0).toLocaleString("es-PE")}
+              loading={analyticsLoading}
+            />
+          </div>
+
+          {/* <div className="grid gap-4 lg:grid-cols-12">
+            <Card className="lg:col-span-8">
+              <CardHeader>
+                <CardTitle>Income Trend</CardTitle>
+              </CardHeader>
+              <CardContent>{analyticsIncomeTrend ? <DynamicChart chart={analyticsIncomeTrend} /> : <Skeleton className="h-56" />}</CardContent>
+            </Card>
+            <Card className="lg:col-span-4">
+              <CardHeader>
+                <CardTitle>Payment Methods (Pie)</CardTitle>
+              </CardHeader>
+              <CardContent>{analyticsPaymentsChart ? <DynamicChart chart={analyticsPaymentsChart} /> : <Skeleton className="h-56" />}</CardContent>
+            </Card>
+          </div> */}
+
+          {/* {netProfit?.comparison ? (
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold">Comparativo net-profit</h3>
+              <div className="grid gap-4 md:grid-cols-3">
+                <ComparisonCard
+                  title="Total ingreso"
+                  deltaValue={netProfit.comparison.delta.totalIncome}
+                  deltaPctValue={netProfit.comparison.deltaPct.totalIncome}
+                  formatter={(v) => formatCurrency(v)}
+                />
+                <ComparisonCard
+                  title="Total egresos"
+                  deltaValue={netProfit.comparison.delta.totalExpenses}
+                  deltaPctValue={netProfit.comparison.deltaPct.totalExpenses}
+                  formatter={(v) => formatCurrency(v)}
+                />
+                <ComparisonCard
+                  title="Utilidad neta"
+                  deltaValue={netProfit.comparison.delta.netProfit}
+                  deltaPctValue={netProfit.comparison.deltaPct.netProfit}
+                  formatter={(v) => formatCurrency(v)}
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {income?.comparison ? (
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold">Comparativo income</h3>
+              <div className="grid gap-4 md:grid-cols-3">
+                <ComparisonCard
+                  title="Productos"
+                  deltaValue={income.comparison.delta.incomeProducts}
+                  deltaPctValue={income.comparison.deltaPct.incomeProducts}
+                  formatter={(v) => formatCurrency(v)}
+                />
+                <ComparisonCard
+                  title="Servicios"
+                  deltaValue={income.comparison.delta.incomeServices}
+                  deltaPctValue={income.comparison.deltaPct.incomeServices}
+                  formatter={(v) => formatCurrency(v)}
+                />
+                <ComparisonCard
+                  title="Total income"
+                  deltaValue={income.comparison.delta.totalIncome}
+                  deltaPctValue={income.comparison.deltaPct.totalIncome}
+                  formatter={(v) => formatCurrency(v)}
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {expenses?.comparison ? (
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold">Comparativo expenses</h3>
+              <div className="grid gap-4 md:grid-cols-1">
+                <ComparisonCard
+                  title="Total expenses"
+                  deltaValue={expenses.comparison.delta.totalExpenses}
+                  deltaPctValue={expenses.comparison.deltaPct.totalExpenses}
+                  formatter={(v) => formatCurrency(v)}
+                />
+              </div>
+            </div>
+          ) : null} */}
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Ranking de usuarios por servicios</CardTitle>
+              </CardHeader>
+              <CardContent>{servicesRankingChart ? <DynamicChart chart={servicesRankingChart} /> : <Skeleton className="h-56" />}</CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Ranking de usuarios por productos</CardTitle>
+              </CardHeader>
+              <CardContent>{productsRankingChart ? <DynamicChart chart={productsRankingChart} /> : <Skeleton className="h-56" />}</CardContent>
+            </Card>
+          </div>
+
           <Card>
             <CardHeader>
-              <CardTitle>Análisis</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Selecciona un rango de fechas y un tipo de análisis.
-              </p>
+              <CardTitle>Línea de tiempo de ingresos y egresos</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={setRangeToday}>
-                  Hoy
-                </Button>
-                <Button type="button" variant="outline" size="sm" onClick={setRangeThisWeek}>
-                  Esta semana
-                </Button>
-                <Button type="button" variant="outline" size="sm" onClick={setRangeThisMonth}>
-                  Este mes
-                </Button>
+            <CardContent>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Concepto</TableHead>
+                      <TableHead>Fuente</TableHead>
+                      <TableHead className="text-right">Monto</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(netProfit?.timeline ?? []).length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                          No hay movimientos para este rango.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      (netProfit?.timeline ?? []).map((item) => (
+                        <TableRow key={`${item.sourceId}-${item.date}`}>
+                          <TableCell>{new Date(item.date).toLocaleString()}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={item.type === "INCOME" ? "secondary" : "destructive"}
+                              className={item.type === "INCOME" ? "bg-green-500 text-white hover:bg-green-600" : ""}
+                            >
+                              {item.type === "INCOME" ? "Ingreso" : "Egreso"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{item.concept}</TableCell>
+                          <TableCell>
+                            {item.source === "PAYMENT_METHOD" ? "Pago de orden" : "Movimiento de caja"}
+                          </TableCell>
+                          <TableCell className="text-right">{formatCurrency(item.amount)}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               </div>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div>
-                  <label className="text-sm font-medium">Desde</label>
-                  <Input
-                    type="date"
-                    value={analyticsFrom}
-                    onChange={(e) => setAnalyticsFrom(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Hasta</label>
-                  <Input
-                    type="date"
-                    value={analyticsTo}
-                    onChange={(e) => setAnalyticsTo(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Tipo de análisis</label>
-                  <select
-                    className="w-full mt-1 p-2 border rounded-md"
-                    value={analysisType}
-                    onChange={(e) => setAnalysisType(e.target.value as any)}
-                  >
-                    <option value="net-profit">Ganancia neta</option>
-                    {hasCash && <option value="income">Ingreso</option>}
-                    {hasCash && <option value="expenses">Egreso</option>}
-                  </select>
-                </div>
-              </div>
-
-              {!isValidDateRange(analyticsFrom, analyticsTo) ? null : (
-                <div className="flex justify-end">
-                  <Button onClick={fetchAnalyticsData} disabled={analyticsLoading} variant="outline">
-                    <RefreshCw className={`h-4 w-4 mr-2 ${analyticsLoading ? "animate-spin" : ""}`} />
-                    Actualizar
-                  </Button>
-                </div>
-              )}
             </CardContent>
           </Card>
-
-          {isValidDateRange(analyticsFrom, analyticsTo) ? (
-            <>
-              {analyticsError && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Error</AlertTitle>
-                  <AlertDescription>{analyticsError}</AlertDescription>
-                </Alert>
-              )}
-
-              {analysisType === "net-profit" && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Ganancia neta</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {analyticsLoading && !netProfitData ? (
-                      <div className="rounded-md border p-6 text-center text-muted-foreground">
-                        Cargando...
-                      </div>
-                    ) : (netProfitData?.timeline?.length || 0) === 0 ? (
-                      <div className="rounded-md border p-6 text-center text-muted-foreground">
-                        No hay movimientos en este rango.
-                      </div>
-                    ) : (
-                      <div className="rounded-md border p-4">
-                        <div className="relative pl-6">
-                          <div className="absolute left-2 top-0 bottom-0 w-px bg-border" />
-                          <div className="space-y-4">
-                            {netProfitData!.timeline.map((item, idx) => (
-                              <div key={`${item.date}-${idx}`} className="relative">
-                                <div
-                                  className={
-                                    item.type === "INCOME"
-                                      ? "absolute left-1.5 top-2 h-2.5 w-2.5 rounded-full bg-green-600"
-                                      : "absolute left-1.5 top-2 h-2.5 w-2.5 rounded-full bg-red-600"
-                                  }
-                                />
-                                <div className="flex items-start justify-between gap-4">
-                                  <div>
-                                    <div className="text-sm text-muted-foreground">
-                                      {new Date(item.date).toLocaleString()}
-                                    </div>
-                                    <div className="mt-1 flex items-center gap-2">
-                                      <Badge
-                                        className={
-                                          item.type === "INCOME"
-                                            ? "bg-green-100 text-green-800 hover:bg-green-100"
-                                            : "bg-red-100 text-red-800 hover:bg-red-100"
-                                        }
-                                      >
-                                        {item.type}
-                                      </Badge>
-                                      <span className="font-medium">{item.concept}</span>
-                                    </div>
-                                  </div>
-                                  <div className="text-right font-medium whitespace-nowrap">
-                                    {formatCurrency(item.amount)}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    <div className="grid gap-4 md:grid-cols-3">
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-sm font-medium">Total ingresos</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="text-2xl font-bold text-green-600">
-                            {formatCurrency(netProfitData?.totals?.totalIncome || 0)}
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-sm font-medium">Total egresos</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="text-2xl font-bold text-red-600">
-                            {formatCurrency(netProfitData?.totals?.totalExpenses || 0)}
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-sm font-medium">Ganancia neta</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="text-2xl font-bold">
-                            {formatCurrency(netProfitData?.totals?.netProfit || 0)}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {analysisType === "income" && (
-                <div className="space-y-4">
-                  {hasCash && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Resumen por métodos de pago</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        {!isAdmin ? (
-                          <Alert>
-                            <AlertCircle className="h-4 w-4" />
-                            <AlertTitle>Solo administradores</AlertTitle>
-                            <AlertDescription>
-                              Este resumen está disponible solo para administradores.
-                            </AlertDescription>
-                          </Alert>
-                        ) : paymentMethodsSummaryForbidden ? (
-                          <Alert>
-                            <AlertCircle className="h-4 w-4" />
-                            <AlertTitle>Sin acceso</AlertTitle>
-                            <AlertDescription>
-                              No tienes acceso a este resumen (requiere rol ADMIN y feature CASH).
-                            </AlertDescription>
-                          </Alert>
-                        ) : analyticsLoading && !paymentMethodsSummary ? (
-                          <div className="rounded-md border p-6 text-center text-muted-foreground">
-                            Cargando...
-                          </div>
-                        ) : !paymentMethodsSummary ? (
-                          <div className="rounded-md border p-6 text-center text-muted-foreground">
-                            No hay datos.
-                          </div>
-                        ) : (
-                          <>
-                            <div className="grid gap-4 md:grid-cols-3">
-                              <Card>
-                                <CardHeader className="pb-2">
-                                  <CardTitle className="text-sm font-medium">Total</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                  <div className="text-2xl font-bold text-green-600">
-                                    {formatCurrency(paymentMethodsSummary.summary.totalAmount || 0)}
-                                  </div>
-                                </CardContent>
-                              </Card>
-                              <Card>
-                                <CardHeader className="pb-2">
-                                  <CardTitle className="text-sm font-medium">N° transacciones</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                  <div className="text-2xl font-bold">
-                                    {paymentMethodsSummary.summary.totalCount || 0}
-                                  </div>
-                                </CardContent>
-                              </Card>
-                              <Card>
-                                <CardHeader className="pb-2">
-                                  <CardTitle className="text-sm font-medium">Métodos usados</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                  <div className="text-2xl font-bold">
-                                    {paymentMethodsSummary.summary.methodsCount || 0}
-                                  </div>
-                                </CardContent>
-                              </Card>
-                            </div>
-
-                            <div className="rounded-md border">
-                              <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>Método</TableHead>
-                                    <TableHead className="text-right">Cantidad</TableHead>
-                                    <TableHead className="text-right">Total</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {paymentMethodsSummary.methods.length === 0 ? (
-                                    <TableRow>
-                                      <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
-                                        No hay datos.
-                                      </TableCell>
-                                    </TableRow>
-                                  ) : (
-                                    paymentMethodsSummary.methods.map((m) => (
-                                      <TableRow key={m.type}>
-                                        <TableCell className="font-medium">{m.type}</TableCell>
-                                        <TableCell className="text-right">{m.count}</TableCell>
-                                        <TableCell className="text-right font-medium">{formatCurrency(m.totalAmount)}</TableCell>
-                                      </TableRow>
-                                    ))
-                                  )}
-                                </TableBody>
-                              </Table>
-                            </div>
-                          </>
-                        )}
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {hasProducts && (
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-sm font-medium">Productos</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="text-2xl font-bold text-green-600">
-                            {formatCurrency(incomeData?.summary?.incomeProducts || 0)}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-                    {hasServices && (
-                      <Card>
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-sm font-medium">Servicios</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="text-2xl font-bold text-green-600">
-                            {formatCurrency(incomeData?.summary?.incomeServices || 0)}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {hasServices && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>Tabla de servicios</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          {hasNamedServices ? (
-                            <Tabs defaultValue="top-recurring-services" className="w-full">
-                              <TabsList className="mb-4">
-                                <TabsTrigger value="top-recurring-services">Top servicios recurrentes</TabsTrigger>
-                                <TabsTrigger value="top-users-services">Top usuarios por servicios</TabsTrigger>
-                              </TabsList>
-
-                              <TabsContent value="top-recurring-services">
-                                <div className="flex items-center justify-end gap-2 mb-3">
-                                  <span className="text-sm text-muted-foreground">% ganancia</span>
-                                  <Input
-                                    type="number"
-                                    min={0}
-                                    max={100}
-                                    step={1}
-                                    value={serviceProfitPercent}
-                                    onChange={(e) => {
-                                      const next = Number(e.target.value);
-                                      if (Number.isFinite(next)) setServiceProfitPercent(next);
-                                    }}
-                                    className="w-[90px]"
-                                  />
-                                </div>
-                                <div className="rounded-md border">
-                                  <Table>
-                                    <TableHeader>
-                                      <TableRow>
-                                        <TableHead>Servicio</TableHead>
-                                        <TableHead>Descripción</TableHead>
-                                        <TableHead className="text-right">Ganancia</TableHead>
-                                        <TableHead className="text-right">Total</TableHead>
-                                      </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                      {topRecurringNamedServices.length === 0 ? (
-                                        <TableRow>
-                                          <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                                            No hay datos.
-                                          </TableCell>
-                                        </TableRow>
-                                      ) : (
-                                        topRecurringNamedServices.map((s) => (
-                                          <TableRow key={s.name}>
-                                            <TableCell className="font-medium">{s.name}</TableCell>
-                                            <TableCell className="max-w-[260px] truncate">{s.description || "-"}</TableCell>
-                                            <TableCell className="text-right font-medium">
-                                              {formatCurrency((Number(s.totalAmount) || 0) * (Math.max(0, Math.min(100, serviceProfitPercent)) / 100))}
-                                            </TableCell>
-                                            <TableCell className="text-right font-medium">{formatCurrency(s.totalAmount)}</TableCell>
-                                          </TableRow>
-                                        ))
-                                      )}
-                                    </TableBody>
-                                  </Table>
-                                </div>
-                              </TabsContent>
-
-                              <TabsContent value="top-users-services">
-                                <div className="rounded-md border">
-                                  <Table>
-                                    <TableHeader>
-                                      <TableRow>
-                                        <TableHead>Usuario</TableHead>
-                                        <TableHead className="text-right">Total</TableHead>
-                                      </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                      {analyticsLoading && !incomeData ? (
-                                        <TableRow>
-                                          <TableCell colSpan={2} className="h-24 text-center text-muted-foreground">
-                                            Cargando...
-                                          </TableCell>
-                                        </TableRow>
-                                      ) : topUsersServicesAggregated.length === 0 ? (
-                                        <TableRow>
-                                          <TableCell colSpan={2} className="h-24 text-center text-muted-foreground">
-                                            No hay datos.
-                                          </TableCell>
-                                        </TableRow>
-                                      ) : (
-                                        topUsersServicesAggregated.map((u) => (
-                                          <TableRow key={u.userId}>
-                                            <TableCell>{u.userName || "-"}</TableCell>
-                                            <TableCell className="text-right font-medium">{formatCurrency(u.totalAmount)}</TableCell>
-                                          </TableRow>
-                                        ))
-                                      )}
-                                    </TableBody>
-                                  </Table>
-                                </div>
-                              </TabsContent>
-                            </Tabs>
-                          ) : (
-                            <div className="rounded-md border">
-                              <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>Usuario</TableHead>
-                                    <TableHead className="text-right">Total</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {(incomeData?.rankings?.topUsersServices || []).length === 0 ? (
-                                    <TableRow>
-                                      <TableCell colSpan={2} className="h-24 text-center text-muted-foreground">
-                                        No hay datos.
-                                      </TableCell>
-                                    </TableRow>
-                                  ) : (
-                                    (incomeData?.rankings?.topUsersServices || []).map((u) => (
-                                      <TableRow key={u.userId}>
-                                        <TableCell>{u.userName}</TableCell>
-                                        <TableCell className="text-right font-medium">{formatCurrency(u.totalAmount ?? u.total ?? 0)}</TableCell>
-                                      </TableRow>
-                                    ))
-                                  )}
-                                </TableBody>
-                              </Table>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {hasProducts && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>Top usuarios por ventas de productos</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="rounded-md border">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>Usuario</TableHead>
-                                  <TableHead className="text-right">Total</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {(incomeData?.rankings?.topUsersProducts || []).length === 0 ? (
-                                  <TableRow>
-                                    <TableCell colSpan={2} className="h-24 text-center text-muted-foreground">
-                                      No hay datos.
-                                    </TableCell>
-                                  </TableRow>
-                                ) : (
-                                  (incomeData?.rankings?.topUsersProducts || []).map((u) => (
-                                    <TableRow key={u.userId}>
-                                      <TableCell>{u.userName}</TableCell>
-                                      <TableCell className="text-right font-medium">{formatCurrency(u.totalAmount ?? u.total ?? 0)}</TableCell>
-                                    </TableRow>
-                                  ))
-                                )}
-                              </TableBody>
-                            </Table>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {analysisType === "expenses" && (
-                <div className="space-y-4">
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Total de egresos</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold text-red-600">
-                        {formatCurrency(
-                          expensesData?.totals?.totalExpenses ??
-                            (expensesData?.expenses || []).reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Detalle de egresos</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="rounded-md border">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Fecha</TableHead>
-                              <TableHead>Usuario</TableHead>
-                              <TableHead>Descripción</TableHead>
-                              <TableHead>Tipo de egreso</TableHead>
-                              <TableHead className="text-right">Monto</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {analyticsLoading && !expensesData ? (
-                              <TableRow>
-                                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                                  Cargando...
-                                </TableCell>
-                              </TableRow>
-                            ) : (expensesData?.expenses || []).length === 0 ? (
-                              <TableRow>
-                                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                                  No hay egresos en este rango.
-                                </TableCell>
-                              </TableRow>
-                            ) : (
-                              (expensesData?.expenses || []).map((e) => (
-                                <TableRow key={e.sourceId || `${e.date}-${e.description}`}>
-                                  <TableCell className="whitespace-nowrap">{new Date(e.date).toLocaleString()}</TableCell>
-                                  <TableCell>{e.user?.name || "-"}</TableCell>
-                                  <TableCell className="max-w-[300px] truncate">{e.description}</TableCell>
-                                  <TableCell>{e.expenseType || "OTRO"}</TableCell>
-                                  <TableCell className="text-right font-medium">{formatCurrency(e.amount)}</TableCell>
-                                </TableRow>
-                              ))
-                            )}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-            </>
-          ) : null}
         </TabsContent>
       </Tabs>
     </div>

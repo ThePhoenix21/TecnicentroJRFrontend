@@ -2,6 +2,15 @@
 import { api } from './api';
 import { AxiosError } from 'axios';
 
+import type {
+  ClientFilters,
+  ClientFull,
+  ClientLookupDniItem,
+  ClientLookupNameItem,
+  ClientLookupPhoneItem,
+  ClientsListResponse,
+} from '@/types/client.types';
+
 // Interfaces basadas en el backend
 export interface Client {
   id: string;
@@ -46,12 +55,17 @@ export interface ClientsResponse {
   };
 }
 
+const isAuthError = (error: unknown) => {
+  const status = (error as any)?.response?.status;
+  return status === 401 || status === 403;
+};
+
 export const clientService = {
-  async getClients(page: number = 1, limit: number = 10): Promise<ClientsResponse> {
+  async getClients(page: number = 1, pageSize: number = 12, filters: ClientFilters = {}): Promise<ClientsListResponse> {
     try {
-      console.log('Obteniendo clientes...', { page, limit });
-      const response = await api.get<ClientsResponse>('/clientes', {
-        params: { page, limit }
+      console.log('Obteniendo clientes...', { page, pageSize, filters });
+      const response = await api.get<ClientsListResponse>('/clientes', {
+        params: { page, pageSize, ...filters }
       });
 
       console.log('Respuesta del backend (getClients):', response.data);
@@ -78,47 +92,38 @@ export const clientService = {
     }
   },
 
-  // ✅ CORREGIDO: Solo ADMIN puede buscar
-  async searchClients(query: string): Promise<Client[]> {
-    console.log('Buscando clientes con query:', query);
+  async getLookupName(): Promise<ClientLookupNameItem[]> {
     try {
-      // El backend requiere mínimo 3 caracteres
-      if (query.trim().length < 3) {
-        console.log('La búsqueda requiere mínimo 3 caracteres');
-        return [];
-      }
-
-      const response = await api.get<Client[]>('/clientes/search', {
-        params: { query }
-      });
-      console.log('Resultados de búsqueda:', response.data);
-      return response.data || [];
+      const response = await api.get<ClientLookupNameItem[]>('/clientes/lookup-name');
+      return response.data;
     } catch (error) {
-      const axiosError = error as AxiosError<{ message?: string }>;
-      
-      // ✅ Manejar error de permisos específico para búsqueda
-      if (axiosError.response?.status === 403) {
-        console.log('No tienes permisos para buscar clientes (solo ADMIN)');
-        throw new Error('No tienes permisos para buscar clientes. Esta función está disponible solo para administradores.');
+      if (!isAuthError(error)) {
+        console.error('[clientService.getLookupName] Error:', error);
       }
-      
-      if (axiosError.response?.status === 400) {
-        console.log('Búsqueda inválida o muy corta');
-        return [];
+      return [];
+    }
+  },
+
+  async getLookupPhone(): Promise<ClientLookupPhoneItem[]> {
+    try {
+      const response = await api.get<ClientLookupPhoneItem[]>('/clientes/lookup-phone');
+      return response.data;
+    } catch (error) {
+      if (!isAuthError(error)) {
+        console.error('[clientService.getLookupPhone] Error:', error);
       }
-      
-      if (axiosError.response?.status === 404) {
-        console.log('No se encontraron resultados para la búsqueda');
-        return [];
+      return [];
+    }
+  },
+
+  async getLookupDni(): Promise<ClientLookupDniItem[]> {
+    try {
+      const response = await api.get<ClientLookupDniItem[]>('/clientes/lookup-dni');
+      return response.data;
+    } catch (error) {
+      if (!isAuthError(error)) {
+        console.error('[clientService.getLookupDni] Error:', error);
       }
-      
-      console.error('Error searching clients:', {
-        message: axiosError.message,
-        response: axiosError.response?.data,
-        status: axiosError.response?.status,
-        url: axiosError.config?.url
-      });
-      
       return [];
     }
   },
@@ -134,14 +139,6 @@ export const clientService = {
     } catch (error) {
       const axiosError = error as AxiosError<{ message?: string }>;
       
-      console.error('Error en getClientByDni:', {
-        dni,
-        error: axiosError.message,
-        response: axiosError.response?.data,
-        status: axiosError.response?.status,
-        url: axiosError.config?.url
-      });
-      
       // ✅ Manejar error de permisos específico
       if (error instanceof Error && error.message.includes('solo ADMIN')) {
         throw error;
@@ -152,6 +149,15 @@ export const clientService = {
         console.log('Cliente no encontrado con DNI:', dni);
         return null;
       }
+      
+      // Solo loguear errores que no sean 404
+      console.error('Error en getClientByDni:', {
+        dni,
+        error: axiosError.message,
+        response: axiosError.response?.data,
+        status: axiosError.response?.status,
+        url: axiosError.config?.url
+      });
       
       throw new Error(
         axiosError.response?.data?.message || 
@@ -183,6 +189,15 @@ export const clientService = {
       
       throw new Error(axiosError.response?.data?.message || 'No se pudo cargar el cliente. Por favor, intente nuevamente.');
     }
+  },
+
+  async getClientFull(id: string): Promise<ClientFull> {
+    const response = await api.get<ClientFull>(`/clientes/${id}/full`);
+    return response.data;
+  },
+
+  async softDeleteClient(id: string): Promise<void> {
+    await api.patch(`/clientes/${id}/soft-delete`);
   },
 
   async createClient(clientData: CreateClientDto): Promise<Client> {
@@ -220,7 +235,8 @@ export const clientService = {
   async updateClient(id: string, clientData: UpdateClientDto): Promise<Client> {
     console.log(`Actualizando cliente ID ${id} con datos:`, clientData);
     try {
-      const response = await api.patch<Client>(`/clientes/${id}`, clientData);
+      const { dni, ...payload } = clientData;
+      const response = await api.patch<Client>(`/clientes/${id}`, payload);
       console.log('Cliente actualizado exitosamente:', response.data);
       return response.data;
     } catch (error) {

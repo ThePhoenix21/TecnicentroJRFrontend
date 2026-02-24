@@ -15,8 +15,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { userService } from '@/services/user.service';
+import { usePermissions } from '@/hooks/usePermissions';
+import { AccessDeniedView } from '@/components/auth/access-denied-view';
+import { ProtectedButton } from '@/components/auth/protected-button';
 
 export default function UsersPage() {
+  const { canViewUsers } = usePermissions();
   const [refreshKey, setRefreshKey] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
@@ -24,6 +28,11 @@ export default function UsersPage() {
   const [isNewUserDialogOpen, setIsNewUserDialogOpen] = useState(false);
   const [selectedStore, setSelectedStore] = useState<string>('all');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+
+  // Verificar permisos de acceso
+  if (!canViewUsers()) {
+    return <AccessDeniedView />;
+  }
 
   // Debounce search term
   useEffect(() => {
@@ -88,11 +97,17 @@ export default function UsersPage() {
               </div>
               
               <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                <ProtectedButton
+                  permissions="MANAGE_USERS"
+                  onClick={() => setIsNewUserDialogOpen(true)}
+                  className="w-full sm:w-auto bg-primary hover:bg-primary/90 transition-colors"
+                  size="sm"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  <span className="font-medium">Nuevo Usuario</span>
+                </ProtectedButton>
                 <UserDialog open={isNewUserDialogOpen} onOpenChange={setIsNewUserDialogOpen} onSuccess={handleUserCreated}>
-                  <Button className="w-full sm:w-auto bg-primary hover:bg-primary/90 transition-colors" size="sm">
-                    <Plus className="h-4 w-4 mr-2" />
-                    <span className="font-medium">Nuevo Usuario</span>
-                  </Button>
+                  <div />
                 </UserDialog>
               </div>
             </div>

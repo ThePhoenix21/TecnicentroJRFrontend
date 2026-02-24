@@ -1,12 +1,16 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { jwtDecode } from 'jwt-decode';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ActiveFilters } from '@/components/ui/active-filters';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -15,26 +19,79 @@ import {
   Power, 
   Calculator,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  Printer,
+  Search,
+  X
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cashSessionService } from '@/services/cash-session.service';
 import { cashService } from '@/services/cash.service';
-import { CashSession, CashBalance, CashMovement } from '@/types/cash.types';
+import { clientService } from '@/services/client.service';
+import { CashSession, CashBalance, CashMovement, CashMovementListItem, CashMovementLookupItem } from '@/types/cash.types';
 import { useAuth } from '@/contexts/auth-context';
 import { formatCurrency } from '@/lib/utils';
+
+interface TenantTokenPayload {
+  tenantLogoUrl?: string;
+  tenantName?: string;
+}
+
+interface TenantInfoFromToken {
+  tenantLogoUrl?: string;
+  tenantName?: string;
+}
+
+const resolveTenantInfoFromToken = (): TenantInfoFromToken => {
+  if (typeof window === 'undefined') return {};
+
+  try {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      console.warn('No auth_token found in localStorage when resolving tenant info');
+      return {};
+    }
+
+    const decoded = jwtDecode<TenantTokenPayload>(token);
+    console.log('Resolved tenant info from token:', decoded.tenantLogoUrl, decoded.tenantName);
+    return {
+      tenantLogoUrl: decoded.tenantLogoUrl || undefined,
+      tenantName: decoded.tenantName || undefined,
+    };
+  } catch (error) {
+    console.error('Error al obtener información del tenant del token:', error);
+    return {};
+  }
+};
 
 export default function CajaPage() {
   const { user, currentStore, hasPermission, isAdmin, canIssuePdf } = useAuth();
 
-  const canViewCash = isAdmin || hasPermission?.("VIEW_CASH") || hasPermission?.("MANAGE_CASH");
+  const canViewCash = isAdmin || hasPermission?.("VIEW_CASH");
   const canManageCash = isAdmin || hasPermission?.("MANAGE_CASH");
+  
+  // Permisos para historial
+  const canViewAllCashHistory = isAdmin || hasPermission?.("VIEW_ALL_CASH_HISTORY");
+  const canViewOwnCashHistory = hasPermission?.("VIEW_OWN_CASH_HISTORY");
+  const canViewHistory = canViewAllCashHistory || canViewOwnCashHistory;
+  
+  // Permiso para impresión
+  const canPrintCashClosure = isAdmin || hasPermission?.("PRINT_CASH_CLOSURE");
 
   const [currentSession, setCurrentSession] = useState<CashSession | null>(null);
   const [balance, setBalance] = useState<CashBalance | null>(null);
   const [loading, setLoading] = useState(true);
   const [openingAmount, setOpeningAmount] = useState('0');
   const [isOpening, setIsOpening] = useState(false);
+  const [openCashConflictModal, setOpenCashConflictModal] = useState<{
+    open: boolean;
+    message: string;
+    storeName?: string;
+  }>({
+    open: false,
+    message: '',
+    storeName: undefined,
+  });
   const [isClosing, setIsClosing] = useState(false);
   const [showMovementForm, setShowMovementForm] = useState(false);
   const [movementData, setMovementData] = useState({
@@ -58,42 +115,174 @@ export default function CajaPage() {
     declaredAmount: ''
   });
   
-  // Estado para paginación de movimientos
-  const [currentPage, setCurrentPage] = useState(1);
-  const movementsPerPage = 10;
+  // Estado para impresión de cierre histórico
+  const [showPrintHistoricalDialog, setShowPrintHistoricalDialog] = useState(false);
+  const [historicalCashId, setHistoricalCashId] = useState('');
+  const [isPrintingHistorical, setIsPrintingHistorical] = useState(false);
+  const [historicalSessionToPrint, setHistoricalSessionToPrint] = useState<CashSession | null>(null);
+
+  const [activeTab, setActiveTab] = useState<'open' | 'history'>('open');
+
+  // Estado para filtros y paginación del historial
+  const defaultFromDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]; // Primer día del mes actual
+  const defaultToDate = new Date().toISOString().split('T')[0]; // Fecha actual
   
-  // Estado para filtrar métodos de pago
-  const [showOnlyCash, setShowOnlyCash] = useState(false);
-  
-  // Funciones de paginación
-  const getFilteredMovements = () => {
-    if (!balance) return [];
-    // Ordenar por createdAt descendente (más nuevos primero)
-    const sortedMovements = [...balance.movements].sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-    
-    // Filtrar por método de pago si está activado
-    return showOnlyCash 
-      ? sortedMovements.filter(movement => !movement.paymentMethod || movement.paymentMethod === 'EFECTIVO')
-      : sortedMovements;
+  const [historyFilters, setHistoryFilters] = useState({
+    from: defaultFromDate,
+    to: defaultToDate,
+    openedByName: '',
+    page: 1,
+    pageSize: 12
+  });
+  const [historyPagination, setHistoryPagination] = useState({
+    total: 0,
+    totalPages: 1,
+    page: 1,
+    pageSize: 12
+  });
+  const [hasSearched, setHasSearched] = useState(false);
+
+  const [closedSessions, setClosedSessions] = useState<CashSession[]>([]);
+  const [closedSessionsLoading, setClosedSessionsLoading] = useState(false);
+  const [selectedClosedSession, setSelectedClosedSession] = useState<CashSession | null>(null);
+  const [selectedMovements, setSelectedMovements] = useState<CashMovementListItem[]>([]);
+  const [selectedMovementsLoading, setSelectedMovementsLoading] = useState(false);
+  const [selectedMovementsPage, setSelectedMovementsPage] = useState(1);
+  const [selectedMovementsTotalPages, setSelectedMovementsTotalPages] = useState(1);
+  const [selectedMovementsTotal, setSelectedMovementsTotal] = useState(0);
+
+  // =====================
+  // Movimientos (nuevo listado paginado con filtros)
+  // =====================
+  const [movements, setMovements] = useState<CashMovementListItem[]>([]);
+  const [movementsLoading, setMovementsLoading] = useState(false);
+  const [movementsPage, setMovementsPage] = useState(1);
+  const [movementsTotalPages, setMovementsTotalPages] = useState(1);
+  const [movementsTotal, setMovementsTotal] = useState(0);
+
+  const [paymentLookup, setPaymentLookup] = useState<CashMovementLookupItem[]>([]);
+  const [operationLookup, setOperationLookup] = useState<CashMovementLookupItem[]>([]);
+  const [clientLookup, setClientLookup] = useState<Array<{ id: string; name: string }>>([]);
+
+  const [paymentFilter, setPaymentFilter] = useState('');
+  const [operationFilter, setOperationFilter] = useState('');
+  const [clientQuery, setClientQuery] = useState('');
+  const [clientNameFilter, setClientNameFilter] = useState('');
+  const [showClientSuggestions, setShowClientSuggestions] = useState(false);
+
+  const filtersActive = useMemo(() => {
+    return !!(paymentFilter.trim() || operationFilter.trim() || clientNameFilter.trim());
+  }, [paymentFilter, operationFilter, clientNameFilter]);
+
+  const movementsPageSize = filtersActive ? 20 : 50;
+  const closedSessionMovementsPageSize = 50;
+
+  const clearFilters = () => {
+    setPaymentFilter('');
+    setOperationFilter('');
+    setClientQuery('');
+    setClientNameFilter('');
+    setShowClientSuggestions(false);
+    setMovementsPage(1);
+    loadMovementsRef.current?.(1);
   };
-  
-  const totalPages = balance ? Math.ceil(getFilteredMovements().length / movementsPerPage) : 1;
-  
-  const getCurrentMovements = () => {
-    const filteredMovements = getFilteredMovements();
-    const startIndex = (currentPage - 1) * movementsPerPage;
-    const endIndex = startIndex + movementsPerPage;
-    return filteredMovements.slice(startIndex, endIndex);
-  };
-  
-  // Resetear página cuando cambian los movimientos o el filtro
-  useEffect(() => {
-    if (balance) {
-      setCurrentPage(1);
+
+  const loadMovements = useCallback(async (targetPage: number) => {
+    if (!currentSession?.id) return;
+    if (!canViewCash) return;
+
+    setMovementsLoading(true);
+    try {
+      const response = await cashService.getCashMovementsList({
+        sessionId: currentSession.id,
+        page: targetPage,
+        pageSize: movementsPageSize,
+        payment: paymentFilter.trim() || undefined,
+        operation: operationFilter.trim() || undefined,
+        clientName: clientNameFilter.trim() || undefined,
+      });
+
+      setMovements(Array.isArray(response.data) ? response.data : []);
+      setMovementsTotal(response.total || 0);
+      setMovementsTotalPages(response.totalPages || 1);
+      setMovementsPage(response.page || targetPage);
+    } catch (error) {
+      console.error('Error al cargar movimientos (listado):', error);
+      setMovements([]);
+      setMovementsTotal(0);
+      setMovementsTotalPages(1);
+      toast.error('Error al cargar movimientos de caja');
+    } finally {
+      setMovementsLoading(false);
     }
-  }, [balance?.movements.length, showOnlyCash]);
+  }, [currentSession?.id, currentSession?.id, canViewCash, movementsPageSize, paymentFilter, operationFilter, clientNameFilter]);
+
+  const loadSelectedSessionMovements = useCallback(async (sessionId: string, targetPage: number = 1) => {
+    if (!canViewHistory) return;
+
+    setSelectedMovementsLoading(true);
+    try {
+      const response = await cashService.getCashMovementsList({
+        sessionId,
+        page: targetPage,
+        pageSize: closedSessionMovementsPageSize,
+      });
+
+      setSelectedMovements(Array.isArray(response.data) ? response.data : []);
+      setSelectedMovementsTotal(response.total || 0);
+      setSelectedMovementsTotalPages(response.totalPages || 1);
+      setSelectedMovementsPage(response.page || targetPage);
+    } catch (error) {
+      console.error('Error al cargar movimientos de sesión cerrada:', error);
+      setSelectedMovements([]);
+      setSelectedMovementsTotal(0);
+      setSelectedMovementsTotalPages(1);
+      toast.error('No se pudieron cargar los movimientos de la sesión seleccionada');
+    } finally {
+      setSelectedMovementsLoading(false);
+    }
+  }, [canViewHistory, closedSessionMovementsPageSize]);
+
+  const loadMovementsRef = useRef(loadMovements);
+
+  useEffect(() => {
+    loadMovementsRef.current = loadMovements;
+  }, [loadMovements]);
+
+  useEffect(() => {
+    const loadLookups = async () => {
+      try {
+        const [payments, operations, clients] = await Promise.all([
+          cashService.getCashMovementsLookupPayment(),
+          cashService.getCashMovementsLookupOperation(),
+          clientService.getLookupName(),
+        ]);
+        setPaymentLookup(Array.isArray(payments) ? payments : []);
+        setOperationLookup(Array.isArray(operations) ? operations : []);
+        setClientLookup(Array.isArray(clients) ? clients : []);
+      } catch (error) {
+        console.error('Error loading cash movement lookups:', error);
+      }
+    };
+
+    loadLookups();
+  }, []);
+
+  useEffect(() => {
+    if (!currentSession?.id) return;
+    setMovementsPage(1);
+    loadMovementsRef.current?.(1);
+  }, [currentSession?.id]);
+
+  useEffect(() => {
+    if (!currentSession?.id) return;
+    const timer = setTimeout(() => {
+      setMovementsPage(1);
+      loadMovementsRef.current?.(1);
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [paymentFilter, operationFilter, clientNameFilter, currentSession?.id]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -151,6 +340,110 @@ export default function CajaPage() {
     loadCurrentSession();
   }, [loadCurrentSession]);
 
+  const loadClosedSessions = useCallback(async () => {
+    if (!canViewHistory) return;
+    if (!currentStore?.id) return;
+
+    const from = historyFilters.from ? new Date(`${historyFilters.from}T00:00:00.000Z`).toISOString() : undefined;
+    const to = historyFilters.to ? new Date(`${historyFilters.to}T23:59:59.999Z`).toISOString() : undefined;
+    let openedByName = historyFilters.openedByName.trim() || undefined;
+    const storeId = isAdmin ? (currentStore?.id || undefined) : undefined;
+
+    // Si solo tiene permiso para ver su propio historial, forzar filtro por su nombre
+    if (!canViewAllCashHistory && canViewOwnCashHistory) {
+      openedByName = user?.name;
+    }
+
+    setClosedSessionsLoading(true);
+    try {
+      const response = await cashSessionService.getClosedCashSessionsByStore({
+        ...(storeId ? { storeId } : {}),
+        ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
+        ...(openedByName ? { openedByName } : {}),
+        page: historyFilters.page,
+        pageSize: historyFilters.pageSize
+      });
+      
+      setClosedSessions(response.data || []);
+      setHistoryPagination({
+        total: response.total || 0,
+        totalPages: response.totalPages || 1,
+        page: response.page || 1,
+        pageSize: response.pageSize || 12
+      });
+    } catch (error: any) {
+      console.error('Error al cargar historial de cajas:', error);
+      setClosedSessions([]);
+      setHistoryPagination({ total: 0, totalPages: 1, page: 1, pageSize: 12 });
+      toast.error(error.response?.data?.message || 'Error al cargar historial de cajas');
+    } finally {
+      setClosedSessionsLoading(false);
+    }
+  }, [canViewHistory, canViewAllCashHistory, canViewOwnCashHistory, historyFilters, currentStore?.id, isAdmin, user?.name]);
+
+  const handleSelectClosedSessionDetail = useCallback((session: CashSession) => {
+    setSelectedClosedSession(session);
+    setSelectedMovements([]);
+    setSelectedMovementsPage(1);
+    setSelectedMovementsTotal(0);
+    setSelectedMovementsTotalPages(1);
+    loadSelectedSessionMovements(session.id, 1);
+  }, [loadSelectedSessionMovements]);
+
+  const handleHistoryFilterChange = useCallback((newFilters: Partial<typeof historyFilters>) => {
+    setHistoryFilters(prev => ({
+      ...prev,
+      ...newFilters,
+      page: 1 // Resetear a página 1 cuando cambian los filtros
+    }));
+  }, []);
+
+  const handleHistoryPageChange = useCallback((newPage: number) => {
+    setHistoryFilters(prev => ({
+      ...prev,
+      page: newPage
+    }));
+  }, []);
+
+  const handleHistoryPageSizeChange = useCallback((newPageSize: number) => {
+    setHistoryFilters(prev => ({
+      ...prev,
+      pageSize: newPageSize,
+      page: 1 // Resetear a página 1 cuando cambia el tamaño
+    }));
+  }, []);
+
+  const clearHistoryFilters = useCallback(() => {
+    setHistoryFilters({
+      from: defaultFromDate,
+      to: defaultToDate,
+      openedByName: '',
+      page: 1,
+      pageSize: 12
+    });
+    setHasSearched(false);
+  }, [defaultFromDate, defaultToDate]);
+
+  const hasActiveHistoryFilters = !!(
+  (historyFilters.from && historyFilters.from !== defaultFromDate) || 
+  (historyFilters.to && historyFilters.to !== defaultToDate) || 
+  historyFilters.openedByName
+);
+
+  const handleBackToClosedSessions = useCallback(() => {
+    setSelectedClosedSession(null);
+    setSelectedMovements([]);
+    setSelectedMovementsPage(1);
+    setSelectedMovementsTotal(0);
+    setSelectedMovementsTotalPages(1);
+  }, []);
+
+  useEffect(() => {
+    // No cargar automáticamente al cambiar a la pestaña history
+    // Solo cargar cuando el usuario haga clic en "Buscar"
+  }, [activeTab, canViewHistory]);
+
   const handleOpenCashSession = async () => {
     if (!canManageCash) {
       toast.error('No tienes permisos para abrir la caja (MANAGE_CASH requerido)');
@@ -172,8 +465,30 @@ export default function CajaPage() {
       await loadCurrentSession();
       setOpeningAmount('0');
     } catch (error: any) {
+      const status = error?.response?.status;
+      const responseData = error?.response?.data;
+
+      if (status === 409) {
+        const storeName =
+          typeof responseData?.storeName === 'string' ? responseData.storeName : undefined;
+        const message =
+          typeof responseData?.message === 'string' && responseData.message.trim()
+            ? responseData.message
+            : storeName
+              ? `Ya tienes una sesión de caja abierta en la tienda ${storeName}. Ciérrala antes de abrir otra.`
+              : 'Ya tienes una sesión de caja abierta en otra tienda. Ciérrala antes de abrir otra.';
+
+        setOpenCashConflictModal({
+          open: true,
+          message,
+          storeName,
+        });
+        return;
+      }
+
       console.error('Error al abrir caja:', error);
-      toast.error(error.response?.data?.message || 'Error al abrir la caja');
+
+      toast.error(responseData?.message || 'Error al abrir la caja');
     } finally {
       setIsOpening(false);
     }
@@ -200,27 +515,18 @@ export default function CajaPage() {
       setCloseData({ email: '', password: '', declaredAmount: '' });
       await loadCurrentSession();
 
-      if (canIssuePdf) {
+      if (canPrintCashClosure) {
         // Generar e imprimir reporte PDF automáticamente
         try {
-          const { default: ReceiptClosingPDF } = await import('./ReceiptClosingPDF');
-          const { pdf } = await import('@react-pdf/renderer');
-
-          // Intentar obtener todos los movimientos de la sesión para que el PDF
-          // incluya también ingresos manuales (como pagos diferidos de servicios)
-          let closingData = response as any;
-          try {
-            const movementsResponse = await cashService.getCashMovements(currentSession.id, 1, 1000);
-            closingData = {
-              ...response,
-              movements: movementsResponse.data,
-            };
-          } catch (movErr) {
-            console.error('Error al obtener movimientos para el PDF de cierre:', movErr);
-          }
+          const { tenantLogoUrl, tenantName } = resolveTenantInfoFromToken();
+          const [{ default: ReceiptClosingPDF }, { pdf }, closingPrintData] = await Promise.all([
+            import('./ReceiptClosingPDF'),
+            import('@react-pdf/renderer'),
+            cashSessionService.getCashClosingPrint(currentSession.id),
+          ]);
 
           const blob = await pdf(
-            <ReceiptClosingPDF data={closingData} />
+            <ReceiptClosingPDF data={closingPrintData} logoSrc={tenantLogoUrl} tenantName={tenantName} />
           ).toBlob();
           
           const pdfUrl = URL.createObjectURL(blob);
@@ -273,6 +579,9 @@ export default function CajaPage() {
       setMovementData({ amount: '', type: 'INCOME', payment: 'EFECTIVO', description: '' });
       setShowMovementForm(false);
       await loadCurrentSession();
+      // Forzar recarga del listado de movimientos para reflejar el nuevo registro
+      setMovementsPage(1);
+      await loadMovementsRef.current?.(1);
     } catch (error: any) {
       console.error('Error al agregar movimiento:', error);
       toast.error(error.response?.data?.message || 'Error al agregar el movimiento');
@@ -286,19 +595,68 @@ export default function CajaPage() {
     return description.replace(/ - Orden [0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/i, '');
   };
 
+  const handlePrintHistoricalClose = async () => {
+    if (!historicalCashId.trim()) {
+      toast.error('Por favor ingrese el ID de la caja cerrada');
+      return;
+    }
+
+    if (!canPrintCashClosure) {
+      toast.error('No tienes permisos para imprimir PDFs');
+      return;
+    }
+
+    try {
+      setIsPrintingHistorical(true);
+
+      const { tenantLogoUrl, tenantName } = resolveTenantInfoFromToken();
+
+      const [{ default: HistoricalClosingPDF }, { pdf }, closingData] = await Promise.all([
+        import('./HistoricalClosingPDF'),
+        import('@react-pdf/renderer'),
+        cashSessionService.getCashClosingPrint(historicalCashId.trim()),
+      ]);
+
+      const blob = await pdf(
+        <HistoricalClosingPDF data={closingData} logoSrc={tenantLogoUrl} tenantName={tenantName} />
+      ).toBlob();
+      
+      const pdfUrl = URL.createObjectURL(blob);
+      const printWindow = window.open(pdfUrl, '_blank');
+      
+      if (printWindow) {
+        // Esperar a que cargue el PDF antes de imprimir
+        setTimeout(() => {
+          printWindow.print();
+        }, 1000);
+      }
+
+      // Cerrar diálogo y limpiar
+      setShowPrintHistoricalDialog(false);
+      setHistoricalCashId('');
+      toast.success('Receipt de cierre histórico generado exitosamente');
+      
+    } catch (error: any) {
+      console.error('Error al generar receipt de cierre histórico:', error);
+      toast.error(error.response?.data?.message || 'Error al generar el receipt de cierre histórico');
+    } finally {
+      setIsPrintingHistorical(false);
+    }
+  };
+
   if (loading) {
     if (!canViewCash) {
-    return (
-      <div className="space-y-6 p-6">
-        <h1 className="text-3xl font-bold">Gestión de Caja</h1>
-        <p className="text-muted-foreground">
-          No tienes permisos para ver esta sección.
-        </p>
-      </div>
-    );
-  }
+      return (
+        <div className="space-y-6 p-6">
+          <h1 className="text-3xl font-bold">Gestión de Caja</h1>
+          <p className="text-muted-foreground">
+            No tienes permisos para ver esta sección.
+          </p>
+        </div>
+      );
+    }
 
-  return (
+    return (
       <div className="space-y-6 p-6">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold">Gestión de Caja</h1>
@@ -320,6 +678,17 @@ export default function CajaPage() {
     );
   }
 
+  if (!canViewCash) {
+    return (
+      <div className="space-y-6 p-6">
+        <h1 className="text-3xl font-bold">Gestión de Caja</h1>
+        <p className="text-muted-foreground">
+          No tienes permisos para ver esta sección.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
@@ -329,39 +698,51 @@ export default function CajaPage() {
             {currentStore?.name} - {user?.name}
           </p>
         </div>
-        <div className="flex gap-2">
-          {currentSession?.status === 'OPEN' && canManageCash && (
-            <>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  if (isMobile) {
-                    setIsMobileMovementModalOpen(true);
-                    setMobileMovementStep('select');
-                    setMobileMovementType(null);
-                    setMobileMovementPayment('EFECTIVO');
-                    setMobileMovementAmount('');
-                    setMobileMovementDescription('');
-                    return;
-                  }
-                  setShowMovementForm(!showMovementForm);
-                }}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Movimiento
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={() => setShowCloseForm(true)}
-                disabled={isClosing}
-              >
-                <Power className="h-4 w-4 mr-2" />
-                Cerrar Caja
-              </Button>
-            </>
-          )}
-        </div>
       </div>
+
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'open' | 'history')}>
+        <TabsList>
+          <TabsTrigger value="open">Caja abierta</TabsTrigger>
+          {canViewHistory && <TabsTrigger value="history">Historial de cajas</TabsTrigger>}
+        </TabsList>
+
+        <TabsContent value="open">
+          <div className="flex justify-end">
+            <div className="flex gap-2">              
+              {currentSession?.status === 'OPEN' && canManageCash && (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (isMobile) {
+                        setIsMobileMovementModalOpen(true);
+                        setMobileMovementStep('select');
+                        setMobileMovementType(null);
+                        setMobileMovementPayment('EFECTIVO');
+                        setMobileMovementAmount('');
+                        setMobileMovementDescription('');
+                        return;
+                      }
+                      setShowMovementForm(!showMovementForm);
+                    }}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Movimiento
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => setShowCloseForm(true)}
+                    disabled={isClosing}
+                  >
+                    <Power className="h-4 w-4 mr-2" />
+                    Cerrar Caja
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-6 space-y-8">
 
       {/* Estado de Caja */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -611,8 +992,44 @@ export default function CajaPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={openCashConflictModal.open}
+        onOpenChange={(open) => {
+          setOpenCashConflictModal((prev) => ({ ...prev, open }));
+        }}
+      >
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Caja abierta en otra tienda</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {openCashConflictModal.message}
+            </p>
+            {openCashConflictModal.storeName && (
+              <div className="text-sm font-medium">
+                Tienda: {openCashConflictModal.storeName}
+              </div>
+            )}
+            <div className="flex justify-end pt-1">
+              <Button
+                type="button"
+                onClick={() =>
+                  setOpenCashConflictModal((prev) => ({
+                    ...prev,
+                    open: false,
+                  }))
+                }
+              >
+                Entendido
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Formulario para abrir caja */}
-      {!currentSession && canManageCash && (
+      {!currentSession && canManageCash && canViewCash && (
         <Card>
           <CardHeader>
             <CardTitle>Abrir Caja</CardTitle>
@@ -646,7 +1063,7 @@ export default function CajaPage() {
       )}
 
       {/* Formulario de movimiento manual */}
-      {showMovementForm && currentSession && (
+      {showMovementForm && currentSession && canManageCash && (
         <Card>
           <CardHeader>
             <CardTitle>Agregar Movimiento Manual</CardTitle>
@@ -727,7 +1144,7 @@ export default function CajaPage() {
       )}
 
       {/* Formulario de cierre de caja */}
-      {showCloseForm && currentSession && (
+      {showCloseForm && currentSession && canManageCash && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-red-600">
@@ -793,114 +1210,212 @@ export default function CajaPage() {
         </Card>
       )}
 
-      {/* Últimos movimientos */}
-      {balance?.movements && balance.movements.length > 0 && (
+      {/* Movimientos de Caja (nuevo listado) */}
+      {currentSession?.id && canViewCash && (
         <Card>
           <CardHeader>
             <CardTitle>Movimientos de Caja</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {/* Información de movimientos */}
-              <div className="flex items-center justify-between text-sm text-muted-foreground">
-                <div className="flex items-center gap-4">
-                  <p>
-                    Mostrando {Math.min(movementsPerPage, getCurrentMovements().length)} de {getFilteredMovements().length} movimientos
-                    {showOnlyCash && " (solo efectivo)"}
-                  </p>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={showOnlyCash}
-                      onChange={(e) => setShowOnlyCash(e.target.checked)}
-                      className="rounded"
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3 w-full md:w-auto max-w-3xl">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Cliente</label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="search"
+                      placeholder="Buscar cliente..."
+                      className="pl-9"
+                      value={clientQuery}
+                      onBlur={() => setTimeout(() => setShowClientSuggestions(false), 150)}
+                      onChange={(e) => {
+                        const nextValue = e.target.value;
+                        setClientQuery(nextValue);
+                        setShowClientSuggestions(nextValue.trim().length > 0);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return;
+                        e.preventDefault();
+                        const trimmed = clientQuery.trim();
+                        if (!trimmed) return;
+                        setClientNameFilter(trimmed);
+                        setClientQuery(trimmed);
+                        setShowClientSuggestions(false);
+                      }}
                     />
-                    <span>Solo efectivo</span>
-                  </label>
-                </div>
-                {getFilteredMovements().length > movementsPerPage && (
-                  <p>
-                    Página {currentPage} de {totalPages} ({movementsPerPage} por página)
-                  </p>
-                )}
-              </div>
-              
-              {/* Paginación */}
-              {getFilteredMovements().length > movementsPerPage && (
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                      disabled={currentPage === 1}
-                    >
-                      Anterior
-                    </Button>
-                    <span className="text-sm font-medium">
-                      Página {currentPage} de {totalPages}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                      disabled={currentPage === totalPages}
-                    >
-                      Siguiente
-                    </Button>
+                    {clientQuery && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setClientQuery("");
+                          setClientNameFilter("");
+                          setShowClientSuggestions(false);
+                        }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        title="Limpiar búsqueda"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                    {showClientSuggestions && clientQuery.trim().length > 0 && (
+                      <div className="absolute z-20 mt-2 w-full rounded-md border bg-background shadow-md">
+                        <div className="max-h-48 overflow-auto">
+                          {clientLookup.filter((c) => c.name.toLowerCase().includes(clientQuery.trim().toLowerCase())).length === 0 ? (
+                            <div className="px-3 py-2 text-xs text-muted-foreground">Sin coincidencias</div>
+                          ) : (
+                            clientLookup
+                              .filter((c) => c.name.toLowerCase().includes(clientQuery.trim().toLowerCase()))
+                              .slice(0, 20)
+                              .map((c) => (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setClientNameFilter(c.name);
+                                    setClientQuery(c.name);
+                                    setShowClientSuggestions(false);
+                                  }}
+                                  className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                                >
+                                  {c.name}
+                                </button>
+                              ))
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Operación</label>
+                  <Select value={operationFilter} onValueChange={(v) => setOperationFilter(v === '__ALL__' ? '' : v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__ALL__">Todas</SelectItem>
+                      {operationLookup.map((item) => (
+                        <SelectItem key={item.id} value={item.value}>
+                          {item.value}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Método de pago</label>
+                  <Select value={paymentFilter} onValueChange={(v) => setPaymentFilter(v === '__ALL__' ? '' : v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__ALL__">Todos</SelectItem>
+                      {paymentLookup.map((item) => (
+                        <SelectItem key={item.id} value={item.value}>
+                          {item.value}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               
-              {/* Lista de movimientos */}
-              <div className="space-y-2">
-                {getCurrentMovements().map((movement) => (
-                  <div key={movement.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-full ${
-                        movement.type === 'INCOME' ? 'bg-green-100' : 'bg-red-100'
-                      }`}>
-                        {movement.type === 'INCOME' ? (
-                          <TrendingUp className="h-4 w-4 text-green-600" />
-                        ) : (
-                          <TrendingDown className="h-4 w-4 text-red-600" />
-                        )}
+              <ActiveFilters 
+                hasActiveFilters={filtersActive}
+                onClearFilters={clearFilters}
+                className="mt-2"
+              />
+              
+              <div className="flex items-center justify-between text-sm text-muted-foreground">
+                <p>
+                  Mostrando {movements.length} de {movementsTotal} movimientos
+                  {filtersActive && ` (filtrados)`}
+                </p>
+                <p>
+                  Página {movementsPage} de {movementsTotalPages}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const next = movementsPage - 1;
+                    if (next < 1) return;
+                    setMovementsPage(next);
+                    loadMovementsRef.current?.(next);
+                  }}
+                  disabled={movementsLoading || movementsPage <= 1}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const next = movementsPage + 1;
+                    if (next > movementsTotalPages) return;
+                    setMovementsPage(next);
+                    loadMovementsRef.current?.(next);
+                  }}
+                  disabled={movementsLoading || movementsPage >= movementsTotalPages}
+                >
+                  Siguiente
+                </Button>
+              </div>
+
+              {movementsLoading ? (
+                <div className="py-10 text-center text-sm text-muted-foreground">Cargando movimientos...</div>
+              ) : movements.length === 0 ? (
+                <div className="py-10 text-center text-sm text-muted-foreground">
+                  No hay movimientos para los filtros seleccionados.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {movements.map((movement) => (
+                    <div
+                      key={movement.id}
+                      className="flex items-center justify-between p-3 border rounded-lg"
+                    >
+                      <div className="flex items-center gap-3 flex-1">
+                        <div className={`p-3 rounded-full flex items-center justify-center w-14 h-14 flex-shrink-0 ${
+                          movement.type === 'INCOME' 
+                            ? 'bg-green-100 text-green-600' 
+                            : 'bg-red-100 text-red-600'
+                        }`}>
+                          {movement.type === 'INCOME' ? (
+                            <TrendingUp className="h-6 w-6" />
+                          ) : (
+                            <TrendingDown className="h-6 w-6" />
+                          )}
+                        </div>
+                        <div className="space-y-1 flex-1">
+                          <p className="font-medium">{formatDescription(movement.description)}</p>
+                          {movement.clientName && (
+                            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                              <span>{movement.clientName}</span>
+                            </div>
+                          )}
+                          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                            <span>{movement.payment}</span>
+                            <span>•</span>
+                            <span>{new Date(movement.createdAt).toLocaleString()}</span>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium">{formatDescription(movement.description)}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date(movement.createdAt).toLocaleString()}
-                          {movement.clientName && ` • ${movement.clientName}`}
-                          {movement.paymentMethod && ` • ${movement.paymentMethod}`}
+                      <div className="text-right">
+                        <p
+                          className={`font-bold ${movement.type === 'INCOME' ? 'text-green-600' : 'text-red-600'}`}
+                        >
+                          {movement.type === 'INCOME' ? '+' : '-'} {formatCurrency(parseFloat(movement.amount || '0'))}
                         </p>
                       </div>
                     </div>
-                    <div className={`font-bold ${
-                      movement.type === 'INCOME' ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      {movement.type === 'INCOME' ? '+' : '-'}
-                      {formatCurrency(movement.amount)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              
-              {/* Paginación inferior */}
-              {getFilteredMovements().length > movementsPerPage && (
-                <div className="flex items-center justify-center">
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                      <Button
-                        key={page}
-                        variant={currentPage === page ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setCurrentPage(page)}
-                        className="w-8 h-8 p-0"
-                      >
-                        {page}
-                      </Button>
-                    ))}
-                  </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -908,15 +1423,431 @@ export default function CajaPage() {
         </Card>
       )}
 
-      {/* Alertas informativas */}
-      {!currentSession && (
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            No hay una sesión de caja abierta. Debes abrir la caja para comenzar a registrar operaciones.
-          </AlertDescription>
-        </Alert>
-      )}
+          </div>
+
+        </TabsContent>
+
+        <TabsContent value="history">
+          {/* Filtros del historial */}
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Search className="h-5 w-5" />
+                Filtros de Historial
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-4">
+                <div>
+                  <label className="text-sm font-medium">Desde</label>
+                  <Input
+                    type="date"
+                    value={historyFilters.from}
+                    onChange={(e) => handleHistoryFilterChange({ from: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Hasta</label>
+                  <Input
+                    type="date"
+                    value={historyFilters.to}
+                    onChange={(e) => handleHistoryFilterChange({ to: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                <div className={canViewAllCashHistory ? "" : "invisible"}>
+                  <label className="text-sm font-medium">Abierto por</label>
+                  <Input
+                    type="text"
+                    placeholder="Buscar por nombre..."
+                    value={historyFilters.openedByName}
+                    onChange={(e) => handleHistoryFilterChange({ openedByName: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        loadClosedSessions();
+                      }
+                    }}
+                    className="mt-1"
+                    disabled={!canViewAllCashHistory}
+                  />
+                </div>
+                <div className="flex items-center justify-end pt-6">
+                  <Button
+                    onClick={loadClosedSessions}
+                    disabled={closedSessionsLoading}
+                    className="flex items-center gap-2"
+                    size="sm"
+                  >
+                    <Search className="h-4 w-4" />
+                    {closedSessionsLoading ? 'Buscando...' : 'Buscar'}
+                  </Button>
+                </div>
+              </div>
+              
+              {/* Filtros activos */}
+              {hasActiveHistoryFilters && (
+                <ActiveFilters
+                  hasActiveFilters={hasActiveHistoryFilters}
+                  onClearFilters={clearHistoryFilters}
+                  className="mt-4"
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          {selectedClosedSession ? (
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <Button variant="outline" onClick={handleBackToClosedSessions} className="w-full md:w-auto">
+                  Volver al historial
+                </Button>
+                {canPrintCashClosure && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (!selectedClosedSession) return;
+                      setHistoricalSessionToPrint(selectedClosedSession);
+                      setHistoricalCashId(selectedClosedSession.id);
+                      setShowPrintHistoricalDialog(true);
+                    }}
+                    className="w-full md:w-auto"
+                  >
+                    <Printer className="h-4 w-4 mr-2" />
+                    Imprimir cierre
+                  </Button>
+                )}
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Sesión cerrada</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedClosedSession.closedAt
+                      ? new Date(selectedClosedSession.closedAt).toLocaleString()
+                      : new Date(selectedClosedSession.openedAt).toLocaleString()}
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Abierta</p>
+                      <p className="text-sm font-medium">{new Date(selectedClosedSession.openedAt).toLocaleString()}</p>
+                      <p className="text-xs text-muted-foreground">{selectedClosedSession.User?.name || ''}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Cerrada</p>
+                      <p className="text-sm font-medium">
+                        {selectedClosedSession.closedAt
+                          ? new Date(selectedClosedSession.closedAt).toLocaleString()
+                          : '-'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Montos</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Inicial</p>
+                          <p className="text-sm font-medium">{formatCurrency(selectedClosedSession.openingAmount || 0)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Cierre</p>
+                          <p className="text-sm font-medium">{formatCurrency(selectedClosedSession.closingAmount || 0)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Movimientos de la sesión</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Mostrando {selectedMovements.length} de {selectedMovementsTotal} movimientos
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (!selectedClosedSession) return;
+                          const next = selectedMovementsPage - 1;
+                          if (next < 1) return;
+                          loadSelectedSessionMovements(selectedClosedSession.id, next);
+                        }}
+                        disabled={selectedMovementsLoading || selectedMovementsPage <= 1}
+                      >
+                        Anterior
+                      </Button>
+                      <p className="text-sm text-muted-foreground">
+                        Página {selectedMovementsPage} de {selectedMovementsTotalPages}
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (!selectedClosedSession) return;
+                          const next = selectedMovementsPage + 1;
+                          if (next > selectedMovementsTotalPages) return;
+                          loadSelectedSessionMovements(selectedClosedSession.id, next);
+                        }}
+                        disabled={selectedMovementsLoading || selectedMovementsPage >= selectedMovementsTotalPages}
+                      >
+                        Siguiente
+                      </Button>
+                    </div>
+
+                    {selectedMovementsLoading ? (
+                      <div className="py-10 text-center text-sm text-muted-foreground">Cargando movimientos...</div>
+                    ) : selectedMovements.length === 0 ? (
+                      <div className="py-10 text-center text-sm text-muted-foreground">
+                        No hay movimientos para esta sesión.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {selectedMovements.map((movement) => (
+                          <div
+                            key={movement.id}
+                            className="flex items-center justify-between rounded-lg border p-3"
+                          >
+                            <div className="flex items-center gap-3 flex-1">
+                              <div className={`p-3 rounded-full flex items-center justify-center w-14 h-14 flex-shrink-0 ${
+                                movement.type === 'INCOME' 
+                                  ? 'bg-green-100 text-green-600' 
+                                  : 'bg-red-100 text-red-600'
+                              }`}>
+                                {movement.type === 'INCOME' ? (
+                                  <TrendingUp className="h-6 w-6" />
+                                ) : (
+                                  <TrendingDown className="h-6 w-6" />
+                                )}
+                              </div>
+                              <div className="space-y-1 flex-1">
+                                <p className="font-medium">{formatDescription(movement.description)}</p>
+                                {movement.clientName && (
+                                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                                    <span>{movement.clientName}</span>
+                                  </div>
+                                )}
+                                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                                  <span>{movement.payment}</span>
+                                  <span>•</span>
+                                  <span>{new Date(movement.createdAt).toLocaleString()}</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p
+                                className={`font-bold ${movement.type === 'INCOME' ? 'text-green-600' : 'text-red-600'}`}
+                              >
+                                {movement.type === 'INCOME' ? '+' : '-'} {formatCurrency(parseFloat(movement.amount || '0'))}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <div className="space-y-4">
+
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-sm text-muted-foreground">
+                Mostrando {((historyPagination.page - 1) * historyPagination.pageSize) + 1} - {Math.min(historyPagination.page * historyPagination.pageSize, historyPagination.total)} de {historyPagination.total} resultados
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleHistoryPageChange(historyPagination.page - 1)}
+                  disabled={historyPagination.page <= 1 || closedSessionsLoading}
+                >
+                  Anterior
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Página {historyPagination.page} de {historyPagination.totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleHistoryPageChange(historyPagination.page + 1)}
+                  disabled={historyPagination.page >= historyPagination.totalPages || closedSessionsLoading}
+                >
+                  Siguiente
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {closedSessionsLoading ? (
+                <div className="py-10 text-center text-sm text-muted-foreground">Cargando historial...</div>
+              ) : closedSessions.length === 0 ? (
+                <div className="py-10 text-center text-sm text-muted-foreground">
+                  No hay cajas cerradas para los filtros seleccionados.
+                </div>
+              ) : (
+                closedSessions.map((s) => (
+                  <Card
+                    key={s.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleSelectClosedSessionDetail(s)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleSelectClosedSessionDetail(s);
+                      }
+                    }}
+                    className="cursor-pointer transition-all duration-200 border border-border/60 hover:border-primary/40 hover:bg-muted/60 hover:shadow-md"
+                  >
+                    <CardHeader className="pb-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <CardTitle className="text-base">Caja cerrada</CardTitle>
+                          <p className="text-xs text-muted-foreground">
+                            {s.closedAt ? new Date(s.closedAt).toLocaleString() : 'Cerrada'}
+                          </p>
+                        </div>
+                        {canPrintCashClosure && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setHistoricalSessionToPrint(s);
+                              setHistoricalCashId(s.id);
+                              setShowPrintHistoricalDialog(true);
+                            }}
+                          >
+                            <Printer className="h-4 w-4 mr-2" />
+                            Imprimir
+                          </Button>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Abierta</p>
+                          <p className="text-sm font-medium">{new Date(s.openedAt).toLocaleString()}</p>
+                          <p className="text-xs text-muted-foreground">{s.openedByName || s.User?.name || ''}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Cerrada</p>
+                          <p className="text-sm font-medium">{s.closedAt ? new Date(s.closedAt).toLocaleString() : '-'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Montos</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <p className="text-xs text-muted-foreground">Inicial</p>
+                              <p className="text-sm font-medium">{formatCurrency(s.openingAmount || 0)}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">Cierre</p>
+                              <p className="text-sm font-medium">{formatCurrency(s.closingAmount || 0)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
+
+            {/* Paginación */}
+            {historyPagination.totalPages > 1 && (
+              <div className="flex items-center justify-between mt-6">
+                <div className="text-sm text-muted-foreground">
+                  Mostrando {((historyPagination.page - 1) * historyPagination.pageSize) + 1} - {Math.min(historyPagination.page * historyPagination.pageSize, historyPagination.total)} de {historyPagination.total} resultados
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleHistoryPageChange(historyPagination.page - 1)}
+                    disabled={historyPagination.page <= 1 || closedSessionsLoading}
+                  >
+                    Anterior
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Página {historyPagination.page} de {historyPagination.totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleHistoryPageChange(historyPagination.page + 1)}
+                    disabled={historyPagination.page >= historyPagination.totalPages || closedSessionsLoading}
+                  >
+                    Siguiente
+                  </Button>
+                </div>
+              </div>
+            )}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      <Dialog
+        open={showPrintHistoricalDialog}
+        onOpenChange={(open) => {
+          setShowPrintHistoricalDialog(open);
+          if (!open) {
+            setHistoricalCashId('');
+            setHistoricalSessionToPrint(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar impresión</DialogTitle>
+          </DialogHeader>
+          {historicalSessionToPrint ? (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                ¿Deseas imprimir el cierre de caja del{' '}
+                <span className="font-medium text-foreground">
+                  {historicalSessionToPrint.closedAt
+                    ? new Date(historicalSessionToPrint.closedAt).toLocaleString()
+                    : new Date(historicalSessionToPrint.openedAt).toLocaleString()}
+                </span>
+                ?
+              </p>
+              <div className="flex gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowPrintHistoricalDialog(false)}
+                  disabled={isPrintingHistorical}
+                  className="flex-1"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handlePrintHistoricalClose}
+                  disabled={isPrintingHistorical}
+                  className="flex-1"
+                >
+                  {isPrintingHistorical ? 'Imprimiendo...' : 'Imprimir'}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              Selecciona una caja cerrada para imprimir.
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,12 +1,12 @@
 import { api, ApiError } from './api';
-import { Store, CreateStoreDto, UpdateStoreDto, StoreResponse, StoreListResponse } from '@/types/store';
+import { Store, CreateStoreDto, UpdateStoreDto, StoreResponse, StoreListResponse, StoreLookupItem } from '@/types/store';
 
 class StoreService {
     private baseUrl = '/store';
 
     async getAllStores(): Promise<Store[]> {
         try {
-            const response = await api.get<Store[]>(this.baseUrl);
+            const response = await api.get<Store[]>(`${this.baseUrl}/tenant-info`);
             return response.data;
         } catch (error) {
             this.handleError(error);
@@ -16,7 +16,10 @@ class StoreService {
 
     async createStore(storeData: CreateStoreDto): Promise<StoreResponse> {
         try {
-            const response = await api.post<StoreResponse>(this.baseUrl, storeData);
+            // Marcar esta solicitud para que el interceptor no redirija automáticamente en caso de 401
+            const response = await api.post<StoreResponse>(this.baseUrl, storeData, {
+                _skipAuthRedirect: true
+            } as any);
             return response.data;
         } catch (error) {
             this.handleError(error);
@@ -37,6 +40,16 @@ class StoreService {
     async getStoreById(id: string): Promise<Store> {
         try {
             const response = await api.get<Store>(`${this.baseUrl}/${id}`);
+            return response.data;
+        } catch (error) {
+            this.handleError(error);
+            throw error;
+        }
+    }
+
+    async getStoresLookup(): Promise<StoreLookupItem[]> {
+        try {
+            const response = await api.get<StoreLookupItem[]>(`${this.baseUrl}/lookup`);
             return response.data;
         } catch (error) {
             this.handleError(error);

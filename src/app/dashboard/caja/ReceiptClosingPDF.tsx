@@ -2,9 +2,7 @@ import React from 'react';
 import { Document, Page, Text, View, StyleSheet, Font, Image } from '@react-pdf/renderer';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-
-// Logo
-const logo = '/icons/logo-jr-g.png';
+import type { CashClosingPrintResponse } from '@/types/cash.types';
 
 // Registrar fuentes
 Font.register({
@@ -82,90 +80,50 @@ const styles = StyleSheet.create({
   },
 });
 
-// Interfaces
-export interface OrderItem {
-  orderNumber: string;
-  quantity: number;
-  description: string;
-  paymentMethod: string;
-  price: number;
-  status: string;
-}
-
-export interface ExpenseItem {
-  description: string;
-  amount: number;
-  time: string;
-}
-
-export interface CashMovement {
-  id: string;
-  amount: number;
-  type: 'INCOME' | 'EXPENSE';
-  description: string;
-  orderId?: string;
-  createdAt: string;
-}
-
-export interface ClosingResponse {
-  message: string;
-  cashBalance: {
-    openingAmount: number;
-    totalIngresos: number;
-    totalSalidas: number;
-    balanceActual: number;
-  };
-  closingReport: {
-    openedAt: string;
-    closedAt: string;
-    openedBy: string;
-    closedBy: string;
-    openingAmount: number;
-    closingAmount: number;
-    storeName: string;
-    storeAddress: string;
-    storePhone: string;
-    printedAt: string;
-    orders: OrderItem[];
-    paymentSummary?: Record<string, number>;
-    expenses?: ExpenseItem[];
-    declaredAmount?: number;
-    difference?: number;
-  };
-  movements: CashMovement[];
-}
-
 export interface ReceiptClosingPDFProps {
-  data: ClosingResponse;
+  data: CashClosingPrintResponse;
+  showOrders?: boolean;
+  logoSrc?: string;
+  tenantName?: string;
 }
 
-const formatCurrency = (amount: number) => `S/${Number(amount).toFixed(2)}`;
-const formatDate = (dateStr: string) => {
+const formatCurrency = (amount?: number) => `S/${Number(amount ?? 0).toFixed(2)}`;
+const formatDate = (dateStr?: string) => {
   try {
-    return format(new Date(dateStr), "dd/MM/yyyy HH:mm", { locale: es });
+    return dateStr ? format(new Date(dateStr), "dd/MM/yyyy HH:mm", { locale: es }) : '';
   } catch (e) {
     return dateStr;
   }
 };
 
-const ReceiptClosingPDF: React.FC<ReceiptClosingPDFProps> = ({ data }) => {
-  const { closingReport, cashBalance, movements = [] } = data;
-  
-  // Calcular resumen de pagos si no viene del backend
-  const paymentSummary = closingReport.paymentSummary || closingReport.orders.reduce((acc, order) => {
-    const method = order.paymentMethod || 'OTROS';
-    acc[method] = (acc[method] || 0) + order.price;
+const ReceiptClosingPDF: React.FC<ReceiptClosingPDFProps> = ({ data, showOrders = true, logoSrc, tenantName }) => {
+  const {
+    store,
+    session,
+    balance,
+    paymentSummary,
+    expenseSummary,
+    orders = [],
+    expenses = [],
+    printedAt,
+    printedBy,
+  } = data;
+
+  const resolvedPaymentSummary = paymentSummary && Object.keys(paymentSummary).length > 0
+    ? paymentSummary
+    : undefined;
+  const resolvedExpenseSummary = expenseSummary && Object.keys(expenseSummary).length > 0
+    ? expenseSummary
+    : undefined;
+  const formatPaymentMethod = (method?: string) => (method && method !== 'NINGUNO' ? method : '');
+  const groupedOrders = orders.reduce((acc, order) => {
+    if (!acc[order.orderNumber]) {
+      acc[order.orderNumber] = [];
+    }
+    acc[order.orderNumber].push(order);
     return acc;
-  }, {} as Record<string, number>);
-
-  const expenses = closingReport.expenses || [];
-
-  // Filtrar ingresos manuales (INCOME sin orderId y que no sean apertura)
-  const manualIncomes = movements.filter(m => 
-    m.type === 'INCOME' && 
-    !m.orderId && 
-    !m.description.toLowerCase().includes('apertura')
-  );
+  }, {} as Record<string, typeof orders>);
+  const groupedOrderEntries = Object.entries(groupedOrders);
 
   return (
     <Document>
@@ -174,11 +132,14 @@ const ReceiptClosingPDF: React.FC<ReceiptClosingPDFProps> = ({ data }) => {
           {/* Encabezado */}
           <View style={styles.header}>
             <View style={styles.logoContainer}>
-              <Image src={logo} style={styles.logo} />
+              {!!logoSrc && <Image src={logoSrc} style={styles.logo} />}
             </View>
-            <Text style={styles.textBold}>{closingReport.storeName}</Text>
-            <Text>{closingReport.storeAddress}</Text>
-            <Text>Tel: {closingReport.storePhone}</Text>
+            {!!tenantName && (
+              <Text style={[styles.textBold, { marginBottom: 4 }, { fontSize: 14 }]}>{tenantName}</Text>
+            )}
+            <Text style={styles.textBold}>tienda: {store.name}</Text>
+            <Text>{store.address}</Text>
+            <Text>Tel: {store.phone}</Text>
           </View>
 
           <View style={styles.divider} />
@@ -189,65 +150,113 @@ const ReceiptClosingPDF: React.FC<ReceiptClosingPDFProps> = ({ data }) => {
           <View style={{ marginBottom: 6 }}>
             <View style={styles.row}>
               <Text>Apertura:</Text>
-              <Text>{formatDate(closingReport.openedAt)}</Text>
+              <Text>{formatDate(session.openedAt)}</Text>
             </View>
             <View style={styles.row}>
-               <Text>Por:</Text>
-               <Text>{closingReport.openedBy}</Text>
+              <Text>Por:</Text>
+              <Text>{session.openedBy}</Text>
             </View>
             <View style={{ marginTop: 2 }} />
             <View style={styles.row}>
               <Text>Cierre:</Text>
-              <Text>{formatDate(closingReport.closedAt)}</Text>
+              <Text>{formatDate(session.closedAt)}</Text>
             </View>
             <View style={styles.row}>
-               <Text>Por:</Text>
-               <Text>{closingReport.closedBy}</Text>
+              <Text>Por:</Text>
+              <Text>{session.closedBy}</Text>
             </View>
           </View>
 
           <View style={styles.divider} />
-
-          {/* Resumen Financiero */}
-          <Text style={[styles.textBold, { marginBottom: 4 }]}>RESUMEN FINANCIERO</Text>
-          <View style={styles.row}>
-            <Text>Monto Apertura:</Text>
-            <Text>{formatCurrency(cashBalance.openingAmount)}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text>(+) Ingresos:</Text>
-            <Text>{formatCurrency(cashBalance.totalIngresos)}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text>(-) Egresos:</Text>
-            <Text>{formatCurrency(cashBalance.totalSalidas)}</Text>
-          </View>
           
-          <View style={[styles.divider, { borderBottomStyle: 'solid' }]} />
-          
+          {/* Balance */}
           <View style={[styles.row, styles.textBold]}>
-            <Text>BALANCE TEÓRICO:</Text>
-            <Text>{formatCurrency(cashBalance.balanceActual)}</Text>
+            <Text>MONTO EFECTIVO EN SISTEMA: </Text>
+            <Text>{formatCurrency(balance.closingAmount)}</Text>
           </View>
-            <View style={[styles.row, styles.textBold]}>
-              <Text>BALANCE DECLARADO:</Text>
-              <Text>{formatCurrency(closingReport.declaredAmount || 0)}</Text>
-            </View>
+          <View style={[styles.row, { marginTop: 2 }]}>
+            <Text>Monto declarado (físico):</Text>
+            <Text>{formatCurrency(balance.declaredAmount)}</Text>
+          </View>
           <View style={[styles.row, { marginTop: 2 }]}>
             <Text>Diferencia:</Text>
-            <Text>{formatCurrency(closingReport.difference || 0)}</Text>
+            <Text>{formatCurrency(balance.difference)}</Text>
           </View>
 
           <View style={styles.divider} />
+          
+          {/* Resumen Financiero */}
+          <Text style={[styles.textBold, { marginBottom: 4 }]}>RESUMEN INGRESO / EGRESO</Text>
+          <View style={styles.row}>
+            <Text>Monto Apertura:</Text>
+            <Text>{formatCurrency(balance.openingAmount)}</Text>
+          </View>
+          <View style={styles.row}>
+            <Text>(+) Ingresos totales:</Text>
+            <Text>{formatCurrency(balance.totalIngresos)}</Text>
+          </View>
+          <View style={styles.row}>
+            <Text style={{ flex: 1, marginRight: 4 }}>(-) Egresos totales:</Text>
+            <Text>{formatCurrency(balance.totalSalidas)}</Text>
+          </View>
+          <View style={styles.row}>
+            <Text style={[styles.textBold]}>Ganacia total:</Text>
+            <Text style={[styles.textBold]}>{formatCurrency(balance.totalIngresos - balance.totalSalidas)}</Text>
+          </View>
+          
+          <View style={styles.divider} />          
 
-          {/* Resumen por Método de Pago */}
-            <Text style={[styles.textBold, { marginBottom: 4 }]}>DESGLOSE DE INGRESOS</Text>
-            {Object.entries(paymentSummary).map(([method, amount]) => (
-              <View key={method} style={styles.row}>
-                <Text>{method}:</Text>
-                <Text>{formatCurrency(amount)}</Text>
-              </View>
-          ))}
+          {/* Resumen de Ingresos por Método de Pago */}
+          {resolvedPaymentSummary && (
+            <>
+              <Text style={[styles.textBold, { marginBottom: 4 }]}>DESGLOSE DE INGRESOS</Text>
+              {Object.entries(resolvedPaymentSummary).map(([method, amount]) => (
+                <View key={method} style={styles.row}>
+                  <Text>{method}:</Text>
+                  <Text>{formatCurrency(amount)}</Text>
+                </View>
+              ))}              
+            </>
+          )}
+
+          {/* Resumen de Egresos por Método de Pago */}
+          {resolvedExpenseSummary && (
+            <>
+              <View style={styles.divider} />
+              <Text style={[styles.textBold, { marginBottom: 4 }]}>DESGLOSE DE EGRESOS</Text>
+              {Object.entries(resolvedExpenseSummary).map(([method, amount]) => (
+                <View key={`expense-${method}`} style={styles.row}>
+                  <Text>{method}:</Text>
+                  <Text>{formatCurrency(amount)}</Text>
+                </View>
+              ))}
+            </>
+          )}
+
+          <View style={styles.divider} />
+
+          {/* Ingresos */}
+          {groupedOrderEntries.length > 0 && (
+            <>
+              <Text style={[styles.textBold, { marginBottom: 4 }]}>INGRESOS REGISTRADOS</Text>
+              {groupedOrderEntries.map(([ticket, ticketOrders]) => (
+                <View key={ticket} style={{ marginBottom: 6 }}>
+                  <Text style={[styles.textBold, { marginBottom: 2 }]}>Ticket ...{ticket}</Text>
+                  {ticketOrders.map((order, idx) => (
+                    <View key={`${ticket}-${idx}`} style={styles.row}>
+                      <Text style={{ flex: 1, marginRight: 4 }}>
+                        {order.description}
+                        {formatPaymentMethod(order.paymentMethod) && (
+                          <Text style={{ fontSize: 7, color: '#666' }}> ({order.paymentMethod})</Text>
+                        )}
+                      </Text>
+                      <Text style={styles.textBold}>{formatCurrency(order.amount)}</Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </>
+          )}
 
           {/* Gastos */}
           {expenses.length > 0 && (
@@ -255,68 +264,26 @@ const ReceiptClosingPDF: React.FC<ReceiptClosingPDFProps> = ({ data }) => {
               <View style={styles.divider} />
               <Text style={[styles.textBold, { marginBottom: 4 }]}>GASTOS REGISTRADOS</Text>
               {expenses.map((expense, idx) => (
-                <View key={idx} style={{ marginBottom: 4 }}>
-                  <View style={styles.row}>
-                    <Text style={{ flex: 1, marginRight: 4 }}>{expense.description}</Text>
-                    <Text style={styles.textBold}>{formatCurrency(expense.amount)}</Text>
-                  </View>
-                  <Text style={{ fontSize: 6, color: '#666' }}>
-                    {formatDate(expense.time)}
-                  </Text>
-                </View>
-              ))}
-            </>
-          )}
-
-          {/* Ingresos Manuales / Varios */}
-          {manualIncomes.length > 0 && (
-            <>
-              <View style={styles.divider} />
-              <Text style={[styles.textBold, { marginBottom: 4 }]}>OTROS INGRESOS / COBROS</Text>
-              {manualIncomes.map((income, idx) => (
-                <View key={idx} style={{ marginBottom: 4 }}>
+                <View key={`${expense.description}-${idx}`} style={{ marginBottom: 4 }}>
                   <View style={styles.row}>
                     <Text style={{ flex: 1, marginRight: 4 }}>
-                      {income.description.replace(/ - Orden [0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/i, '')}
+                      {expense.description}
+                      {' '}
+                      <Text style={{ fontSize: 7, color: '#666' }}>({expense.paymentMethod})</Text>
                     </Text>
-                    <Text style={styles.textBold}>{formatCurrency(income.amount)}</Text>
+                    <Text style={styles.textBold}>{formatCurrency(expense.amount)}</Text>
                   </View>
-                  <Text style={{ fontSize: 6, color: '#666' }}>
-                    {formatDate(income.createdAt)}
-                  </Text>
                 </View>
               ))}
             </>
           )}
 
-           <View style={styles.divider} />
-           
-           {/* Detalle de Ventas */}
-           <Text style={[styles.textBold, { marginBottom: 4 }]}>
-             DETALLE DE VENTAS ({closingReport.orders.length})
-           </Text>
-            <View style={[styles.row, { borderBottomWidth: 1, borderColor: '#000', marginBottom: 2 }]}>
-               <Text style={[styles.textBold, { width: '25%' }]}>Ticket</Text>
-               <Text style={[styles.textBold, { width: '50%' }]}>Desc.</Text>
-               <Text style={[styles.textBold, { width: '25%', textAlign: 'right' }]}>Monto</Text>
-            </View>
-           {closingReport.orders.map((order, idx) => (
-             <View key={idx} style={{ marginBottom: 2 }}>
-                <View style={styles.row}>
-                  <Text style={{ width: '25%' }}>{order.orderNumber}</Text>
-                  <Text style={{ width: '50%' }}>
-                    {order.description}
-                  </Text>
-                  <Text style={{ width: '25%', textAlign: 'right' }}>
-                    {formatCurrency(order.price)}
-                  </Text>
-                </View>
-             </View>
-           ))}
+          <View style={[styles.divider, { borderBottomStyle: 'solid' }]} />
 
           {/* Footer */}
-           <View style={styles.footer}>
-            <Text>Impreso el: {formatDate(closingReport.printedAt)}</Text>
+          <View style={styles.footer}>
+            <Text>Impreso el: {formatDate(printedAt)}</Text>
+            {printedBy && <Text>Impreso por: {printedBy}</Text>}
             <Text style={{ marginTop: 2 }}>--- FIN DEL REPORTE ---</Text>
           </View>
 

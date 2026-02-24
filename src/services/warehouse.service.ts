@@ -1,0 +1,65 @@
+import { api } from "./api";
+import type {
+  CreateWarehouseDto,
+  CreateWarehouseResponse,
+  DeleteWarehouseResponse,
+  UpdateWarehouseDto,
+  WarehouseDetail,
+  WarehouseLookupItem,
+  WarehouseListItem,
+} from "@/types/warehouse.types";
+
+export type WarehouseSimpleItem = {
+  id: string;
+  name: string;
+};
+
+class WarehouseService {
+  async getWarehouses(): Promise<WarehouseListItem[]> {
+    const response = await api.get<WarehouseListItem[]>("/warehouses");
+    return response.data;
+  }
+
+  async getWarehousesSimple(): Promise<WarehouseSimpleItem[]> {
+    const response = await api.get<WarehouseSimpleItem[]>("/warehouses/simple");
+    return response.data;
+  }
+
+  async getWarehousesLookup(): Promise<WarehouseLookupItem[]> {
+    const response = await api.get<WarehouseLookupItem[]>("/warehouses/lookup");
+    return response.data;
+  }
+
+  async createWarehouse(dto: CreateWarehouseDto): Promise<CreateWarehouseResponse> {
+    const response = await api.post<CreateWarehouseResponse>("/warehouses", dto);
+    return response.data;
+  }
+
+  async getWarehouseById(warehouseId: string): Promise<WarehouseDetail> {
+    const response = await api.get<WarehouseDetail>(`/warehouses/${warehouseId}`);
+    return response.data;
+  }
+
+  async updateWarehouse(warehouseId: string, dto: UpdateWarehouseDto): Promise<WarehouseDetail> {
+    const response = await api.put<WarehouseDetail>(`/warehouses/${warehouseId}`, dto);
+    return response.data;
+  }
+
+  async getStoresSimple(): Promise<Array<{ id: string; name: string; address: string }>> {
+    // Obtener tiendas del tenant actual
+    const response = await api.get<Array<{ id: string; name: string; address: string }>>('/store/simple');
+    return response.data;
+  }
+
+  async updateWarehouseStores(warehouseId: string, storeIds: string[]): Promise<{ success: boolean; message: string }> {
+    const response = await api.put<{ success: boolean; message: string }>(`/warehouses/${warehouseId}/stores`, { storeIds });
+    return response.data;
+  }
+
+  async deleteWarehouse(warehouseId: string): Promise<DeleteWarehouseResponse> {
+    const response = await api.delete<DeleteWarehouseResponse>(`/warehouses/${warehouseId}`);
+    return response.data;
+  }
+}
+
+export const warehouseService = new WarehouseService();

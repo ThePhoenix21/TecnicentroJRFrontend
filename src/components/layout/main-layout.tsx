@@ -3,6 +3,7 @@
 import { AppHeader } from "./app-header";
 import { AppSidebar } from "./app-sidebar";
 import { useAuth } from "@/contexts/auth-context";
+import { getFirstAccessibleRouteFromPermissions } from "@/lib/permission-routes";
 
 import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -16,7 +17,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   const [authChecked, setAuthChecked] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, loading, user, hasStoreSelected, hasPermission, tenantFeatures, tenantFeaturesLoaded } = useAuth();
+  const { isAuthenticated, loading, user, currentStore, hasStoreSelected, hasPermission, tenantFeatures, tenantFeaturesLoaded } = useAuth();
 
   const publicRoutes = ["/login", "/register", "/forgot-password"];
   
@@ -110,7 +111,13 @@ export function MainLayout({ children }: MainLayoutProps) {
 
         // Helper: ruta por defecto según permisos (solo para USER)
         const getDefaultUserRoute = () => {
-          if (hasPermission("VIEW_DASHBOARD") && isRouteAllowedByTenant('/dashboard')) return "/dashboard";
+          const routeFromPermissions = getFirstAccessibleRouteFromPermissions(user?.permissions, {
+            isRouteAllowed: isRouteAllowedByTenant,
+          });
+          if (routeFromPermissions) {
+            return routeFromPermissions;
+          }
+
           if ((hasPermission("VIEW_ORDERS") || hasPermission("MANAGE_ORDERS")) && isRouteAllowedByTenant('/dashboard/ventas')) return "/dashboard/ventas";
           if ((hasPermission("VIEW_CASH") || hasPermission("MANAGE_CASH")) && isRouteAllowedByTenant('/dashboard/caja')) return "/dashboard/caja";
           if ((hasPermission("VIEW_INVENTORY") || hasPermission("MANAGE_INVENTORY")) && isRouteAllowedByTenant('/dashboard/inventario')) return "/dashboard/inventario";
@@ -144,7 +151,8 @@ export function MainLayout({ children }: MainLayoutProps) {
           "/dashboard/servicios",
           "/dashboard/productos",
           "/dashboard/clientes",
-          "/dashboard/inventario"
+          "/dashboard/inventario",
+          "/dashboard/support"
         ];
         
         // Verificar si la ruta actual está permitida para el rol USER
@@ -197,11 +205,7 @@ export function MainLayout({ children }: MainLayoutProps) {
       <AppHeader />
       <div className="flex flex-1">
         <AppSidebar />
-        {/*
-          En móviles: main ocupa todo el ancho.
-          En md+: dejamos margen a la izquierda para el sidebar fijo.
-        */}
-        <main className="flex-1 p-4 md:p-6 md:ml-64 pb-14 md:pb-6">
+        <main key={currentStore?.id || 'no-store'} className="flex-1 p-4 md:p-6 md:ml-64 pb-14 md:pb-6">
           {children}
         </main>
       </div>

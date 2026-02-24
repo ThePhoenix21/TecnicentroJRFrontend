@@ -61,6 +61,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<User | null>;
   logout: () => void;
   selectStore: (store: AuthStore) => void;
+  refreshStores: () => Promise<void>;
   isAuthenticated: boolean;
   isAdmin: boolean;
   hasPermission: (permission: string) => boolean;
@@ -157,13 +158,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     
     if (redirect) {
-      // Redirigir a la página de login
-      router.push('/login');
-      
-      // Forzar un recargue completo para limpiar cualquier estado de la aplicación
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login';
-      }
+      // Redirección única para evitar navegación duplicada y errores transitorios de runtime.
+      router.replace('/login');
     }
   }, [router]);
 
@@ -176,11 +172,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const hasPermission = useCallback((permission: string): boolean => {
-    if (!user) return false;
-    // Admins always have all permissions, but we can also check the array if strictly needed.
-    // However, per requirements, admin implies full access.
-    if (user.role?.toLowerCase() === 'admin') return true;
-    return user.permissions?.includes(permission) || false;
+    const isAdmin = user?.role?.toLowerCase() === 'admin';
+    if (isAdmin) return true; // Admins have all permissions
+    // Solo verificar permisos, no usar role para acceso
+    return user?.permissions?.includes(permission) || false;
   }, [user]);
 
   // Función para cargar tiendas reales desde el backend
@@ -201,6 +196,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Función para obtener tiendas del usuario (reales o del JWT)
   const getUserStores = useCallback(async (userStores: string[]): Promise<AuthStore[]> => {
+    // Optimización: si solo hay 1 tienda, no consultar el endpoint de stores.
+    // En este caso, el nombre debería venir del login (response.user.stores). Si no hay nombre,
+    // usamos un fallback sin llamar al backend.
+    if (!userStores || userStores.length <= 1) {
+      return (userStores || []).map((storeId: string) => ({
+        id: storeId,
+        name: `Tienda ${storeId.slice(-8)}`,
+      }));
+    }
+
     try {
       // Intentar cargar tiendas reales
       const realStores = await loadRealStores();
@@ -235,6 +240,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log('✅ Tienda guardada en localStorage y estado actualizado');
   }, []);
 
+  const refreshStores = useCallback(async () => {
+    try {
+      const realStores = await loadRealStores();
+      if (realStores.length === 0) return;
+
+      setUser((prev) => {
+        if (!prev) return prev;
+
+        const isAdminRole = prev.role?.toLowerCase() === 'admin';
+        const allowedIds = new Set((prev.stores || []).map((s) => s.id));
+
+        const nextStores = (isAdminRole ? realStores : realStores.filter((s) => allowedIds.has(s.id))).map(
+          (store) => ({
+            id: store.id,
+            name: store.name,
+          })
+        );
+
+        const nextUser = { ...prev, stores: nextStores };
+        localStorage.setItem('user', JSON.stringify(nextUser));
+        return nextUser;
+      });
+
+      setCurrentStore((prev) => {
+        if (!prev) return prev;
+        const refreshed = realStores.find((s) => s.id === prev.id);
+        if (!refreshed) return prev;
+        const next = { id: refreshed.id, name: refreshed.name };
+        localStorage.setItem('current_store', JSON.stringify(next));
+        return next;
+      });
+    } catch (error) {
+      console.error('❌ Error refrescando tiendas:', error);
+    }
+  }, [loadRealStores]);
+
   const login = async (email: string, password: string): Promise<User | null> => {
     setLoading(true);
     setError(null);
@@ -261,11 +302,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error('Invalid login response: Missing token or user data');
       }
       
-      // Update user state - obtener tiendas reales
+      // Update user state - construir tiendas (priorizar response.user.stores para evitar llamadas extra)
       const jwtToken = response.access_token;
       let jwtStores: AuthStore[] = [];
-      
-      // Extraer tiendas del JWT si existen
+
       try {
         console.log('JWT Token:', jwtToken);
         const decoded = jwtDecode(jwtToken) as any;
@@ -275,16 +315,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (effectiveCurrency === 'PEN' || effectiveCurrency === 'USD' || effectiveCurrency === 'EUR') {
           localStorage.setItem(CURRENCY_STORAGE_KEY, effectiveCurrency);
         }
-        
-        if (decoded.stores && Array.isArray(decoded.stores)) {
-          // El JWT tiene IDs de tiendas, obtener los nombres reales
+
+        // 1) Preferir tiendas del backend (ya incluyen name/address/phone)
+        const responseStores = Array.isArray(response.user?.stores) ? response.user.stores : [];
+        if (responseStores.length > 0) {
+          jwtStores = responseStores.map((s: any) => ({ id: s.id, name: s.name }));
+        } else if (decoded.stores && Array.isArray(decoded.stores)) {
+          // 2) Fallback: tiendas en JWT (solo IDs)
           console.log('Tiendas en JWT:', decoded.stores);
-          
-          // Obtener tiendas reales usando los IDs del JWT
+          // Solo consultar endpoint de stores si hay múltiples tiendas
           jwtStores = await getUserStores(decoded.stores);
-          console.log('Tiendas procesadas con nombres reales:', jwtStores);
         } else {
-          console.log('No hay tiendas en el JWT o no es array');
+          console.log('No hay tiendas en el response.user.stores ni en el JWT');
         }
       } catch (error) {
         console.error('Error al extraer tiendas del JWT:', error);
@@ -315,9 +357,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('refresh_token', response.refresh_token);
       }
       
-      // Para usuarios USER con una sola tienda, seleccionarla automáticamente
-      if (userData.role.toLowerCase() === 'user' && jwtStores.length === 1) {
-        console.log('🏪 Usuario USER con una sola tienda, seleccionando automáticamente');
+      // Si hay exactamente una tienda permitida, seleccionarla automáticamente (sin depender del rol)
+      if (jwtStores.length === 1) {
+        console.log('🏪 Usuario con una sola tienda, seleccionando automáticamente');
         setCurrentStore(jwtStores[0]);
         localStorage.setItem('current_store', JSON.stringify(jwtStores[0]));
       }
@@ -524,13 +566,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.error('Error al recuperar tienda seleccionada:', error);
             localStorage.removeItem('current_store');
           }
-        } else if (userData.role.toLowerCase() === 'user' && userData.stores && userData.stores.length > 0) {
-          // Para usuarios USER, seleccionar automáticamente la primera tienda
-          console.log('🏪 Usuario USER sin tienda seleccionada');
-          console.log('📋 Tiendas disponibles:', userData.stores);
-          console.log('✅ Usando primera tienda:', userData.stores[0]);
+        } else if (userData.stores && userData.stores.length === 1) {
+          // Si solo hay 1 tienda y aún no hay current_store guardada, seleccionarla automáticamente
+          console.log('🏪 Usuario sin tienda seleccionada (1 tienda disponible)');
+          console.log('✅ Usando la única tienda:', userData.stores[0]);
           setCurrentStore(userData.stores[0]);
-          // Guardar en localStorage para futuras sesiones
           localStorage.setItem('current_store', JSON.stringify(userData.stores[0]));
         } else {
           console.log('❌ No se pudo seleccionar tienda automáticamente:', {
@@ -582,6 +622,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login,
     logout,
     selectStore,
+    refreshStores,
     isAuthenticated: !!user,
     isAdmin: user?.role?.toLowerCase() === 'admin',
     hasPermission,
