@@ -236,14 +236,10 @@ export default function VentasPage() {
 
         if (canSellProducts && (canViewInventory || canViewProductsForSales)) {
           try {
-<<<<<<< HEAD
-            const productsResponse = await storeProductService.getStoreProducts(currentStore.id, 1, 1000);
-=======
             const productsResponse = await storeProductService.getStoreProductsSimple(effectiveStoreId, {
               page: 1,
               pageSize: 1000
             });
->>>>>>> 2c30ab8bcaac1177bef5b5c5f12dab6a6c39fda6
             const productsArray = productsResponse.data || [];
             setProducts(productsArray);
           } catch (error) {

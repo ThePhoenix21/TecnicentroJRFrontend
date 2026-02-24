@@ -158,18 +158,6 @@ export default function ProductsPage() {
     
     try {
       setLoading(true);
-<<<<<<< HEAD
-      const response = await storeProductService.getStoreProducts(currentStore.id, 1, 1000, searchTerm);
-      console.log('📦 Datos recibidos de storeProductService:', response);
-      
-      // El backend devuelve {data: Array(1), total: 1, page: 1, limit: 100, totalPages: 1}
-      // Necesitamos acceder a response.data, no response directamente
-      const productsArray = Array.isArray(response?.data) ? response.data : [];
-      console.log('📊 Array procesado:', productsArray.length, 'productos');
-      
-      setStoreProducts(productsArray);
-      setFilteredStoreProducts(productsArray);
-=======
       const response = await storeProductService.getStoreProductsList({
         storeId,
         page: targetPage,
@@ -182,7 +170,6 @@ export default function ProductsPage() {
       setTotal(response.total || 0);
       setTotalPages(response.totalPages || 1);
       setPage(response.page || targetPage);
->>>>>>> 2c30ab8bcaac1177bef5b5c5f12dab6a6c39fda6
     } catch (error) {
       console.error('❌ Error fetching store products:', error);
       setStoreProducts([]);

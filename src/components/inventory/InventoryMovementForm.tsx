@@ -48,15 +48,8 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
   const loadProducts = async (storeId: string) => {
     setIsLoadingProducts(true);
     try {
-<<<<<<< HEAD
-      // Cargamos una cantidad razonable de productos. 
-      // TODO: Implementar búsqueda asíncrona si hay muchos productos
-      const response = await storeProductService.getStoreProducts(storeId, 1, 1000);
-      setProducts(response.data);
-=======
       const response = await storeProductService.getStoreProductsLookup({ storeId });
-      setProducts(Array.isArray(response) ? response : []);
->>>>>>> 2c30ab8bcaac1177bef5b5c5f12dab6a6c39fda6
+      setProducts(response);
     } catch (error) {
       console.error("Error loading products:", error);
       toast({
