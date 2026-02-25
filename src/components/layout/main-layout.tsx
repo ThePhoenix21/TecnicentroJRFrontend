@@ -92,12 +92,17 @@ export function MainLayout({ children }: MainLayoutProps) {
         const routeFeatureRequirements: Array<{ prefix: string; requiredTenantFeatures: string[] }> = [
           { prefix: '/dashboard/tiendas', requiredTenantFeatures: ['STORE', 'STORES'] },
           { prefix: '/dashboard/caja', requiredTenantFeatures: ['CASH'] },
-          { prefix: '/dashboard/ventas', requiredTenantFeatures: ['SALES', 'ORDERS', 'SALESOFPRODUCTS', 'SALESOFSERVICES'] },
+          { prefix: '/dashboard/ventas', requiredTenantFeatures: ['SALES'] },
           { prefix: '/dashboard/servicios', requiredTenantFeatures: ['SERVICES'] },
           { prefix: '/dashboard/productos', requiredTenantFeatures: ['PRODUCTS'] },
           { prefix: '/dashboard/inventario', requiredTenantFeatures: ['INVENTORY'] },
+          { prefix: '/dashboard/support', requiredTenantFeatures: ['SUPPORT'] },
+          { prefix: '/dashboard/warehouses', requiredTenantFeatures: ['WAREHOUSES'] },
+          { prefix: '/dashboard/empleados', requiredTenantFeatures: ['EMPLOYEES'] },
+          { prefix: '/dashboard/proveedores', requiredTenantFeatures: ['SUPPLIERS'] },
+          { prefix: '/dashboard/ordenes-suministro', requiredTenantFeatures: ['SUPPLY_ORDERS'] },
           { prefix: '/dashboard/clientes', requiredTenantFeatures: ['CLIENTS'] },
-          { prefix: '/dashboard/configuracion', requiredTenantFeatures: ['CONFIG', 'SETTINGS'] },
+          { prefix: '/dashboard/configuracion/usuarios', requiredTenantFeatures: ['USERS'] },
           { prefix: '/dashboard', requiredTenantFeatures: ['DASHBOARD'] },
         ];
 
