@@ -68,6 +68,10 @@ export interface ServiceWithClient {
   orderId?: string;
   hasPendingPayment?: boolean;
   isFromCurrentCash?: boolean;
+  seller?: {
+    id: string;
+    name: string;
+  };
   service?: {
     id: string;
     name: string;
@@ -119,6 +123,10 @@ export interface ServiceListItem {
   createdAt: string;
   hasPendingPayment?: boolean;
   isFromCurrentCash?: boolean;
+  seller?: {
+    id: string;
+    name: string;
+  };
 }
 
 export interface ServiceListResponse {
@@ -140,6 +148,10 @@ interface FindAllWithClientsPagedResponse {
     createdAt?: string;
     hasPendingPayment?: boolean;
     isFromCurrentCash?: boolean;
+    seller?: {
+      id?: string;
+      name?: string;
+    };
   }>;
   total: number;
   totalPages: number;
@@ -323,6 +335,12 @@ class ServiceService implements IServiceService {
               createdAt: item.createdAt || '',
               hasPendingPayment: item.hasPendingPayment,
               isFromCurrentCash: item.isFromCurrentCash,
+              seller: item.seller?.id && item.seller?.name
+                ? {
+                    id: String(item.seller.id),
+                    name: String(item.seller.name),
+                  }
+                : undefined,
             })),
             total: payload.total ?? 0,
             totalPages: payload.totalPages ?? 1,
@@ -369,6 +387,12 @@ class ServiceService implements IServiceService {
           createdAt: s.createdAt || '',
           hasPendingPayment: s.hasPendingPayment,
           isFromCurrentCash: s.isFromCurrentCash,
+          seller: s.seller?.id && s.seller?.name
+            ? {
+                id: String(s.seller.id),
+                name: String(s.seller.name),
+              }
+            : undefined,
         })),
         total: all.length,
         totalPages: Math.ceil(all.length / pageSize),

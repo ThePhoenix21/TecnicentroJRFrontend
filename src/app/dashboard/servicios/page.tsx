@@ -620,6 +620,7 @@ export default function ServiciosPage() {
                         <TableHead className="min-w-[150px]">Cliente</TableHead>
                         <TableHead className="min-w-[180px]">Servicio</TableHead>
                         {/* Hide Estado, Precio, Fecha in mobile */}
+                        {canDetailServices && <TableHead className="hidden md:table-cell min-w-[160px]">Usuario</TableHead>}
                         <TableHead className="hidden sm:table-cell min-w-[120px]">Estado</TableHead>
                         <TableHead className="hidden md:table-cell min-w-[100px] text-right">Precio</TableHead>
                         <TableHead className="hidden lg:table-cell min-w-[100px]">Fecha</TableHead>
@@ -704,6 +705,11 @@ export default function ServiciosPage() {
                               {formatPrice(service.price)}
                             </div>
                           </TableCell>
+                          {canDetailServices && (
+                            <TableCell className={`hidden md:table-cell ${cellMutedClass}`}>
+                              {service.seller?.name || '-'}
+                            </TableCell>
+                          )}
                           <TableCell className={`hidden sm:table-cell ${cellMutedClass}`}>
                             <span className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getStatusBadge(service.status)}`}>
                               {translateStatus(service.status)}
