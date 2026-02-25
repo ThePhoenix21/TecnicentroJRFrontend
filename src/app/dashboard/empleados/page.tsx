@@ -1201,109 +1201,117 @@ export default function EmpleadosPage() {
             </div>
           ) : (
             <div className="rounded-md border overflow-hidden">
-              <Table>
-                <TableHeader className="bg-muted/50">
-                  <TableRow>
-                    <TableHead className="w-[50px]">
-                      <input
-                        type="checkbox"
-                        checked={employees.length > 0 && selectedEmployees.size === employees.length}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedEmployees(new Set(employees.map((emp) => emp.id)));
-                          } else {
-                            setSelectedEmployees(new Set());
-                          }
-                        }}
-                      />
-                    </TableHead>
-                    <TableHead>Nombres</TableHead>
-                    <TableHead>Apellidos</TableHead>
-                    <TableHead>Cargo</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead>Tienda asignada</TableHead>
-                    <TableHead>Almacén asignado</TableHead>
-                    <TableHead>Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {employees.map((e) => {
-                    const assigned = resolveAssigned(e);
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-muted/50">
+                    <TableRow>
+                      <TableHead className="w-[50px] sticky left-0 bg-muted/50 z-10">
+                        <input
+                          type="checkbox"
+                          checked={employees.length > 0 && selectedEmployees.size === employees.length}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedEmployees(new Set(employees.map((emp) => emp.id)));
+                            } else {
+                              setSelectedEmployees(new Set());
+                            }
+                          }}
+                        />
+                      </TableHead>
+                      <TableHead className="min-w-[120px]">Nombres</TableHead>
+                      <TableHead className="min-w-[120px]">Apellidos</TableHead>
+                      {/* Hide Cargo, Estado, Tienda asignada, Almacén asignado in mobile */}
+                      <TableHead className="hidden sm:table-cell min-w-[100px]">Cargo</TableHead>
+                      <TableHead className="hidden md:table-cell min-w-[80px]">Estado</TableHead>
+                      <TableHead className="hidden lg:table-cell min-w-[120px]">Tienda asignada</TableHead>
+                      <TableHead className="hidden xl:table-cell min-w-[120px]">Almacén asignado</TableHead>
+                      <TableHead className="min-w-[100px] sticky right-0 bg-muted/50 z-10">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {employees.map((e) => {
+                      const assigned = resolveAssigned(e);
 
-                    return (
-                      <TableRow
-                        key={e.id}
-                        className="cursor-pointer"
-                        onClick={() => openDetail(e.id)}
-                      >
-                        <TableCell onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            checked={selectedEmployees.has(e.id)}
-                            onChange={(event) => {
-                              const newSelected = new Set(selectedEmployees);
-                              if (event.target.checked) {
-                                newSelected.add(e.id);
-                              } else {
-                                newSelected.delete(e.id);
-                              }
-                              setSelectedEmployees(newSelected);
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell className="font-medium">{e.firstName}</TableCell>
-                        <TableCell>{e.lastName}</TableCell>
-                        <TableCell>{e.position}</TableCell>
-                        <TableCell>
-                          <span
-                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold
-                              ${
-                                e.status === "ACTIVE"
-                                  ? "bg-emerald-100 text-emerald-800"
-                                  : e.status === "SUSPENDED"
-                                  ? "bg-amber-100 text-amber-800"
-                                  : "bg-slate-200 text-slate-700"
-                              }
-                            `}
-                          >
-                            {statusLabel[e.status] ?? e.status}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span>{assigned.store ?? "-"}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span>{assigned.warehouse ?? "-"}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell onClick={(e) => e.stopPropagation()}>
-                          <div className="flex gap-1">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openDetail(e.id)}
+                      return (
+                        <TableRow
+                          key={e.id}
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => openDetail(e.id)}
+                        >
+                          <TableCell onClick={(e) => e.stopPropagation()} className="sticky left-0 bg-background z-10">
+                            <input
+                              type="checkbox"
+                              checked={selectedEmployees.has(e.id)}
+                              onChange={(event) => {
+                                const newSelected = new Set(selectedEmployees);
+                                if (event.target.checked) {
+                                  newSelected.add(e.id);
+                                } else {
+                                  newSelected.delete(e.id);
+                                }
+                                setSelectedEmployees(newSelected);
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium">{e.firstName}</TableCell>
+                          <TableCell>{e.lastName}</TableCell>
+                          <TableCell className="hidden sm:table-cell text-sm">{e.position}</TableCell>
+                          <TableCell className="hidden md:table-cell">
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium whitespace-nowrap
+                                ${
+                                  e.status === "ACTIVE"
+                                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
+                                    : e.status === "SUSPENDED"
+                                    ? "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
+                                    : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                                }
+                              `}
                             >
-                              <Search className="h-3 w-3" />
-                            </Button>
-                            <ProtectedButton
-                              permissions="MANAGE_EMPLOYEES"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openDeleteConfirmation(e.id)}
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </ProtectedButton>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                              {statusLabel[e.status] ?? e.status}
+                            </span>
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell">
+                            <div className="flex flex-col">
+                              <span className="truncate max-w-[100px]" title={assigned.store ?? "-"}>
+                                {assigned.store ?? "-"}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="hidden xl:table-cell">
+                            <div className="flex flex-col">
+                              <span className="truncate max-w-[100px]" title={assigned.warehouse ?? "-"}>
+                                {assigned.warehouse ?? "-"}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell onClick={(e) => e.stopPropagation()} className="sticky right-0 bg-background z-10">
+                            <div className="flex gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openDetail(e.id)}
+                                className="h-8 w-8 p-0"
+                              >
+                                <Search className="h-3 w-3" />
+                              </Button>
+                              <ProtectedButton
+                                permissions="MANAGE_EMPLOYEES"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openDeleteConfirmation(e.id)}
+                                className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </ProtectedButton>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           )}
 

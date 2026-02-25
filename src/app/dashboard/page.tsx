@@ -517,10 +517,10 @@ export default function DashboardPage() {
   const allLoading = dashboardLoading || analyticsLoading;
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-4 md:space-y-6 p-4 md:p-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Panel de control</h1>
+          <h1 className="text-2xl md:text-3xl font-bold">Panel de control</h1>
           <p className="text-sm text-muted-foreground">Datos en tiempo real desde contrato oficial.</p>
         </div>
       </div>
@@ -539,19 +539,28 @@ export default function DashboardPage() {
           {hasPermission('VIEW_ANALYTICS') && <TabsTrigger value="analytics">Análisis</TabsTrigger>}
         </TabsList>
 
-        <div className="flex gap-2 items-end">
-          <div>
-            <label className="text-sm font-medium">Desde</label>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-2">
+            <div>
+              <label className="text-sm font-medium block sm:hidden">Desde</label>
+              <Input 
+                type="date" 
+                value={from} 
+                onChange={(e) => setFrom(e.target.value)} 
+                className="w-full"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium block sm:hidden">Hasta</label>
+              <Input 
+                type="date" 
+                value={to} 
+                onChange={(e) => setTo(e.target.value)} 
+                className="w-full"
+              />
+            </div>
           </div>
-          <div>
-            <label className="text-sm font-medium">Hasta</label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-          </div>
-          {/* <Input type="date" value={compareFrom} onChange={(e) => setCompareFrom(e.target.value)} />
-          <Input type="date" value={compareTo} onChange={(e) => setCompareTo(e.target.value)} /> */}
-          <div>
-            <label className="text-sm font-medium invisible">Actualizar</label>
+          <div className="flex justify-center sm:justify-start">
             <Button
               variant="outline"
               onClick={() => {
@@ -559,6 +568,7 @@ export default function DashboardPage() {
                 void loadAnalytics();
               }}
               disabled={!canRefresh || allLoading}
+              className="w-full sm:w-auto"
             >
               <RefreshCw className={`mr-2 h-4 w-4 ${allLoading ? "animate-spin" : ""}`} />
               Actualizar
@@ -569,7 +579,7 @@ export default function DashboardPage() {
         <TabsContent value="dashboard" className="space-y-4">
           <EndpointErrorAlerts errors={dashboardErrors} />
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
               title="Total de ganancia en ventas"
               value={formatCurrency(summary?.kpis.salesTotal ?? 0)}
@@ -779,49 +789,58 @@ export default function DashboardPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Línea de tiempo de ingresos y egresos</CardTitle>
+              <CardTitle className="text-lg md:text-xl">Línea de tiempo de ingresos y egresos</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Fecha</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Concepto</TableHead>
-                      <TableHead>Fuente</TableHead>
-                      <TableHead className="text-right">Monto</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(netProfit?.timeline ?? []).length === 0 ? (
+              <div className="rounded-md border overflow-hidden">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
                       <TableRow>
-                        <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                          No hay movimientos para este rango.
-                        </TableCell>
+                        <TableHead className="min-w-[120px]">Fecha</TableHead>
+                        <TableHead className="min-w-[80px]">Tipo</TableHead>
+                        <TableHead className="min-w-[150px]">Concepto</TableHead>
+                        <TableHead className="min-w-[120px]">Fuente</TableHead>
+                        <TableHead className="min-w-[100px] text-right">Monto</TableHead>
                       </TableRow>
-                    ) : (
-                      (netProfit?.timeline ?? []).map((item) => (
-                        <TableRow key={`${item.sourceId}-${item.date}`}>
-                          <TableCell>{new Date(item.date).toLocaleString()}</TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={item.type === "INCOME" ? "secondary" : "destructive"}
-                              className={item.type === "INCOME" ? "bg-green-500 text-white hover:bg-green-600" : ""}
-                            >
-                              {item.type === "INCOME" ? "Ingreso" : "Egreso"}
-                            </Badge>
+                    </TableHeader>
+                    <TableBody>
+                      {(netProfit?.timeline ?? []).length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                            No hay movimientos para este rango.
                           </TableCell>
-                          <TableCell>{item.concept}</TableCell>
-                          <TableCell>
-                            {item.source === "PAYMENT_METHOD" ? "Pago de orden" : "Movimiento de caja"}
-                          </TableCell>
-                          <TableCell className="text-right">{formatCurrency(item.amount)}</TableCell>
                         </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+                      ) : (
+                        (netProfit?.timeline ?? []).map((item) => (
+                          <TableRow key={`${item.sourceId}-${item.date}`}>
+                            <TableCell className="text-sm">
+                              <div className="font-medium">{new Date(item.date).toLocaleDateString()}</div>
+                              <div className="text-xs text-muted-foreground">{new Date(item.date).toLocaleTimeString()}</div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={item.type === "INCOME" ? "secondary" : "destructive"}
+                                className={item.type === "INCOME" ? "bg-green-500 text-white hover:bg-green-600" : ""}
+                              >
+                                {item.type === "INCOME" ? "Ingreso" : "Egreso"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="max-w-[200px] truncate" title={item.concept}>
+                              {item.concept}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {item.source === "PAYMENT_METHOD" ? "Pago de orden" : "Movimiento de caja"}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              {formatCurrency(item.amount)}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             </CardContent>
           </Card>

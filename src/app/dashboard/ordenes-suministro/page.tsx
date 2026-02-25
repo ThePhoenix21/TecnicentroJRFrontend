@@ -1081,13 +1081,13 @@ export default function OrdenesSuministroPage() {
                   <Table>
                     <TableHeader className="bg-muted/50">
                       <TableRow>
-                        <TableHead>Código</TableHead>
-                        <TableHead>Estado</TableHead>
-                        <TableHead>Emisión</TableHead>
-                        <TableHead>Proveedor</TableHead>
-                        <TableHead>Creado por</TableHead>
-                        <TableHead>Tienda</TableHead>
-                        <TableHead>Almacén</TableHead>
+                        <TableHead className="min-w-[120px]">Código</TableHead>
+                        <TableHead className="min-w-[120px]">Estado</TableHead>
+                        <TableHead className="hidden sm:table-cell min-w-[140px]">Emisión</TableHead>
+                        <TableHead className="hidden md:table-cell min-w-[150px]">Proveedor</TableHead>
+                        <TableHead className="hidden lg:table-cell min-w-[150px]">Creado por</TableHead>
+                        <TableHead className="hidden xl:table-cell min-w-[120px]">Tienda</TableHead>
+                        <TableHead className="hidden xl:table-cell min-w-[120px]">Almacén</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1103,18 +1103,18 @@ export default function OrdenesSuministroPage() {
                                 {status.label}
                               </span>
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="hidden sm:table-cell">
                               {order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}
                             </TableCell>
-                            <TableCell className="text-muted-foreground">{order.providerName || "-"}</TableCell>
-                            <TableCell>
+                            <TableCell className="hidden md:table-cell text-muted-foreground">{order.providerName || "-"}</TableCell>
+                            <TableCell className="hidden lg:table-cell">
                               <div className="text-sm leading-tight">
                                 <div className="font-medium">{order.creatorUser || "-"}</div>
                                 <div className="text-xs text-muted-foreground">{order.creatorUserEmail || "-"}</div>
                               </div>
                             </TableCell>
-                            <TableCell className="text-muted-foreground">{order.storeName || "-"}</TableCell>
-                            <TableCell className="text-muted-foreground">{order.warehouseName || "-"}</TableCell>
+                            <TableCell className="hidden xl:table-cell text-muted-foreground">{order.storeName || "-"}</TableCell>
+                            <TableCell className="hidden xl:table-cell text-muted-foreground">{order.warehouseName || "-"}</TableCell>
                           </TableRow>
                         );
                       })}
@@ -1185,13 +1185,14 @@ export default function OrdenesSuministroPage() {
                   <Table>
                     <TableHeader className="bg-muted/50">
                       <TableRow>
-                        <TableHead>Código</TableHead>
-                        <TableHead>Estado</TableHead>
-                        <TableHead>Emisión</TableHead>
-                        <TableHead>Proveedor</TableHead>
-                        <TableHead>Tienda</TableHead>
-                        <TableHead>Almacén</TableHead>
-                        <TableHead className="text-right">Acción</TableHead>
+                        <TableHead className="min-w-[120px]">Código</TableHead>
+                        <TableHead className="min-w-[120px]">Estado</TableHead>
+                        {/* Hide Emisión, Proveedor, Tienda, Almacén in mobile */}
+                        <TableHead className="hidden sm:table-cell min-w-[140px]">Emisión</TableHead>
+                        <TableHead className="hidden md:table-cell min-w-[150px]">Proveedor</TableHead>
+                        <TableHead className="hidden xl:table-cell min-w-[120px]">Tienda</TableHead>
+                        <TableHead className="hidden xl:table-cell min-w-[120px]">Almacén</TableHead>
+                        <TableHead className="text-right min-w-[100px]">Acción</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1207,12 +1208,12 @@ export default function OrdenesSuministroPage() {
                                 {status.label}
                               </span>
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="hidden sm:table-cell">
                               {order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}
                             </TableCell>
-                            <TableCell className="text-muted-foreground">{order.providerName || "-"}</TableCell>
-                            <TableCell className="text-muted-foreground">{order.storeName || "-"}</TableCell>
-                            <TableCell className="text-muted-foreground">{order.warehouseName || "-"}</TableCell>
+                            <TableCell className="hidden md:table-cell text-muted-foreground">{order.providerName || "-"}</TableCell>
+                            <TableCell className="hidden xl:table-cell text-muted-foreground">{order.storeName || "-"}</TableCell>
+                            <TableCell className="hidden xl:table-cell text-muted-foreground">{order.warehouseName || "-"}</TableCell>
                             <TableCell className="text-right">
                               <Button size="sm" onClick={() => openReceive(order.id)}>
                                 Recibir

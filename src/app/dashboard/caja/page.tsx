@@ -690,11 +690,11 @@ export default function CajaPage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 md:space-y-6 p-4 md:p-6">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Gestión de Caja</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl md:text-3xl font-bold">Gestión de Caja</h1>
+          <p className="text-sm text-muted-foreground">
             {currentStore?.name} - {user?.name}
           </p>
         </div>
@@ -707,8 +707,8 @@ export default function CajaPage() {
         </TabsList>
 
         <TabsContent value="open">
-          <div className="flex justify-end">
-            <div className="flex gap-2">              
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+            <div className="flex flex-col gap-2 sm:flex-row">              
               {currentSession?.status === 'OPEN' && canManageCash && (
                 <>
                   <Button
@@ -725,6 +725,7 @@ export default function CajaPage() {
                       }
                       setShowMovementForm(!showMovementForm);
                     }}
+                    className="w-full sm:w-auto"
                   >
                     <Plus className="h-4 w-4 mr-2" />
                     Movimiento
@@ -733,6 +734,7 @@ export default function CajaPage() {
                     variant="destructive"
                     onClick={() => setShowCloseForm(true)}
                     disabled={isClosing}
+                    className="w-full sm:w-auto"
                   >
                     <Power className="h-4 w-4 mr-2" />
                     Cerrar Caja
@@ -1038,7 +1040,7 @@ export default function CajaPage() {
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex gap-4 items-end">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
               <div className="flex-1">
                 <label className="text-sm font-medium">Monto Inicial</label>
                 <Input
@@ -1048,11 +1050,13 @@ export default function CajaPage() {
                   onChange={(e) => setOpeningAmount(e.target.value)}
                   min="0"
                   step="0.01"
+                  className="w-full"
                 />
               </div>
               <Button
                 onClick={handleOpenCashSession}
                 disabled={isOpening || !openingAmount}
+                className="w-full sm:w-auto"
               >
                 <DollarSign className="h-4 w-4 mr-2" />
                 {isOpening ? 'Abriendo...' : 'Abrir Caja'}

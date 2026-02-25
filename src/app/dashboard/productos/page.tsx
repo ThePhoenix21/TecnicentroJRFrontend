@@ -734,13 +734,13 @@ export default function ProductsPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Productos</h1>
-          <p className="text-muted-foreground">{currentStore.name}</p>
+          <h1 className="text-2xl md:text-3xl font-bold">Productos</h1>
+          <p className="text-sm text-muted-foreground">{currentStore.name}</p>
         </div>
         {canCreateProducts && (
-          <Button onClick={openNewProductModal}>
+          <Button onClick={openNewProductModal} className="w-full sm:w-auto">
             <Plus className="mr-2 h-4 w-4" />
             Nuevo Producto
           </Button>
@@ -748,7 +748,7 @@ export default function ProductsPage() {
       </div>
 
       <div className="mb-6 space-y-4">
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4">
           
           <div className="space-y-2">
             <Label>Producto</Label>
@@ -883,11 +883,11 @@ export default function ProductsPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {visibleProducts.map((storeProduct) => (
               <Card
                 key={storeProduct.id}
-                className={`h-full flex flex-col py-5 transition hover:border-primary ${canManageProducts ? 'cursor-pointer' : 'cursor-not-allowed opacity-80'}`}
+                className={`h-full flex flex-col transition hover:border-primary ${canManageProducts ? 'cursor-pointer' : 'cursor-not-allowed opacity-80'}`}
                 onClick={() => openProductDetail(storeProduct.id)}
               >
               <CardHeader>

@@ -336,11 +336,12 @@ export function UserTable({
             <TableRow>
               <TableHead className="w-[200px]">Nombre</TableHead>
               <TableHead className="hidden md:table-cell">Email</TableHead>
-              <TableHead className="w-[120px]">Rol</TableHead>
-              <TableHead className="w-[100px]">Estado</TableHead>
-              <TableHead className="hidden sm:table-cell">Tienda</TableHead>
-              <TableHead className="hidden sm:table-cell">Teléfono</TableHead>
-              <TableHead className="hidden lg:table-cell">Creado</TableHead>
+              <TableHead className="hidden sm:table-cell w-[120px]">Rol</TableHead>
+              {/* Hide Estado, Tienda, Teléfono, Creado, Actualizado in mobile */}
+              <TableHead className="hidden sm:table-cell w-[100px]">Estado</TableHead>
+              <TableHead className="hidden lg:table-cell">Tienda</TableHead>
+              <TableHead className="hidden xl:table-cell">Teléfono</TableHead>
+              <TableHead className="hidden xl:table-cell">Creado</TableHead>
               <TableHead className="hidden xl:table-cell">Actualizado</TableHead>
               <TableHead className="w-[100px] text-right">Acciones</TableHead>
             </TableRow>
@@ -355,7 +356,6 @@ export function UserTable({
                   </div>
                   <div>
                     <div className="font-medium">{user.name}</div>
-                    <div className="text-sm text-muted-foreground md:hidden">{user.email}</div>
                   </div>
                 </div>
               </TableCell>
@@ -364,9 +364,9 @@ export function UserTable({
                   {user.email}
                 </div>
               </TableCell>
-              <TableCell>{getRoleBadge(user.role)}</TableCell>
-              <TableCell>{getStatusBadge(user.status)}</TableCell>
-              <TableCell className="hidden sm:table-cell">
+              <TableCell className="hidden sm:table-cell">{getRoleBadge(user.role)}</TableCell>
+              <TableCell className="hidden sm:table-cell">{getStatusBadge(user.status)}</TableCell>
+              <TableCell className="hidden lg:table-cell">
                 {user.stores && user.stores.length > 0 ? (
                   <div className="space-y-1">
                     {user.stores.slice(0, 2).map((store) => (
@@ -387,7 +387,7 @@ export function UserTable({
                   <span className="text-muted-foreground">-</span>
                 )}
               </TableCell>
-              <TableCell className="hidden sm:table-cell">
+              <TableCell className="hidden xl:table-cell">
                 {user.phone ? (
                   <a 
                     href={`tel:${user.phone}`} 
@@ -400,7 +400,7 @@ export function UserTable({
                   <span className="text-muted-foreground">-</span>
                 )}
               </TableCell>
-              <TableCell className="hidden lg:table-cell">
+              <TableCell className="hidden xl:table-cell">
                 <div className="text-sm text-muted-foreground">
                   {new Date(user.createdAt).toLocaleDateString('es-ES')}
                 </div>
@@ -417,7 +417,7 @@ export function UserTable({
                       variant="ghost" 
                       size="icon" 
                       onClick={() => handleEditClick(user)}
-                      className="h-8 w-8 opacity-0 group-hover:opacity-100"
+                      className="h-8 w-8 md:opacity-0 md:group-hover:opacity-100"
                       title="Editar usuario"
                     >
                       <Edit className="h-4 w-4" />
@@ -429,7 +429,7 @@ export function UserTable({
                       variant="ghost"
                       size="icon"
                       onClick={() => handleDelete(user.id)}
-                      className="h-8 w-8 text-destructive hover:text-destructive/90 opacity-0 group-hover:opacity-100"
+                      className="h-8 w-8 text-destructive hover:text-destructive/90 md:opacity-0 md:group-hover:opacity-100"
                       title="Desactivar usuario"
                     >
                       <Trash2 className="h-4 w-4" />
