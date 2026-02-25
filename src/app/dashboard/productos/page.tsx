@@ -123,6 +123,11 @@ export default function ProductsPage() {
     return anyError?.response?.status === 403;
   };
 
+  const isUnauthorizedError = (error: unknown) => {
+    const anyError = error as any;
+    return anyError?.response?.status === 401;
+  };
+
   useEffect(() => {
     if (currentStore?.id && !selectedStoreId) {
       setSelectedStoreId(currentStore.id);
@@ -131,19 +136,24 @@ export default function ProductsPage() {
   }, [currentStore?.id, currentStore?.name, selectedStoreId]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
+
     const loadStores = async () => {
       try {
         const stores = await storeService.getStoresLookup();
         setStoresLookup(Array.isArray(stores) ? stores : []);
       } catch (error) {
+        if (isUnauthorizedError(error)) return;
         console.error('Error loading stores lookup:', error);
       }
     };
 
     loadStores();
-  }, []);
+  }, [isAuthenticated]);
 
   const fetchStoreProducts = useCallback(async (targetPage = 1) => {
+    if (!isAuthenticated) return;
+
     const storeId = selectedStoreId || currentStore?.id;
     if (!storeId) {
       console.log('❌ No hay storeId seleccionado, abortando fetchStoreProducts');
@@ -175,6 +185,7 @@ export default function ProductsPage() {
       setStoreProducts([]);
       setTotal(0);
       setTotalPages(1);
+      if (isUnauthorizedError(error)) return;
       if (isForbiddenError(error)) {
         toast({
           title: 'Sin permisos',
@@ -191,7 +202,7 @@ export default function ProductsPage() {
       setLoading(false);
       console.log('🏁 fetchStoreProducts finalizado');
     }
-  }, [selectedStoreId, currentStore?.id, nameFilter, hideOutOfStock, toast, canViewProducts]);
+  }, [isAuthenticated, selectedStoreId, currentStore?.id, nameFilter, hideOutOfStock, toast, canViewProducts]);
 
   const fetchStoreProductsRef = useRef(fetchStoreProducts);
 
@@ -201,6 +212,11 @@ export default function ProductsPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
+      setSelectedStoreId('');
+      setStoreQuery('');
+      setStoreProducts([]);
+      setTotal(0);
+      setTotalPages(1);
       router.push('/login');
     }
   }, [isAuthenticated, router]);
@@ -240,17 +256,23 @@ export default function ProductsPage() {
   }, [isAuthenticated, activeStoreId]);
 
   const loadProductLookup = useCallback(async () => {
+    if (!isAuthenticated) {
+      setNameSuggestions([]);
+      return;
+    }
+
     try {
       setNameLookupLoading(true);
       const lookup = await storeProductService.getCatalogProductsLookup('');
       setNameSuggestions(Array.isArray(lookup) ? lookup : []);
     } catch (error) {
+      if (isUnauthorizedError(error)) return;
       console.error('Error loading product name lookup:', error);
       setNameSuggestions([]);
     } finally {
       setNameLookupLoading(false);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     loadProductLookup();
@@ -269,16 +291,18 @@ export default function ProductsPage() {
   }, []);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     if (nameFilter.trim()) {
       setPage(1);
       fetchStoreProductsRef.current?.(1);
     }
-  }, [nameFilter]);
+  }, [isAuthenticated, nameFilter]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     setPage(1);
     fetchStoreProductsRef.current?.(1);
-  }, [hideOutOfStock]);
+  }, [isAuthenticated, hideOutOfStock]);
 
   // Debug: verificar estado actual
   useEffect(() => {

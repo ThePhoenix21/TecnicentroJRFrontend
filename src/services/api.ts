@@ -71,13 +71,23 @@ api.interceptors.response.use(
     } else if (error.response.status === 401) {
       // Manejar acceso no autorizado
       if (typeof window !== 'undefined' && !originalRequest?._retry && !originalRequest?._skipAuthRedirect) {
+        const hasToken = !!localStorage.getItem('auth_token');
+
+        // Si ya no hay token (logout en progreso/completado), no forzar redirección.
+        // Evita errores transitorios cuando quedan requests en vuelo al cerrar sesión.
+        if (!hasToken) {
+          return Promise.reject(error);
+        }
+
         if (originalRequest) {
           originalRequest._retry = true;
         }
         // Limpiar datos de autenticación y redirigir al login
         localStorage.removeItem('auth_token');
         localStorage.removeItem('user');
-        window.location.href = '/login';
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
       }
     }
     return Promise.reject(error);
