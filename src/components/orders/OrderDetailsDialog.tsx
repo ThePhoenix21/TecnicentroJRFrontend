@@ -742,7 +742,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-5xl w-[95%] max-h-[90vh] p-0 flex flex-col overflow-hidden">
+      <DialogContent className="sm:max-w-5xl md:max-w-4xl lg:max-w-5xl w-[95%] max-h-[90vh] p-0 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-6 pt-6 pb-2 border-b border-border flex-shrink-0">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -756,7 +756,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
         {/* Layout principal: contenido + acciones */}
         <div className="flex flex-1 min-h-0 flex-col md:flex-row">
           {/* Contenido con scroll - más ancho */}
-          <div className="flex-[2] min-h-0 overflow-y-auto p-6">
+          <div className="md:basis-3/4 lg:basis-4/5 min-h-0 overflow-y-auto p-6">
               {isLoadingDetails ? (
                 <div className="flex justify-center py-8">
                   <p className="text-muted-foreground">Cargando detalles completos...</p>
@@ -1035,7 +1035,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
           </div>
 
           {/* Panel lateral de acciones - más estrecho */}
-          <div className="w-full md:w-72 border-t md:border-t-0 md:border-l border-border bg-muted/10 p-6 flex-shrink-0 flex flex-col gap-4">
+          <div className="w-full md:basis-1/4 lg:basis-1/5 md:max-w-xs border-t md:border-t-0 md:border-l border-border bg-muted/10 p-5 flex-shrink-0 flex flex-col gap-4">
             <div className="space-y-3">
               {!isOnlyProductsOrder && orderPendingAmount === 0 && canShowActionButtons && (
                 <div className="space-y-1">
