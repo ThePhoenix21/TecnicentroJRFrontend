@@ -17,6 +17,9 @@ import {
   ClipboardCheck,
   Warehouse,
   LifeBuoy,
+  ChevronDown,
+  Check,
+  Menu,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from '@/contexts/auth-context';
@@ -29,6 +32,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type SidebarItem = {
   name: string;
@@ -285,36 +295,93 @@ export function AppSidebar() {
         </div>
       </aside>
 
-      {/* Barra inferior de navegación solo en móviles */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 border-t border-border/60 backdrop-blur-sm">
-        <div className="flex items-center justify-between px-3 py-2">
-          {sidebarItems.map((item) => {
-            const isActive = pathname === item.href;
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex flex-col items-center justify-center px-3 py-2 rounded-lg text-xs",
-                  isActive
-                    ? "text-primary"
-                    : "text-foreground/80 hover:text-foreground"
-                )}
-                aria-label={item.name}
-                title={item.name}
-              >
-                <Icon
-                  className={cn(
-                    "h-6 w-6 mb-0.5",
-                    isActive ? "text-primary" : "text-foreground/70"
+      {/* Barra superior de navegación solo en móviles */}
+      <nav className="md:hidden fixed top-0 left-0 right-0 z-40 bg-card/95 border-b border-border/60 backdrop-blur-sm">
+        <div className="flex items-center h-14">
+          {/* Primera mitad: Selector de tienda */}
+          {currentStore && (
+            <div className="flex-1 px-3 py-2 border-r border-border/40">
+              <div className="flex items-center gap-2 w-full">
+                <Building className="h-4 w-4 text-primary flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  {canSelectStore ? (
+                    <Select
+                      value={currentStore.id}
+                      onValueChange={(storeId) => {
+                        const nextStore = user?.stores?.find((s) => s.id === storeId);
+                        if (nextStore) {
+                          selectStore(nextStore as AuthStore);
+                          router.refresh();
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-7 px-2 text-xs font-semibold w-full border-0 bg-transparent hover:bg-accent/50 focus:ring-0">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(user?.stores || []).map((store) => (
+                          <SelectItem key={store.id} value={store.id}>
+                            {store.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-xs font-semibold text-foreground truncate">{currentStore.name}</p>
                   )}
-                />
-              </Link>
-            );
-          })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Segunda mitad: Lista desplegable de secciones */}
+          <div className="flex-1 px-3 py-2 border-l border-border/40 border-r border-border/40">
+            <div className="flex items-center gap-2">
+              <Menu className="h-4 w-4 text-primary flex-shrink-0" />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="flex-1 h-7 px-2 justify-between text-xs font-medium border-0 bg-transparent hover:bg-accent/50"
+                  >
+                    {sidebarItems.find(item => pathname === item.href)?.name || "Secciones"}
+                    <ChevronDown className="h-3 w-3 opacity-50" />
+                  </Button>
+                </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="w-56 max-h-80 overflow-y-auto"
+                side="bottom"
+              >
+                {sidebarItems.map((item) => {
+                  const isActive = pathname === item.href;
+                  const Icon = item.icon;
+                  return (
+                    <DropdownMenuItem
+                      key={item.href}
+                      asChild
+                      className={cn(
+                        "cursor-pointer",
+                        isActive && "bg-accent"
+                      )}
+                    >
+                      <Link href={item.href} className="flex items-center w-full">
+                        <Icon className="mr-3 h-4 w-4" />
+                        <span className="flex-1">{item.name}</span>
+                        {isActive && <Check className="ml-2 h-3 w-3" />}
+                      </Link>
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            </div>
+          </div>
         </div>
       </nav>
+
+      {/* Espaciador para el contenido en móviles */}
+      <div className="md:hidden h-14"></div>
     </>
   );
 }

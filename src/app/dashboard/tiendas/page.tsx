@@ -326,66 +326,69 @@ export default function TiendasPage() {
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader className="bg-muted/50">
-                    <TableRow>
-                      <TableHead>Nombre</TableHead>
-                      <TableHead>Dirección</TableHead>
-                      <TableHead>Teléfono</TableHead>
-                      <TableHead>Creado por</TableHead>
-                      <TableHead>Fecha de creación</TableHead>
-                      {canManage && <TableHead className="text-right">Acciones</TableHead>}
+                    <TableRow className="h-8">
+                      <TableHead className="text-xs font-medium px-2">Nombre</TableHead>
+                      {/* Hidden columns on mobile */}
+                      <TableHead className="hidden md:table-cell text-xs font-medium px-2">Dirección</TableHead>
+                      <TableHead className="hidden md:table-cell text-xs font-medium px-2">Teléfono</TableHead>
+                      <TableHead className="hidden md:table-cell text-xs font-medium px-2">Creado por</TableHead>
+                      <TableHead className="hidden md:table-cell text-xs font-medium px-2">Fecha de creación</TableHead>
+                      {canManage && <TableHead className="text-xs font-medium px-2 text-center">Acciones</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredStores.map((store) => (
-                      <TableRow key={store.id}>
-                        <TableCell className="font-medium">{store.name}</TableCell>
-                        <TableCell>
+                      <TableRow key={store.id} className="h-8">
+                        <TableCell className="font-medium px-2 py-1 text-sm">{store.name}</TableCell>
+                        {/* Hidden columns on mobile */}
+                        <TableCell className="hidden md:table-cell px-2 py-1">
                           {store.address ? (
                             <div className="flex items-center gap-1">
                               <MapPin className="h-4 w-4 text-gray-400" />
-                              {store.address}
+                              <span className="text-sm">{store.address}</span>
                             </div>
                           ) : (
-                            <span className="text-gray-400">Sin dirección</span>
+                            <span className="text-gray-400 text-sm">Sin dirección</span>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden md:table-cell px-2 py-1">
                           {store.phone ? (
                             <div className="flex items-center gap-1">
                               <Phone className="h-4 w-4 text-gray-400" />
-                              {store.phone}
+                              <span className="text-sm">{store.phone}</span>
                             </div>
                           ) : (
-                            <span className="text-gray-400">Sin teléfono</span>
+                            <span className="text-gray-400 text-sm">Sin teléfono</span>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden md:table-cell px-2 py-1">
                           {store.createdBy ? (
                             <div className="flex items-center gap-1">
                               <Mail className="h-4 w-4 text-gray-400" />
                               <div>
-                                <div className="font-medium">{store.createdBy.name}</div>
-                                <div className="text-sm text-gray-500">{store.createdBy.email}</div>
+                                <div className="font-medium text-sm">{store.createdBy.name}</div>
+                                <div className="text-xs text-gray-500">{store.createdBy.email}</div>
                               </div>
                             </div>
                           ) : (
-                            <span className="text-gray-400">Desconocido</span>
+                            <span className="text-gray-400 text-sm">Desconocido</span>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden md:table-cell px-2 py-1 text-sm">
                           {format(new Date(store.createdAt), "dd/MM/yyyy HH:mm")}
                         </TableCell>
                         {canManage && (
-                          <TableCell className="text-right">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleEditStore(store)}
-                              className="flex items-center gap-1"
-                            >
-                              <Edit2 className="h-4 w-4" />
-                              Editar
-                            </Button>
+                          <TableCell className="px-2 py-1">
+                            <div className="flex justify-center items-center">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEditStore(store)}
+                                className="flex items-center justify-center h-8 w-8 p-0"
+                              >
+                                <Edit2 className="h-3 w-3" />
+                              </Button>
+                            </div>
                           </TableCell>
                         )}
                       </TableRow>

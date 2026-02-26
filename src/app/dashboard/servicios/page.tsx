@@ -615,15 +615,15 @@ export default function ServiciosPage() {
               <div className="rounded-md border overflow-hidden">
                 <div className="overflow-x-auto">
                   <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="min-w-[150px]">Cliente</TableHead>
-                        <TableHead className="min-w-[180px]">Servicio</TableHead>
+                    <TableHeader className="bg-muted/50">
+                      <TableRow className="h-8">
+                        <TableHead className="w-[35%] text-xs font-medium px-2">Servicio</TableHead>
+                        <TableHead className="w-[35%] text-xs font-medium px-2">Cliente</TableHead>
                         {/* Hide Estado, Precio, Fecha in mobile */}
-                        {canDetailServices && <TableHead className="hidden md:table-cell min-w-[160px]">Usuario</TableHead>}
-                        <TableHead className="hidden sm:table-cell min-w-[120px]">Estado</TableHead>
-                        <TableHead className="hidden md:table-cell min-w-[100px] text-right">Precio</TableHead>
-                        <TableHead className="hidden lg:table-cell min-w-[100px]">Fecha</TableHead>
+                        {canDetailServices && <TableHead className="hidden md:table-cell w-[15%] text-xs font-medium px-2">Usuario</TableHead>}
+                        <TableHead className="hidden sm:table-cell w-[15%] text-xs font-medium px-2">Estado</TableHead>
+                        <TableHead className="hidden md:table-cell w-[15%] text-xs font-medium px-2 text-right">Precio</TableHead>
+                        <TableHead className="hidden lg:table-cell w-[10%] text-xs font-medium px-2">Fecha</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -677,7 +677,7 @@ export default function ServiciosPage() {
                           return (
                         <TableRow
                           key={service.id || `${service.serviceName}-${service.createdAt}-${idx}`}
-                          className={`${canOpenDetailRow ? 'cursor-pointer hover:bg-accent/50' : 'cursor-default'} ${isOutsideCurrentCashSession ? 'bg-muted/40 text-muted-foreground opacity-70 grayscale' : ''}`}
+                          className={`${canOpenDetailRow ? 'cursor-pointer hover:bg-accent/50' : 'cursor-default'} ${isOutsideCurrentCashSession ? 'bg-muted/40 text-muted-foreground opacity-70 grayscale' : ''} h-8`}
                           onClick={() => {
                             if (!canDetailServices) {
                               toast.error('No tienes permisos para ver el detalle del servicio (DETAIL_SERVICES requerido).');
@@ -690,33 +690,38 @@ export default function ServiciosPage() {
                             openDetail(service.id);
                           }}
                         >
-                          <TableCell className={`max-w-[150px] truncate ${cellMutedClass}`}>
-                            <div className="font-medium">{service.clientName}</div>
-                            {/* Show status icon in mobile */}
-                            <div className="sm:hidden flex items-center gap-1 mt-1">
-                              <span className={`text-lg ${statusInfo.color}`}>{statusInfo.icon}</span>
-                              <span className="text-xs text-muted-foreground">{translateStatus(service.status)}</span>
+                          <TableCell className={`truncate ${cellMutedClass} px-2 py-1`}>
+                            <div className="font-medium text-xs sm:text-sm">
+                              <span className="sm:hidden">{service.serviceName.length > 25 ? service.serviceName.substring(0, 25) + '...' : service.serviceName}</span>
+                              <span className="hidden sm:inline">{service.serviceName}</span>
                             </div>
-                          </TableCell>
-                          <TableCell className={`max-w-[180px] truncate ${cellMutedClass}`}>
-                            <div className="font-medium">{service.serviceName}</div>
                             {/* Show price in mobile */}
-                            <div className="sm:hidden text-sm text-muted-foreground mt-1">
+                            <div className="sm:hidden text-xs text-muted-foreground mt-1 font-medium">
                               {formatPrice(service.price)}
                             </div>
                           </TableCell>
+                          <TableCell className={`truncate ${cellMutedClass} px-2 py-1`}>
+                            <div className="font-medium text-xs sm:text-sm">
+                              <span className="sm:hidden">{service.clientName.length > 8 ? service.clientName.substring(0, 8) + '...' : service.clientName}</span>
+                              <span className="hidden sm:inline">{service.clientName}</span>
+                            </div>
+                            {/* Show status icon in mobile */}
+                            <div className="sm:hidden flex items-center gap-1 mt-1">
+                              <span className={`text-sm ${statusInfo.color}`}>{statusInfo.icon}</span>
+                            </div>
+                          </TableCell>
                           {canDetailServices && (
-                            <TableCell className={`hidden md:table-cell ${cellMutedClass}`}>
+                            <TableCell className={`hidden md:table-cell ${cellMutedClass} px-2 py-1 text-sm`}>
                               {service.seller?.name || '-'}
                             </TableCell>
                           )}
-                          <TableCell className={`hidden sm:table-cell ${cellMutedClass}`}>
+                          <TableCell className={`hidden sm:table-cell ${cellMutedClass} px-2 py-1`}>
                             <span className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getStatusBadge(service.status)}`}>
                               {translateStatus(service.status)}
                             </span>
                           </TableCell>
-                          <TableCell className={`hidden md:table-cell text-right font-medium ${cellMutedClass}`}>{formatPrice(service.price)}</TableCell>
-                          <TableCell className={`hidden lg:table-cell whitespace-nowrap ${cellMutedClass}`}>
+                          <TableCell className={`hidden md:table-cell text-right font-medium ${cellMutedClass} px-2 py-1 text-sm`}>{formatPrice(service.price)}</TableCell>
+                          <TableCell className={`hidden lg:table-cell whitespace-nowrap ${cellMutedClass} px-2 py-1 text-xs`}>
                             {service.createdAt ? format(new Date(service.createdAt), "dd/MM/yy") : "N/A"}
                           </TableCell>
                         </TableRow>

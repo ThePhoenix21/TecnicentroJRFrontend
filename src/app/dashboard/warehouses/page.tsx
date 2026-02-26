@@ -451,9 +451,10 @@ export default function WarehousesPage() {
               <Table>
                 <TableHeader className="bg-muted/50">
                   <TableRow>
-                    <TableHead>Nombre</TableHead>
-                    <TableHead>Dirección</TableHead>
-                    <TableHead>Teléfono</TableHead>
+                    <TableHead className="min-w-[150px]">Nombre</TableHead>
+                    {/* Hide Dirección and Teléfono in mobile */}
+                    <TableHead className="hidden sm:table-cell min-w-[200px]">Dirección</TableHead>
+                    <TableHead className="hidden md:table-cell min-w-[120px]">Teléfono</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -464,8 +465,8 @@ export default function WarehousesPage() {
                       onClick={() => openDetail(w.id)}
                     >
                       <TableCell className="font-medium">{w.name}</TableCell>
-                      <TableCell>{w.address}</TableCell>
-                      <TableCell>{w.phone}</TableCell>
+                      <TableCell className="hidden sm:table-cell">{w.address}</TableCell>
+                      <TableCell className="hidden md:table-cell">{w.phone}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -478,13 +479,11 @@ export default function WarehousesPage() {
       <Dialog open={isDetailOpen} onOpenChange={(open) => (open ? setIsDetailOpen(true) : closeDetail())}>
         <DialogContent className="sm:max-w-[980px] max-h-[90vh] p-0 overflow-hidden">
           <div className="flex flex-col max-h-[90vh]">
-            <div className="p-6 pb-2">
-              <DialogHeader>
-                <DialogTitle>Detalle de almacén</DialogTitle>
-              </DialogHeader>
-            </div>
+            <DialogHeader className="p-4 sm:p-6 pb-2 sm:pb-2 flex-shrink-0">
+              <DialogTitle className="text-lg sm:text-xl">Detalle de almacén</DialogTitle>
+            </DialogHeader>
 
-            <div className="flex-1 overflow-y-auto px-6 pb-6">
+            <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-4 sm:pb-6">
               {detailLoading ? (
                 <div className="flex justify-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -492,21 +491,21 @@ export default function WarehousesPage() {
               ) : !detail ? (
                 <div className="text-center py-6 text-muted-foreground">Sin información</div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-4 sm:space-y-6">
                   <Tabs defaultValue="general" className="w-full">
-                    <TabsList className="w-full justify-start flex-wrap">
-                      <TabsTrigger value="general">Información general</TabsTrigger>
-                      <TabsTrigger value="employees">Empleados</TabsTrigger>
-                      <TabsTrigger value="stores">Tiendas</TabsTrigger>
-                      <TabsTrigger value="supply-orders">Órdenes de suministro</TabsTrigger>
-                      <TabsTrigger value="receipts">Recepciones</TabsTrigger>
-                      <TabsTrigger value="stock">Productos y stock</TabsTrigger>
+                    <TabsList className="w-full h-auto p-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1">
+                      <TabsTrigger value="general" className="text-xs sm:text-sm">General</TabsTrigger>
+                      <TabsTrigger value="employees" className="text-xs sm:text-sm">Empleados</TabsTrigger>
+                      <TabsTrigger value="stores" className="text-xs sm:text-sm">Tiendas</TabsTrigger>
+                      <TabsTrigger value="supply-orders" className="text-xs sm:text-sm">Órdenes</TabsTrigger>
+                      <TabsTrigger value="receipts" className="text-xs sm:text-sm">Recepciones</TabsTrigger>
+                      <TabsTrigger value="stock" className="text-xs sm:text-sm">Stock</TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="general">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-sm font-semibold">Datos generales</h3>
+                    <TabsContent value="general" className="mt-4 sm:mt-6">
+                      <div className="space-y-4 sm:space-y-6">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <h3 className="text-base sm:text-lg font-semibold">Datos generales</h3>
                           <Button
                             variant="outline"
                             size="sm"
@@ -520,24 +519,26 @@ export default function WarehousesPage() {
                               });
                             }}
                             disabled={detailLoading || editSubmitting || deleteSubmitting}
+                            className="w-full sm:w-auto h-9"
                           >
                             <Pencil className="h-4 w-4 mr-2" />
-                            {isEditing ? 'Cancelar edición' : 'Editar'}
+                            <span className="hidden sm:inline">{isEditing ? 'Cancelar edición' : 'Editar'}</span>
+                            <span className="sm:hidden">{isEditing ? 'Cancelar' : 'Editar'}</span>
                           </Button>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                           <div className="space-y-2">
                             <label className="text-sm font-medium">Nombre</label>
                             <Input
                               value={isEditing ? editForm.name : detail.name}
                               onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
                               disabled={!isEditing}
-                              className={
+                              className={`h-10 ${
                                 isEditing
                                   ? 'bg-emerald-50 border-emerald-300 focus-visible:ring-emerald-400'
                                   : undefined
-                              }
+                              }`}
                             />
                           </div>
 
@@ -547,11 +548,11 @@ export default function WarehousesPage() {
                               value={isEditing ? editForm.phone : detail.phone}
                               onChange={(e) => setEditForm((p) => ({ ...p, phone: e.target.value }))}
                               disabled={!isEditing}
-                              className={
+                              className={`h-10 ${
                                 isEditing
                                   ? 'bg-emerald-50 border-emerald-300 focus-visible:ring-emerald-400'
                                   : undefined
-                              }
+                              }`}
                             />
                           </div>
 
@@ -561,21 +562,21 @@ export default function WarehousesPage() {
                               value={isEditing ? editForm.address : detail.address}
                               onChange={(e) => setEditForm((p) => ({ ...p, address: e.target.value }))}
                               disabled={!isEditing}
-                              className={
+                              className={`h-10 ${
                                 isEditing
                                   ? 'bg-emerald-50 border-emerald-300 focus-visible:ring-emerald-400'
                                   : undefined
-                              }
+                              }`}
                             />
                           </div>
                         </div>
 
                         {isEditing && (
-                          <div className="flex justify-end">
+                          <div className="flex justify-end pt-2">
                             <Button
                               onClick={handleSaveEdit}
                               disabled={editSubmitting || deleteSubmitting}
-                              className="bg-emerald-600 text-white hover:bg-emerald-700"
+                              className="bg-emerald-600 text-white hover:bg-emerald-700 h-10"
                             >
                               <Save className="h-4 w-4 mr-2" />
                               {editSubmitting ? 'Guardando...' : 'Guardar'}

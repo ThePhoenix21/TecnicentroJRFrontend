@@ -1186,7 +1186,7 @@ export default function OrdenesSuministroPage() {
                     <TableHeader className="bg-muted/50">
                       <TableRow>
                         <TableHead className="min-w-[120px]">Código</TableHead>
-                        <TableHead className="min-w-[120px]">Estado</TableHead>
+                        <TableHead className="hidden sm:table-cell min-w-[120px]">Estado</TableHead>
                         {/* Hide Emisión, Proveedor, Tienda, Almacén in mobile */}
                         <TableHead className="hidden sm:table-cell min-w-[140px]">Emisión</TableHead>
                         <TableHead className="hidden md:table-cell min-w-[150px]">Proveedor</TableHead>
@@ -1201,7 +1201,7 @@ export default function OrdenesSuministroPage() {
                         return (
                           <TableRow key={order.id}>
                             <TableCell className="font-medium">{order.code}</TableCell>
-                            <TableCell>
+                            <TableCell className="hidden sm:table-cell">
                               <span
                                 className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${status.className}`}
                               >
@@ -1841,269 +1841,278 @@ export default function OrdenesSuministroPage() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-[640px]">
-          <DialogHeader>
-            <DialogTitle>Nueva orden de suministro</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Proveedor</label>
-                <Select
-                  value={createForm.providerId}
-                  onValueChange={(value) => {
-                    setCreateForm((prev) => ({ ...prev, providerId: value }));
-                    setCreateErrors((prev) => ({ ...prev, providerId: false }));
-                  }}
-                >
-                  <SelectTrigger
-                    className={createErrors.providerId ? "border-destructive focus-visible:ring-destructive/30" : undefined}
-                  >
-                    <SelectValue placeholder={lookupLoading ? "Cargando..." : "Selecciona proveedor"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {providersLookup.map((provider) => (
-                      <SelectItem key={provider.id} value={provider.id}>
-                        {provider.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Destino</label>
-                <Select value={locationType} onValueChange={(value) => setLocationType(value as "store" | "warehouse")}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tipo de destino" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="store">Tienda</SelectItem>
-                    <SelectItem value="warehouse">Almacén</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+        <DialogContent className="sm:max-w-[640px] max-h-[90vh] p-0 overflow-hidden">
+          <div className="flex flex-col max-h-[90vh]">
+            <DialogHeader className="p-4 sm:p-6 pb-2 sm:pb-2 flex-shrink-0">
+              <DialogTitle className="text-lg sm:text-xl">Nueva orden de suministro</DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-4 sm:pb-6">
+              <div className="space-y-4 sm:space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Proveedor</label>
+                    <Select
+                      value={createForm.providerId}
+                      onValueChange={(value) => {
+                        setCreateForm((prev) => ({ ...prev, providerId: value }));
+                        setCreateErrors((prev) => ({ ...prev, providerId: false }));
+                      }}
+                    >
+                      <SelectTrigger
+                        className={`h-10 ${createErrors.providerId ? "border-destructive focus-visible:ring-destructive/30" : undefined}`}
+                      >
+                        <SelectValue placeholder={lookupLoading ? "Cargando..." : "Selecciona proveedor"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {providersLookup.map((provider) => (
+                          <SelectItem key={provider.id} value={provider.id}>
+                            {provider.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Destino</label>
+                    <Select value={locationType} onValueChange={(value) => setLocationType(value as "store" | "warehouse")}>
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="Tipo de destino" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="store">Tienda</SelectItem>
+                        <SelectItem value="warehouse">Almacén</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                {locationType === "store" ? "Tienda" : "Almacén"}
-              </label>
-              {locationType === "store" ? (
-                <Select
-                  value={createForm.storeId ?? ""}
-                  onValueChange={(value) => {
-                    setCreateForm((prev) => ({ ...prev, storeId: value, warehouseId: undefined }));
-                    setCreateErrors((prev) => ({ ...prev, locationId: false }));
-                  }}
-                >
-                  <SelectTrigger
-                    className={createErrors.locationId ? "border-destructive focus-visible:ring-destructive/30" : undefined}
-                  >
-                    <SelectValue placeholder={lookupLoading ? "Cargando..." : "Selecciona tienda"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {storesLookup.map((store) => (
-                      <SelectItem key={store.id} value={store.id}>
-                        {store.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Select
-                  value={createForm.warehouseId ?? ""}
-                  onValueChange={(value) => {
-                    setCreateForm((prev) => ({ ...prev, warehouseId: value, storeId: undefined }));
-                    setCreateErrors((prev) => ({ ...prev, locationId: false }));
-                  }}
-                >
-                  <SelectTrigger
-                    className={createErrors.locationId ? "border-destructive focus-visible:ring-destructive/30" : undefined}
-                  >
-                    <SelectValue placeholder={lookupLoading ? "Cargando..." : "Selecciona almacén"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {warehousesLookup.map((warehouse) => (
-                      <SelectItem key={warehouse.id} value={warehouse.id}>
-                        {warehouse.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    {locationType === "store" ? "Tienda" : "Almacén"}
+                  </label>
+                  {locationType === "store" ? (
+                    <Select
+                      value={createForm.storeId ?? ""}
+                      onValueChange={(value) => {
+                        setCreateForm((prev) => ({ ...prev, storeId: value, warehouseId: undefined }));
+                        setCreateErrors((prev) => ({ ...prev, locationId: false }));
+                      }}
+                    >
+                      <SelectTrigger
+                        className={`h-10 ${createErrors.locationId ? "border-destructive focus-visible:ring-destructive/30" : undefined}`}
+                      >
+                        <SelectValue placeholder={lookupLoading ? "Cargando..." : "Selecciona tienda"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {storesLookup.map((store) => (
+                          <SelectItem key={store.id} value={store.id}>
+                            {store.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Select
+                      value={createForm.warehouseId ?? ""}
+                      onValueChange={(value) => {
+                        setCreateForm((prev) => ({ ...prev, warehouseId: value, storeId: undefined }));
+                        setCreateErrors((prev) => ({ ...prev, locationId: false }));
+                      }}
+                    >
+                      <SelectTrigger
+                        className={`h-10 ${createErrors.locationId ? "border-destructive focus-visible:ring-destructive/30" : undefined}`}
+                      >
+                        <SelectValue placeholder={lookupLoading ? "Cargando..." : "Selecciona almacén"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {warehousesLookup.map((warehouse) => (
+                          <SelectItem key={warehouse.id} value={warehouse.id}>
+                            {warehouse.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Descripción</label>
-              <Input
-                value={createForm.description ?? ""}
-                onChange={(e) => setCreateForm((prev) => ({ ...prev, description: e.target.value }))}
-                placeholder="Descripción opcional"
-              />
-            </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Descripción</label>
+                  <Input
+                    value={createForm.description ?? ""}
+                    onChange={(e) => setCreateForm((prev) => ({ ...prev, description: e.target.value }))}
+                    placeholder="Descripción opcional"
+                    className="h-10"
+                  />
+                </div>
 
-            <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">Productos</h3>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    {
-                      setCreateForm((prev) => ({
-                        ...prev,
-                        products: [...prev.products, { productId: "", quantity: 1, note: "" }],
-                      }));
-                      setCreateErrors((prev) => ({
-                        ...prev,
-                        products: [...prev.products, { productId: false, quantity: false }],
-                      }));
-                    }
-                  }
-                >
-                  Agregar producto
-                </Button>
-              </div>
-              <div className="space-y-4 max-h-[320px] overflow-y-auto pr-1">
-                {createForm.products.map((item, index) => {
-                  const selectedProductName = productsLookup.find((product) => product.id === item.productId)?.name;
-                  return (
-                    <div key={`${item.productId}-${index}`} className="space-y-3 rounded-md border bg-background p-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-muted-foreground">Producto {index + 1}</span>
-                        {createForm.products.length > 1 && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() =>
-                              {
+                <div className="space-y-3 rounded-lg border bg-muted/30 p-3 sm:p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <h3 className="text-sm font-semibold">Productos</h3>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        {
+                          setCreateForm((prev) => ({
+                            ...prev,
+                            products: [...prev.products, { productId: "", quantity: 1, note: "" }],
+                          }));
+                          setCreateErrors((prev) => ({
+                            ...prev,
+                            products: [...prev.products, { productId: false, quantity: false }],
+                          }));
+                        }
+                      }
+                      className="w-full sm:w-auto h-8"
+                    >
+                      Agregar producto
+                    </Button>
+                  </div>
+                  <div className="space-y-4 max-h-[280px] sm:max-h-[320px] overflow-y-auto pr-1">
+                    {createForm.products.map((item, index) => {
+                      const selectedProductName = productsLookup.find((product) => product.id === item.productId)?.name;
+                      return (
+                        <div key={`${item.productId}-${index}`} className="space-y-3 rounded-md border bg-background p-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-muted-foreground">Producto {index + 1}</span>
+                            {createForm.products.length > 1 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  {
+                                    setCreateForm((prev) => ({
+                                      ...prev,
+                                      products: prev.products.filter((_, idx) => idx !== index),
+                                    }));
+                                    setCreateErrors((prev) => ({
+                                      ...prev,
+                                      products: prev.products.filter((_, idx) => idx !== index),
+                                    }));
+                                  }
+                                }
+                                className="h-7 px-2 text-muted-foreground"
+                              >
+                                Quitar
+                              </Button>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-2 min-w-0">
+                              <label className="text-sm font-medium">Producto</label>
+                              <Select
+                                value={item.productId}
+                                onValueChange={(value) => {
+                                  setCreateForm((prev) => ({
+                                    ...prev,
+                                    products: prev.products.map((prod, idx) =>
+                                      idx === index ? { ...prod, productId: value } : prod
+                                    ),
+                                  }));
+                                  setCreateErrors((prev) => ({
+                                    ...prev,
+                                    products: prev.products.map((prod, idx) =>
+                                      idx === index ? { ...prod, productId: false } : prod
+                                    ),
+                                  }));
+                                }}
+                              >
+                                <SelectTrigger
+                                  className={`w-full truncate h-9 ${
+                                    createErrors.products[index]?.productId
+                                      ? "border-destructive focus-visible:ring-destructive/30"
+                                      : ""
+                                  }`}
+                                  title={selectedProductName || undefined}
+                                >
+                                  <SelectValue
+                                    className="truncate"
+                                    placeholder={lookupLoading ? "Cargando..." : "Selecciona producto"}
+                                  />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {productsLookup.map((product) => (
+                                    <SelectItem key={product.id} value={product.id}>
+                                      <span className="block max-w-[220px] truncate" title={product.name}>
+                                        {product.name}
+                                      </span>
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">Cantidad</label>
+                              <Input
+                                type="number"
+                                min={1}
+                                value={item.quantity ?? 1}
+                                onChange={(e) => {
+                                  const value = Number(e.target.value);
+                                  setCreateForm((prev) => ({
+                                    ...prev,
+                                    products: prev.products.map((prod, idx) =>
+                                      idx === index ? { ...prod, quantity: value } : prod
+                                    ),
+                                  }));
+                                  setCreateErrors((prev) => ({
+                                    ...prev,
+                                    products: prev.products.map((prod, idx) =>
+                                      idx === index ? { ...prod, quantity: false } : prod
+                                    ),
+                                  }));
+                                }}
+                                className={`h-9 ${
+                                  createErrors.products[index]?.quantity
+                                    ? "border-destructive focus-visible:ring-destructive/30"
+                                    : undefined
+                                }`}
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium">Nota</label>
+                            <Input
+                              value={item.note ?? ""}
+                              onChange={(e) =>
                                 setCreateForm((prev) => ({
                                   ...prev,
-                                  products: prev.products.filter((_, idx) => idx !== index),
-                                }));
-                                setCreateErrors((prev) => ({
-                                  ...prev,
-                                  products: prev.products.filter((_, idx) => idx !== index),
-                                }));
+                                  products: prev.products.map((prod, idx) =>
+                                    idx === index ? { ...prod, note: e.target.value } : prod
+                                  ),
+                                }))
                               }
-                            }
-                            className="h-7 px-2 text-muted-foreground"
-                          >
-                            Quitar
-                          </Button>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-2 min-w-0">
-                          <label className="text-sm font-medium">Producto</label>
-                          <Select
-                            value={item.productId}
-                            onValueChange={(value) => {
-                              setCreateForm((prev) => ({
-                                ...prev,
-                                products: prev.products.map((prod, idx) =>
-                                  idx === index ? { ...prod, productId: value } : prod
-                                ),
-                              }));
-                              setCreateErrors((prev) => ({
-                                ...prev,
-                                products: prev.products.map((prod, idx) =>
-                                  idx === index ? { ...prod, productId: false } : prod
-                                ),
-                              }));
-                            }}
-                          >
-                            <SelectTrigger
-                              className={`w-full truncate ${
-                                createErrors.products[index]?.productId
-                                  ? "border-destructive focus-visible:ring-destructive/30"
-                                  : ""
-                              }`}
-                              title={selectedProductName || undefined}
-                            >
-                              <SelectValue
-                                className="truncate"
-                                placeholder={lookupLoading ? "Cargando..." : "Selecciona producto"}
-                              />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {productsLookup.map((product) => (
-                                <SelectItem key={product.id} value={product.id}>
-                                  <span className="block max-w-[220px] truncate" title={product.name}>
-                                    {product.name}
-                                  </span>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                              placeholder="Nota opcional"
+                              className="h-9"
+                            />
+                          </div>
                         </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">Cantidad</label>
-                          <Input
-                            type="number"
-                            min={1}
-                            value={item.quantity ?? 1}
-                            onChange={(e) => {
-                              const value = Number(e.target.value);
-                              setCreateForm((prev) => ({
-                                ...prev,
-                                products: prev.products.map((prod, idx) =>
-                                  idx === index ? { ...prod, quantity: value } : prod
-                                ),
-                              }));
-                              setCreateErrors((prev) => ({
-                                ...prev,
-                                products: prev.products.map((prod, idx) =>
-                                  idx === index ? { ...prod, quantity: false } : prod
-                                ),
-                              }));
-                            }}
-                            className={
-                              createErrors.products[index]?.quantity
-                                ? "border-destructive focus-visible:ring-destructive/30"
-                                : undefined
-                            }
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Nota</label>
-                        <Input
-                          value={item.note ?? ""}
-                          onChange={(e) =>
-                            setCreateForm((prev) => ({
-                              ...prev,
-                              products: prev.products.map((prod, idx) =>
-                                idx === index ? { ...prod, note: e.target.value } : prod
-                              ),
-                            }))
-                          }
-                          placeholder="Nota opcional"
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
+
+            <DialogFooter className="px-4 sm:px-6 py-4 border-t flex flex-col sm:flex-row gap-3 pt-4 border-t">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setCreateOpen(false);
+                  resetCreateForm();
+                }}
+                disabled={createSubmitting}
+                className="w-full sm:w-auto h-10"
+              >
+                Cancelar
+              </Button>
+              <Button onClick={handleCreate} disabled={createSubmitting} className="w-full sm:w-auto h-10">
+                {createSubmitting ? "Creando..." : "Crear orden"}
+              </Button>
+            </DialogFooter>
           </div>
-          <DialogFooter className="px-6 py-4 border-t flex flex-col sm:flex-row gap-2 sm:gap-2">
-            <Button
-              variant="muted"
-              onClick={() => {
-                setCreateOpen(false);
-                resetCreateForm();
-              }}
-              disabled={createSubmitting}
-            >
-              Cancelar
-            </Button>
-            <Button onClick={handleCreate} disabled={createSubmitting}>
-              {createSubmitting ? "Creando..." : "Crear orden"}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
       </>

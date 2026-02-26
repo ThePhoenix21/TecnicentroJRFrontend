@@ -1872,7 +1872,7 @@ export function SaleForm({
         overlayPointerDownOutsideRef.current = false;
       }}
     >
-      <div className="bg-background border border-muted rounded-3xl shadow-xl w-full max-w-4xl max-h-[95vh] md:max-h-[90vh] flex flex-col">
+      <div className="bg-background border border-muted rounded-3xl shadow-xl w-full max-w-4xl max-w-[95vw] sm:max-w-2xl md:max-w-4xl max-h-[95vh] md:max-h-[90vh] flex flex-col">
         <div className="flex justify-between items-center p-3 md:p-4 border-b rounded-t-3xl sticky top-0 bg-background z-10">
           <h2 className="text-lg md:text-xl font-semibold">Nueva Venta</h2>
           <div className="flex items-center gap-2">
@@ -2004,9 +2004,9 @@ export function SaleForm({
         </Dialog>
 
         <div className="flex-1 overflow-y-auto">
-          <div className="h-full flex flex-col md:flex-row">
+          <div className="h-full flex flex-col lg:flex-row">
             {/* Panel izquierdo - Productos */}
-            <div className="w-full md:w-1/2 p-4 border-r overflow-auto">
+            <div className="w-full lg:w-1/2 p-3 md:p-4 border-b lg:border-b-0 lg:border-r overflow-auto">
               <form onSubmit={handleAddCustomItem} className="space-y-4 mb-6">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Tipo de ítem</label>
@@ -2331,8 +2331,8 @@ export function SaleForm({
             </div>
 
             {/* Panel derecho - Carrito */}
-            <div className="w-full md:w-1/2 p-4 flex flex-col">
-              <h3 className="text-lg font-medium mb-4">Detalle de la Venta</h3>
+            <div className="w-full lg:w-1/2 p-3 md:p-4 flex flex-col">
+              <h3 className="text-base md:text-lg font-medium mb-3 md:mb-4">Detalle de la Venta</h3>
 
               {selectedItems.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
@@ -2751,7 +2751,6 @@ export function SaleForm({
         paymentTotal={paymentConfirmation.paymentTotal}
       />
 
-      {/* Modal de métodos de pago (a nivel orden) */}
       <Dialog
         open={isOrderPaymentsModalOpen}
         onOpenChange={(open) => {
@@ -2760,18 +2759,18 @@ export function SaleForm({
           }
         }}
       >
-        <DialogContent className="sm:max-w-[520px]">
+        <DialogContent className="sm:max-w-[520px] max-w-[95vw]">
           <DialogHeader>
             <DialogTitle>Métodos de pago</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <label className="text-sm font-medium">Agregar métodos</label>
               <button
                 type="button"
                 onClick={addOrderPaymentMethod}
-                className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors self-start sm:self-auto"
               >
                 <Plus className="w-3 h-3" />
                 Agregar método
@@ -2780,7 +2779,7 @@ export function SaleForm({
 
             <div className="space-y-2">
               {orderPaymentMethodsDraft.map((paymentMethod) => (
-                <div key={paymentMethod.id} className="flex gap-2">
+                <div key={paymentMethod.id} className="flex flex-col sm:flex-row gap-2">
                   <select
                     value={paymentMethod.type}
                     onChange={(e) =>
@@ -2802,42 +2801,45 @@ export function SaleForm({
                     <option value={PaymentType.OTRO}>Otro</option>
                   </select>
 
-                  <input
-                    type="number"
-                    value={paymentMethod.amount}
-                    onChange={(e) =>
-                      updateOrderPaymentMethod(
-                        paymentMethod.id,
-                        "amount",
-                        parseFloat(e.target.value) || 0
-                      )
-                    }
-                    onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                    className="w-28 p-2 border rounded text-sm"
-                    placeholder="Monto"
-                    min="0"
-                    step="0.01"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      value={paymentMethod.amount}
+                      onChange={(e) =>
+                        updateOrderPaymentMethod(
+                          paymentMethod.id,
+                          "amount",
+                          parseFloat(e.target.value) || 0
+                        )
+                      }
+                      onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                      className="flex-1 sm:w-28 p-2 border rounded text-sm"
+                      placeholder="Monto"
+                      min="0"
+                      step="0.01"
+                    />
 
-                  {orderPaymentMethodsDraft.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeOrderPaymentMethod(paymentMethod.id)}
-                      className="p-2 text-red-500 hover:bg-red-50 rounded transition-colors"
-                    >
-                      <Minus className="w-4 h-4" />
-                    </button>
-                  )}
+                    {orderPaymentMethodsDraft.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeOrderPaymentMethod(paymentMethod.id)}
+                        className="p-2 text-red-500 hover:bg-red-50 rounded transition-colors"
+                      >
+                        <Minus className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
             <Button
               type="button"
               variant="outline"
               onClick={() => setIsOrderPaymentsModalOpen(false)}
+              className="w-full sm:w-auto"
             >
               Cancelar
             </Button>
@@ -2848,6 +2850,7 @@ export function SaleForm({
                 setIsOrderPaymentsModalOpen(false);
                 handleSubmit(orderPaymentMethodsDraft);
               }}
+              className="w-full sm:w-auto"
             >
               Aceptar
             </Button>

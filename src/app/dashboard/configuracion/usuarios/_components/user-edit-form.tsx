@@ -404,16 +404,16 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 sm:space-y-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
           <FormField
             control={form.control}
             name="name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Nombre completo</FormLabel>
+                <FormLabel className="text-sm font-medium">Nombre completo</FormLabel>
                 <FormControl>
-                  <Input placeholder="Nombre del usuario" {...field} />
+                  <Input placeholder="Nombre del usuario" className="h-10" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -425,7 +425,7 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
             name="username"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Alias (opcional)</FormLabel>
+                <FormLabel className="text-sm font-medium">Alias (opcional)</FormLabel>
                 <FormControl>
                   <Input
                     placeholder="alias"
@@ -433,6 +433,7 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
                     autoCapitalize="none"
                     autoCorrect="off"
                     spellCheck={false}
+                    className="h-10"
                     {...field}
                   />
                 </FormControl>
@@ -446,9 +447,9 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
             name="email"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Correo electrónico</FormLabel>
+                <FormLabel className="text-sm font-medium">Correo electrónico</FormLabel>
                 <FormControl>
-                  <Input type="email" placeholder="usuario@ejemplo.com" {...field} />
+                  <Input type="email" placeholder="usuario@ejemplo.com" className="h-10" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -460,9 +461,9 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
             name="phone"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Teléfono</FormLabel>
+                <FormLabel className="text-sm font-medium">Teléfono</FormLabel>
                 <FormControl>
-                  <Input type="tel" placeholder="+51 987 654 321" {...field} />
+                  <Input type="tel" placeholder="+51 987 654 321" className="h-10" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -474,10 +475,10 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
             name="language"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Idioma</FormLabel>
+                <FormLabel className="text-sm font-medium">Idioma</FormLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-10">
                       <SelectValue placeholder="Selecciona un idioma" />
                     </SelectTrigger>
                   </FormControl>
@@ -496,10 +497,10 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
             name="timezone"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Zona horaria</FormLabel>
+                <FormLabel className="text-sm font-medium">Zona horaria</FormLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-10">
                       <SelectValue placeholder="Selecciona una zona horaria" />
                     </SelectTrigger>
                   </FormControl>
@@ -519,10 +520,10 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
             name="status"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Estado</FormLabel>
+                <FormLabel className="text-sm font-medium">Estado</FormLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-10">
                       <SelectValue placeholder="Selecciona un estado" />
                     </SelectTrigger>
                   </FormControl>
@@ -543,10 +544,10 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
               name="storeId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Tienda asignada</FormLabel>
+                  <FormLabel className="text-sm font-medium">Tienda asignada</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger className="h-10">
                         <SelectValue placeholder="Selecciona una tienda" />
                       </SelectTrigger>
                     </FormControl>
@@ -572,23 +573,24 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
                 isLoading={isLoadingPermissions}
                 title="Permisos"
                 description="Selecciona los permisos que tendrá este usuario"
-                columns={3}
-                maxHeight="max-h-64"
-                className="md:col-span-2 space-y-4 border rounded-lg p-4"
+                columns={2}
+                maxHeight="max-h-48 sm:max-h-64"
+                className="sm:col-span-2 space-y-3 border rounded-lg p-3 sm:p-4"
               />
           )}
         </div>
 
-        <div className="flex justify-end space-x-4">
+        <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t">
           <Button
             type="button"
             variant="outline"
             onClick={onSuccess}
             disabled={isSubmitting}
+            className="w-full sm:w-auto h-10"
           >
             Cancelar
           </Button>
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto h-10">
             {isSubmitting ? 'Actualizando...' : 'Actualizar usuario'}
           </Button>
         </div>

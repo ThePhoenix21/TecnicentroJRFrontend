@@ -729,8 +729,8 @@ export default function VentasPage() {
             </div>
             {canViewOrdersHistoryPermission && (
               <div className="space-y-3">
-                <div className="flex items-end gap-3 overflow-x-auto overflow-y-visible">
-                  <div ref={clientDropdownRef} className="relative min-w-[220px]">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  <div ref={clientDropdownRef} className="relative">
                     <Label className="text-xs text-muted-foreground">Cliente</Label>
                     <Input
                       placeholder="Nombre del cliente..."
@@ -776,7 +776,7 @@ export default function VentasPage() {
                     )}
                   </div>
 
-                  <div ref={orderNumberDropdownRef} className="relative min-w-[220px]">
+                  <div ref={orderNumberDropdownRef} className="relative">
                     <Label className="text-xs text-muted-foreground">N° Orden</Label>
                     <Input
                       placeholder="Número de orden..."
@@ -824,7 +824,7 @@ export default function VentasPage() {
 
                   {/* Filtro de Vendedor - SOLO para usuarios con VIEW_ALL_ORDERS_HISTORY */}
                   {canViewAllOrdersHistoryPermission && (
-                    <div ref={sellerDropdownRef} className="relative min-w-[220px]">
+                    <div ref={sellerDropdownRef} className="relative">
                       <Label className="text-xs text-muted-foreground">Vendedor</Label>
                       <Input
                         placeholder="Nombre del vendedor..."
@@ -871,7 +871,7 @@ export default function VentasPage() {
                     </div>
                   )}
 
-                  <div className="min-w-[180px]">
+                  <div className="relative">
                     <Label className="text-xs text-muted-foreground">Estado</Label>
                     <Select
                       value={selectedStatus}
@@ -894,21 +894,23 @@ export default function VentasPage() {
                     </Select>
                   </div>
 
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground h-10 whitespace-nowrap min-w-[120px]">
-                    <Checkbox
-                      id="current-cash-orders"
-                      checked={onlyCurrentCash}
-                      onCheckedChange={(checked) => {
-                        setOnlyCurrentCash(Boolean(checked));
-                        setCurrentPage(1);
-                      }}
-                    />
-                    <label
-                      htmlFor="current-cash-orders"
-                      className="cursor-pointer select-none"
-                    >
-                      Caja actual
-                    </label>
+                  <div className="flex items-end">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Checkbox
+                        id="current-cash-orders"
+                        checked={onlyCurrentCash}
+                        onCheckedChange={(checked) => {
+                          setOnlyCurrentCash(Boolean(checked));
+                          setCurrentPage(1);
+                        }}
+                      />
+                      <label
+                        htmlFor="current-cash-orders"
+                        className="cursor-pointer select-none"
+                      >
+                        Caja actual
+                      </label>
+                    </div>
                   </div>
                 </div>
 
@@ -935,19 +937,21 @@ export default function VentasPage() {
                 <div className="overflow-x-auto">
                   <Table className="w-full">
                     <TableHeader className="bg-muted/50">
-                      <TableRow>
-                        <TableHead className="w-[90px] px-2 text-center">Fecha</TableHead>
-                        <TableHead className="min-w-[120px] px-2 text-center">{hasNamedServices ? 'Nombre' : 'Cliente'}</TableHead>
+                      <TableRow className="h-8">
+                        <TableHead className="w-[25%] text-xs font-medium px-2">Fecha</TableHead>
+                        <TableHead className="w-[50%] text-xs font-medium px-2 text-center">Venta</TableHead>
+                        <TableHead className="w-[25%] text-xs font-medium px-2 text-right">Total</TableHead>
+                        {/* Hidden columns for desktop */}
+                        <TableHead className="hidden md:table-cell min-w-[120px] px-2">{hasNamedServices ? 'Nombre' : 'Cliente'}</TableHead>
                         {isAdmin && (
-                          <TableHead className="w-[110px] px-2 text-center">Vendedor</TableHead>
+                          <TableHead className="hidden md:table-cell w-[110px] px-2">Vendedor</TableHead>
                         )}
                         {hasProductsFeature && (
-                          <TableHead className="w-[100px] px-2 text-center hidden md:table-cell">Productos</TableHead>
+                          <TableHead className="hidden md:table-cell w-[100px] px-2">Productos</TableHead>
                         )}
-                        <TableHead className="w-[100px] px-2 text-center hidden md:table-cell">Servicios</TableHead>
-                        <TableHead className="w-[110px] px-2 text-center">Estado</TableHead>
-                        <TableHead className="min-w-[160px] px-2 text-center hidden md:table-cell">Método</TableHead>
-                        <TableHead className="w-[100px] px-2 text-right">Total</TableHead>
+                        <TableHead className="hidden md:table-cell w-[100px] px-2">Servicios</TableHead>
+                        <TableHead className="hidden md:table-cell w-[110px] px-2">Estado</TableHead>
+                        <TableHead className="hidden md:table-cell min-w-[160px] px-2">Método</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1052,14 +1056,57 @@ export default function VentasPage() {
                                 if (order.id) handleViewOrder(order.id);
                               }}
                             >
-                              <TableCell className="px-2 py-3 text-center">
+                              <TableCell className="px-2 py-1">
                                 <div className="flex flex-col items-center">
-                                  <span className="text-xs sm:text-sm font-medium">{shortDate}</span>
+                                  <span className="text-xs font-medium">{shortDate}</span>
                                   <span className="text-xs text-muted-foreground">{shortTime}</span>
                                 </div>
                               </TableCell>
 
-                              <TableCell className="px-2 py-3 text-center">
+                              <TableCell className="px-2 py-1 text-center">
+                                <div className="flex flex-col items-center">
+                                  <span className="text-xs font-medium text-center">
+                                    {productCount > 0 && serviceCount > 0 ? (
+                                      <span className="text-xs">Venta mixta</span>
+                                    ) : productCount > 0 ? (
+                                      <span className="text-xs">Producto{serviceCount > 0 ? ' + Servicio' : ''}</span>
+                                    ) : serviceCount > 0 ? (
+                                      <span className="text-xs">Servicio</span>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">Sin items</span>
+                                    )}
+                                  </span>
+                                  <div className="flex gap-1 mt-1 justify-center">
+                                    {productCount > 0 && (
+                                      <Badge variant="outline" className="text-xs py-0 px-1">
+                                        {productCount} prod.
+                                      </Badge>
+                                    )}
+                                    {serviceCount > 0 && (
+                                      <Badge variant="outline" className="text-xs py-0 px-1">
+                                        {serviceCount} serv.
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </TableCell>
+
+                              <TableCell className="px-2 py-1 text-right">
+                                <div className="flex flex-col items-end">
+                                  <span
+                                    className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium mb-1 ${status.className}`}
+                                  >
+                                    <span className="mr-0.5 text-xs">{status.icon}</span>
+                                    <span className="text-xs">{status.text}</span>
+                                  </span>
+                                  <span className="text-xs font-medium whitespace-nowrap">
+                                    {formatCurrency(displayTotal)}
+                                  </span>
+                                </div>
+                              </TableCell>
+
+                              {/* Hidden desktop columns */}
+                              <TableCell className="hidden md:table-cell px-2 py-3 text-center">
                                 <div className="flex flex-col items-center min-w-0">
                                   <span className="text-sm font-medium truncate max-w-[140px] sm:max-w-[200px]">
                                     {displayName}
@@ -1073,7 +1120,7 @@ export default function VentasPage() {
                               </TableCell>
 
                               {isAdmin && (
-                                <TableCell className="px-2 py-3 text-center">
+                                <TableCell className="hidden md:table-cell px-2 py-3 text-center">
                                   <span className="text-sm font-medium truncate max-w-[140px] sm:max-w-[200px]">
                                     {order.sellerName || "Sistema"}
                                   </span>
@@ -1081,7 +1128,7 @@ export default function VentasPage() {
                               )}
 
                               {hasProductsFeature && (
-                                <TableCell className="px-2 py-3 text-center hidden md:table-cell">
+                                <TableCell className="hidden md:table-cell px-2 py-3 text-center">
                                   {productCount > 0 ? (
                                     <Badge variant="outline" className="text-xs py-0.5">
                                       {productCount} {productCount === 1 ? "prod." : "prod."}
@@ -1092,7 +1139,7 @@ export default function VentasPage() {
                                 </TableCell>
                               )}
 
-                              <TableCell className="px-2 py-3 text-center hidden md:table-cell">
+                              <TableCell className="hidden md:table-cell px-2 py-3 text-center">
                                 {serviceCount > 0 ? (
                                   <Badge variant="outline" className="text-xs py-0.5">
                                     {serviceCount} {serviceCount === 1 ? "serv." : "serv."}
@@ -1102,7 +1149,7 @@ export default function VentasPage() {
                                 )}
                               </TableCell>
 
-                              <TableCell className="px-2 py-3">
+                              <TableCell className="hidden md:table-cell px-2 py-3">
                                 <div className="flex justify-center">
                                   <span
                                     className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-medium ${status.className}`}
@@ -1113,7 +1160,7 @@ export default function VentasPage() {
                                 </div>
                               </TableCell>
 
-                              <TableCell className="px-2 py-3 text-center hidden md:table-cell">
+                              <TableCell className="hidden md:table-cell px-2 py-3 text-center">
                                 {shouldShowPaymentMethods ? (
                                   <div className="flex flex-col items-center gap-0.5">
                                     {statusKey === "PAID" ? (
@@ -1140,12 +1187,6 @@ export default function VentasPage() {
                                 ) : (
                                   <span className="text-muted-foreground text-sm">-</span>
                                 )}
-                              </TableCell>
-
-                              <TableCell className="px-2 py-3 text-right">
-                                <span className="text-sm font-medium whitespace-nowrap">
-                                  {formatCurrency(displayTotal)}
-                                </span>
                               </TableCell>
                             </TableRow>
                           );
@@ -1177,28 +1218,30 @@ export default function VentasPage() {
               </div>
 
               {totalPages > 1 && (
-                <div className="flex items-center justify-end space-x-2 py-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handlePageChange(currentPage - 1)}
-                    disabled={currentPage === 1 || loading}
-                  >
-                    Anterior
-                  </Button>
-                  <div className="text-sm font-medium">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-2 py-4">
+                  <div className="text-xs text-muted-foreground order-2 sm:order-1">
                     Página {currentPage} de {totalPages}
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handlePageChange(currentPage + 1)}
-                    disabled={currentPage === totalPages || loading}
-                  >
-                    Siguiente
-                  </Button>
+                  <div className="flex items-center gap-2 order-1 sm:order-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage === 1 || loading}
+                    >
+                      Anterior
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage === totalPages || loading}
+                    >
+                      Siguiente
+                    </Button>
+                  </div>
                 </div>
               )}
             </>

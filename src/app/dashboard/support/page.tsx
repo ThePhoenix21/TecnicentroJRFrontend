@@ -350,23 +350,17 @@ export default function SupportPage() {
               <Table>
                 <TableHeader className="bg-muted/50">
                   <TableRow>
-                    <TableHead>Asunto</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead>Prioridad</TableHead>
+                    <TableHead className="min-w-[150px] text-xs">Asunto</TableHead>
+                    <TableHead className="min-w-[100px] text-xs">Estado</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredTickets.map((t) => (
-                    <TableRow key={t.id} className="cursor-pointer" onClick={() => openDetail(t.id)}>
-                      <TableCell className="font-medium">{t.subject}</TableCell>
-                      <TableCell>
-                        <span className={`text-xs px-2 py-1 rounded-full ${getStatusClasses(t.status)}`}>
+                    <TableRow key={t.id} className="cursor-pointer h-10" onClick={() => openDetail(t.id)}>
+                      <TableCell className="font-medium text-xs px-3">{t.subject}</TableCell>
+                      <TableCell className="px-3">
+                        <span className={`text-[10px] px-2 py-1 rounded-full ${getStatusClasses(t.status)}`}>
                           {statusLabel[t.status]}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <span className={`text-xs px-2 py-1 rounded-full ${getPriorityClasses(t.priority)}`}>
-                          {priorityLabel[t.priority]}
                         </span>
                       </TableCell>
                     </TableRow>
@@ -441,19 +435,11 @@ export default function SupportPage() {
                     <p className="text-sm">{detail.subject}</p>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2 rounded-lg border bg-background p-4">
-                      <h3 className="text-sm font-semibold">Estado</h3>
-                      <span className={`inline-flex text-xs px-2 py-1 rounded-full ${getStatusClasses(detail.status)}`}>
-                        {statusLabel[detail.status]}
-                      </span>
-                    </div>
-                    <div className="space-y-2 rounded-lg border bg-background p-4">
-                      <h3 className="text-sm font-semibold">Prioridad</h3>
-                      <span className={`inline-flex text-xs px-2 py-1 rounded-full ${getPriorityClasses(detail.priority)}`}>
-                        {priorityLabel[detail.priority]}
-                      </span>
-                    </div>
+                  <div className="space-y-2 rounded-lg border bg-background p-4">
+                    <h3 className="text-sm font-semibold">Estado</h3>
+                    <span className={`inline-flex text-xs px-2 py-1 rounded-full ${getStatusClasses(detail.status)}`}>
+                      {statusLabel[detail.status]}
+                    </span>
                   </div>
 
                   <div className="space-y-2 rounded-lg border bg-background p-4">

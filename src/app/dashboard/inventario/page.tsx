@@ -68,19 +68,24 @@ export default function InventoryDashboard() {
   return (
     <div className="space-y-6 p-4 sm:p-6">
       <div className="space-y-1">
-        <p className="text-sm text-muted-foreground uppercase tracking-wide">Inventario</p>
-        <h1 className="text-3xl font-bold tracking-tight">Gestión de Inventario</h1>
-        <p className="text-muted-foreground">
+        <p className="text-xs sm:text-sm text-muted-foreground uppercase tracking-wide">Inventario</p>
+        <h1 className="text-xl sm:text-3xl font-bold tracking-tight">Gestión de Inventario</h1>
+        <p className="text-sm sm:text-base text-muted-foreground">
           Administra y monitorea los movimientos, conteos y reportes de stock.
         </p>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="w-full justify-start overflow-x-auto">
+        <TabsList className="w-full justify-start overflow-x-auto h-auto p-1 bg-muted/50">
           {availableTabs.map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value} disabled={tab.disabled} className="flex items-center gap-2">
-              <tab.icon className="h-4 w-4" />
-              <span>{tab.label}</span>
+            <TabsTrigger
+              key={tab.value}
+              value={tab.value}
+              disabled={tab.disabled}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium flex-shrink-0 data-[state=active]:bg-background data-[state=active]:shadow-sm"
+            >
+              <tab.icon className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{tab.label}</span>
             </TabsTrigger>
           ))}
         </TabsList>

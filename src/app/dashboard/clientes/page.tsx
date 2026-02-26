@@ -440,125 +440,51 @@ function ClientesContent() {
                   {totalPages > 1 && ` · página ${page} de ${totalPages}`}
                 </span>
               </div>
-              {/* Vista de tabla para pantallas medianas y grandes */}
-              <div className="hidden md:block">
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Nombre</TableHead>
-                        <TableHead>Contacto</TableHead>
-                        <TableHead>Documento</TableHead>
-                        <TableHead>Historial</TableHead>
-                        <TableHead>Registro</TableHead>
+              {/* Vista de tabla para todas las pantallas con columnas ocultas en móviles */}
+              <div className="rounded-md border overflow-hidden">
+                <Table className="[&_td]:py-2 [&_th]:py-2">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="min-w-[140px] text-xs">Nombre</TableHead>
+                      <TableHead className="hidden sm:table-cell text-xs">Contacto</TableHead>
+                      <TableHead className="min-w-[110px] text-xs">Documento</TableHead>
+                      {/* Hide Historial and Registro in mobile */}
+                      <TableHead className="hidden md:table-cell text-xs">Historial</TableHead>
+                      <TableHead className="hidden lg:table-cell text-xs">Registro</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {clients.map((client) => (
+                      <TableRow
+                        key={client.id}
+                        className={`h-12 ${canManageClients ? 'hover:bg-accent/50 cursor-pointer' : undefined}`}
+                        onClick={canManageClients ? () => openDetails(client.id) : undefined}
+                      >
+                        <TableCell className="font-medium text-[11px] px-3">{client.name}</TableCell>
+                        <TableCell className="hidden sm:table-cell px-3">
+                          <div className="space-y-0.5">
+                            {client.email && <div className="text-[11px]">{client.email}</div>}
+                            {client.phone && <div className="text-[11px] text-muted-foreground">{client.phone}</div>}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-[11px] px-3">
+                          {client.dni && <div className="text-[11px]">DNI: {client.dni}</div>}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell px-3">
+                          <div className="space-y-0.5 text-xs">
+                            <div>Ventas: <span className="font-semibold">{client.salesCount ?? 0}</span></div>
+                            <div className="text-destructive">
+                              Anuladas: <span className="font-semibold">{client.cancelledCount ?? 0}</span>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell whitespace-nowrap px-3 text-xs">
+                          {client.createdAt ? format(new Date(client.createdAt), 'dd/MM/yy') : 'N/A'}
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {clients.map((client) => (
-                        <TableRow
-                          key={client.id}
-                          className={canManageClients ? 'hover:bg-accent/50 cursor-pointer' : undefined}
-                          onClick={canManageClients ? () => openDetails(client.id) : undefined}
-                        >
-                          <TableCell className="font-medium">{client.name}</TableCell>
-                          <TableCell>
-                            <div className="space-y-1">
-                              {client.email && <div className="text-sm">{client.email}</div>}
-                              {client.phone && <div className="text-sm text-muted-foreground">{client.phone}</div>}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {client.dni && <div className="text-sm">DNI: {client.dni}</div>}
-                          </TableCell>
-                          <TableCell>
-                            <div className="space-y-0.5 text-sm">
-                              <div>Ventas: <span className="font-semibold">{client.salesCount ?? 0}</span></div>
-                              <div className="text-destructive">
-                                Anuladas: <span className="font-semibold">{client.cancelledCount ?? 0}</span>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap">
-                            {client.createdAt ? format(new Date(client.createdAt), 'dd/MM/yy') : 'N/A'}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-
-              {/* Vista de tarjetas para móviles */}
-              <div className="md:hidden space-y-3">
-                {clients.map((client) => (
-                  <Card 
-                    key={client.id} 
-                    className={canManageClients ? 'overflow-hidden hover:shadow-md transition-shadow cursor-pointer' : 'overflow-hidden'}
-                    onClick={canManageClients ? () => openDetails(client.id) : undefined}
-                  >
-                    <div className="p-4">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="text-sm font-medium">{client.name}</div>
-                          <div className="mt-1 text-xs text-muted-foreground space-y-1">
-                            {client.email && <div>{client.email}</div>}
-                            {client.phone && <div>{client.phone}</div>}
-                            {client.dni && <div>DNI: {client.dni}</div>}
-                          </div>
-                        </div>
-                        <div className="text-right text-xs space-y-0.5">
-                          <div>
-                            Ventas: <span className="font-semibold">{client.salesCount ?? 0}</span>
-                          </div>
-                          <div className="text-destructive">
-                            Anuladas: <span className="font-semibold">{client.cancelledCount ?? 0}</span>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {(client.email || client.phone) && (
-                        <div className="mt-3 space-y-1 text-sm">
-                          {client.email && (
-                            <div className="flex items-center">
-                              <span className="text-muted-foreground w-16">Email:</span>
-                              <a 
-                                href={`mailto:${client.email}`} 
-                                className="text-primary hover:underline"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {client.email}
-                              </a>
-                            </div>
-                          )}
-                          {client.phone && (
-                            <div className="flex items-center">
-                              <span className="text-muted-foreground w-16">Tel:</span>
-                              <a 
-                                href={`tel:${client.phone}`}
-                                className="text-primary hover:underline"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {client.phone}
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      
-                      <div className="mt-3 pt-3 border-t flex flex-col gap-1 text-sm">
-                        <span className="text-muted-foreground">
-                          Registro: {client.createdAt ? format(new Date(client.createdAt), 'dd/MM/yy') : 'N/A'}
-                        </span>
-                        <div className="flex justify-between text-xs">
-                          <span>Ventas: <span className="font-semibold">{client.salesCount ?? 0}</span></span>
-                          <span className="text-destructive">
-                            Anuladas: <span className="font-semibold">{client.cancelledCount ?? 0}</span>
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
 
               {totalPages > 1 && (

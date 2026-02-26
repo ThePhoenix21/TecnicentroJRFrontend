@@ -78,30 +78,32 @@ export function UserDialog({
           {children}
         </DialogTrigger>
       )}
-      <DialogContent className="sm:max-w-[600px]">
-        <DialogHeader>
-          <DialogTitle>{user ? 'Editar Usuario' : 'Nuevo Usuario'}</DialogTitle>
-          <DialogDescription>
-            {user
-              ? 'Actualiza la información del usuario.'
-              : 'Completa el formulario para crear un nuevo usuario.'}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="py-4">
-          {user ? (
-            // Modo edición: usar el nuevo formulario
-            <UserEditForm
-              user={user}
-              stores={stores}
-              onSuccess={handleFormSuccess}
-            />
-          ) : (
-            // Modo creación: usar el mismo UserForm pero con initialData undefined
-            <UserForm
-              initialData={undefined}
-              onSuccess={handleFormSuccess}
-            />
-          )}
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] p-0 overflow-hidden">
+        <div className="flex flex-col max-h-[90vh]">
+          <DialogHeader className="p-4 sm:p-6 pb-2 sm:pb-2 flex-shrink-0">
+            <DialogTitle className="text-lg sm:text-xl">{user ? 'Editar Usuario' : 'Nuevo Usuario'}</DialogTitle>
+            <DialogDescription className="text-sm">
+              {user
+                ? 'Actualiza la información del usuario.'
+                : 'Completa el formulario para crear un nuevo usuario.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-4 sm:pb-6">
+            {user ? (
+              // Modo edición: usar el nuevo formulario
+              <UserEditForm
+                user={user}
+                stores={stores}
+                onSuccess={handleFormSuccess}
+              />
+            ) : (
+              // Modo creación: usar el mismo UserForm pero con initialData undefined
+              <UserForm
+                initialData={undefined}
+                onSuccess={handleFormSuccess}
+              />
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

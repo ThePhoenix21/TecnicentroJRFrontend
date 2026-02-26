@@ -315,56 +315,61 @@ export function ActiveSessionView({
   });
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-bold">{session.name}</h2>
-          <div className="flex items-center gap-2 text-muted-foreground mt-1">
-            <Badge variant={isOpen ? 'default' : 'secondary'}>
-              {isOpen ? 'En Progreso' : 'Cerrada'}
-            </Badge>
-            <span className="text-sm">
+    <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
+      {/* Header con información distribuida */}
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+          <div className="flex-1">
+            <h2 className="text-lg sm:text-xl font-bold text-foreground">{session.name}</h2>
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+              <Badge variant={isOpen ? 'default' : 'secondary'} className="text-xs">
+                {isOpen ? 'En Progreso' : 'Cerrada'}
+              </Badge>
+              <span className="text-xs sm:text-sm text-muted-foreground">
                 Creada el {new Date(session.createdAt).toLocaleDateString()}
-            </span>
+              </span>
+            </div>
           </div>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={loadData} disabled={isLoading}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-            Actualizar
-          </Button>
-          <Button variant="outline" onClick={onBack}>Volver</Button>
-          {isOpen && canManage && (
-            <Button onClick={handleCloseSession} disabled={isClosing || isReconciling}>
-              {isClosing || isReconciling ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
-              Finalizar Inventario
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={loadData} disabled={isLoading} className="text-xs">
+              <RefreshCw className={`mr-1 h-3 w-3 ${isLoading ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Actualizar</span>
             </Button>
-          )}
+            <Button variant="outline" size="sm" onClick={onBack} className="text-xs">Volver</Button>
+            {isOpen && canManage && (
+              <Button size="sm" onClick={handleCloseSession} disabled={isClosing || isReconciling} className="text-xs">
+                {isClosing || isReconciling ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckCircle className="mr-1 h-3 w-3" />}
+                <span className="hidden sm:inline">Finalizar</span>
+                <span className="sm:hidden">Finalizar</span>
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <CardTitle>Conteo de Productos</CardTitle>
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-6">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <Card className="w-[70vw] mx-auto">
+        <CardHeader className="pb-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <CardTitle className="text-base sm:text-lg">Conteo de Productos</CardTitle>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+              <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
                 <Checkbox
                   id="hide-zero-stock"
                   checked={hideZeroStock}
                   onCheckedChange={(checked) => {
                     setHideZeroStock(checked === true);
                   }}
+                  className="h-3 w-3 sm:h-4 sm:w-4"
                 />
-                <label htmlFor="hide-zero-stock">Ocultar productos sin stock</label>
+                <label htmlFor="hide-zero-stock" className="text-xs sm:text-sm">Ocultar productos sin stock</label>
               </div>
-              <div className="relative w-72">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-2 top-2 h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
                 <Input 
                     placeholder="Buscar producto..." 
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-8"
+                    className="pl-7 sm:pl-8 text-sm"
                 />
               </div>
             </div>
@@ -372,19 +377,19 @@ export function ActiveSessionView({
         </CardHeader>
         <CardContent>
             {isLoading ? (
-                <div className="flex justify-center p-8">
-                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <div className="flex justify-center py-6 sm:py-8">
+                    <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-muted-foreground" />
                 </div>
             ) : (
-                <div className="rounded-md border">
+                <div className="rounded-md border overflow-x-auto">
                     <Table>
                         <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[40%]">Producto</TableHead>
-                                <TableHead className="text-center">Stock Teórico</TableHead>
-                                <TableHead className="text-center w-[150px]">Stock Físico</TableHead>
-                                <TableHead className="text-center">Diferencia</TableHead>
-                                <TableHead className="text-right">Estado</TableHead>
+                            <TableRow className="h-8 sm:h-10">
+                                <TableHead className="text-xs sm:text-sm font-medium">Producto</TableHead>
+                                <TableHead className="text-center text-xs sm:text-sm font-medium">Stock Teórico</TableHead>
+                                <TableHead className="text-center text-xs sm:text-sm font-medium">Stock Físico</TableHead>
+                                <TableHead className="text-center text-xs sm:text-sm font-medium">Diferencia</TableHead>
+                                <TableHead className="text-right text-xs sm:text-sm font-medium">Estado</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -413,33 +418,21 @@ export function ActiveSessionView({
                                       : "bg-yellow-500/32 hover:bg-yellow-500/32";
 
                                 return (
-                                    <TableRow key={product.id} className={rowClass}>
-                                        <TableCell className="font-medium">
+                                    <TableRow key={product.id} className={`${rowClass} h-10 sm:h-12`}>
+                                        <TableCell className="text-sm sm:text-base font-medium py-2 px-2 sm:px-4">
                                             {product.name}
                                         </TableCell>
-                                        <TableCell className="text-center text-muted-foreground">
+                                        <TableCell className="text-center text-muted-foreground py-2 px-1 sm:px-2 text-sm sm:text-base">
                                             {product.stock}
                                         </TableCell>
-                                        <TableCell className="text-center">
-                                            {hasValidInput && countItem ? (
-                                                <span className={`font-bold ${
-                                                    difference === 0 ? "text-green-600" :
-                                                    difference < 0 ? "text-red-600" : "text-yellow-600"
-                                                }`}>
-                                                    {difference > 0 ? '+' : ''}{difference}
-                                                </span>
-                                            ) : (
-                                                <span className="text-muted-foreground">-</span>
-                                            )}
-                                        </TableCell>
-                                        <TableCell className="text-center">
+                                        <TableCell className="text-center py-2 px-1 sm:px-2">
                                             <div className="relative flex items-center justify-center">
                                               <Input
                                                 type="number"
                                                 min="0"
                                                 placeholder="-"
                                                 className={cn(
-                                                  "text-center font-bold",
+                                                  "text-center font-bold text-sm sm:text-base h-8 sm:h-10",
                                                   (!hasValidInput && canManage) && "border-destructive ring-1 ring-destructive",
                                                   countItem && canManage && "border-primary",
                                                   (!canManage || !isOpen) && "bg-muted text-muted-foreground cursor-not-allowed"
@@ -456,19 +449,31 @@ export function ActiveSessionView({
                                                 disabled={!canManage || !isOpen}
                                               />
                                               {isSaving && canManage && (
-                                                <Loader2 className="absolute right-2 h-3 w-3 animate-spin text-primary" />
+                                                <Loader2 className="absolute right-1 sm:right-2 h-2.5 w-2.5 sm:h-3 sm:w-3 animate-spin text-primary" />
                                               )}
                                             </div>
                                         </TableCell>
-                                        <TableCell className="text-right">
+                                        <TableCell className="text-center py-2 px-1 sm:px-2">
+                                            {hasValidInput && countItem ? (
+                                                <span className={`font-bold text-sm sm:text-base ${
+                                                    difference === 0 ? "text-green-600" :
+                                                    difference < 0 ? "text-red-600" : "text-yellow-600"
+                                                }`}>
+                                                    {difference > 0 ? '+' : ''}{difference}
+                                                </span>
+                                            ) : (
+                                                <span className="text-muted-foreground text-sm">-</span>
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="text-right py-2 px-2 sm:px-4">
                                             {hasValidInput && countItem ? (
                                                 difference === 0 ? (
-                                                    <Badge variant="outline" className="text-green-600 border-green-200">Correcto</Badge>
+                                                    <Badge variant="outline" className="text-green-600 border-green-200 text-xs">Correcto</Badge>
                                                 ) : (
-                                                    <Badge variant="outline" className="text-red-600 border-red-200">Descuadre</Badge>
+                                                    <Badge variant="outline" className="text-red-600 border-red-200 text-xs">Descuadre</Badge>
                                                 )
                                             ) : (
-                                                <Badge variant="outline" className="text-muted-foreground">Pendiente</Badge>
+                                                <Badge variant="outline" className="text-muted-foreground text-xs">Pendiente</Badge>
                                             )}
                                         </TableCell>
                                     </TableRow>

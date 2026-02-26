@@ -673,12 +673,13 @@ export default function ProveedoresPage() {
               <Table>
                 <TableHeader className="bg-muted/50">
                   <TableRow>
-                    <TableHead>Nombre</TableHead>
-                    <TableHead>RUC</TableHead>
-                    <TableHead>Dirección</TableHead>
-                    <TableHead className="text-center">Órdenes totales</TableHead>
-                    <TableHead className="text-center">Órdenes anuladas</TableHead>
-                    <TableHead>Creación</TableHead>
+                    <TableHead className="min-w-[150px]">Nombre</TableHead>
+                    <TableHead className="min-w-[120px]">RUC</TableHead>
+                    {/* Hide Dirección, Órdenes totales, Órdenes anuladas, Creación in mobile */}
+                    <TableHead className="hidden sm:table-cell min-w-[200px]">Dirección</TableHead>
+                    <TableHead className="hidden md:table-cell min-w-[120px] text-center">Órdenes totales</TableHead>
+                    <TableHead className="hidden lg:table-cell min-w-[120px] text-center">Órdenes anuladas</TableHead>
+                    <TableHead className="hidden xl:table-cell min-w-[140px]">Creación</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -690,10 +691,10 @@ export default function ProveedoresPage() {
                     >
                       <TableCell className="font-medium">{p.name}</TableCell>
                       <TableCell>{p.ruc}</TableCell>
-                      <TableCell>{p.address}</TableCell>
-                      <TableCell className="text-center">{p.activeOrdersCount ?? 0}</TableCell>
-                      <TableCell className="text-center">{p.annulledOrdersCount ?? 0}</TableCell>
-                      <TableCell>{p.createdAt ? new Date(p.createdAt).toLocaleString() : "-"}</TableCell>
+                      <TableCell className="hidden sm:table-cell">{p.address}</TableCell>
+                      <TableCell className="hidden md:table-cell text-center">{p.activeOrdersCount ?? 0}</TableCell>
+                      <TableCell className="hidden lg:table-cell text-center">{p.annulledOrdersCount ?? 0}</TableCell>
+                      <TableCell className="hidden xl:table-cell">{p.createdAt ? new Date(p.createdAt).toLocaleString() : "-"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

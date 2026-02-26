@@ -234,11 +234,11 @@ export default function InventoryReportsPage() {
   const totals = summary?.totals || { incoming: 0, outgoing: 0, sales: 0, adjustmentsNet: 0 };
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Reportes de Inventario</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-xl sm:text-3xl font-bold tracking-tight">Reportes de Inventario</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             Resumen del periodo: {summary?.period ? (
                 `${new Date(summary.period.from).toLocaleDateString()} - ${new Date(summary.period.to).toLocaleDateString()}`
             ) : 'Mes en curso'}
@@ -346,10 +346,10 @@ export default function InventoryReportsPage() {
       <Card className="col-span-4">
         <CardHeader>
           <div className="flex items-center gap-2">
-            <List className="h-5 w-5 text-blue-500" />
-            <CardTitle>Listado de Productos</CardTitle>
+            <List className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500" />
+            <CardTitle className="text-lg sm:text-xl">Listado de Productos</CardTitle>
           </div>
-          <CardDescription>
+          <CardDescription className="text-xs sm:text-sm">
             Todos los productos de la tienda con su stock actual.
           </CardDescription>
         </CardHeader>
@@ -420,37 +420,37 @@ export default function InventoryReportsPage() {
           </div>
 
           {isLoadingProducts ? (
-            <div className="text-center py-8 text-muted-foreground flex flex-col items-center">
-              <RefreshCw className="h-10 w-10 mb-2 animate-spin" />
-              <p>Cargando productos...</p>
+            <div className="text-center py-6 sm:py-8 text-muted-foreground flex flex-col items-center">
+              <RefreshCw className="h-8 w-8 sm:h-10 sm:w-10 mb-2 animate-spin" />
+              <p className="text-sm sm:text-base">Cargando productos...</p>
             </div>
           ) : storeProducts.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground flex flex-col items-center">
-              <Package className="h-10 w-10 mb-2 opacity-20" />
-              <p>No hay productos en la tienda.</p>
+            <div className="text-center py-6 sm:py-8 text-muted-foreground flex flex-col items-center">
+              <Package className="h-8 w-8 sm:h-10 sm:w-10 mb-2 opacity-20" />
+              <p className="text-sm sm:text-base">No hay productos en la tienda.</p>
             </div>
           ) : (
             <>
-              <div className="space-y-2">
+              <div className="space-y-1 sm:space-y-2">
                 {filteredProducts.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground flex flex-col items-center">
-                    <Package className="h-10 w-10 mb-2 opacity-20" />
-                    <p>No se encontraron productos con los filtros aplicados.</p>
+                  <div className="text-center py-6 sm:py-8 text-muted-foreground flex flex-col items-center">
+                    <Package className="h-8 w-8 sm:h-10 sm:w-10 mb-2 opacity-20" />
+                    <p className="text-sm sm:text-base">No se encontraron productos con los filtros aplicados.</p>
                   </div>
                 ) : (
                   filteredProducts.map((product) => (
-                  <div key={product.id} className="flex items-center justify-between border-b pb-3 last:border-0 last:pb-0">
+                  <div key={product.id} className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0">
                     <div className="flex-1">
-                      <p className="font-medium leading-none">{product.product?.name || 'Sin nombre'}</p>
+                      <p className="text-sm sm:text-base font-medium leading-none">{product.product?.name || 'Sin nombre'}</p>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 sm:gap-4">
                       <div className="text-right">
-                        <span className={`text-2xl font-bold ${product.stock === 0 ? 'text-red-600' : product.stock < 10 ? 'text-yellow-600' : 'text-green-600'}`}>
+                        <span className={`text-lg sm:text-2xl font-bold ${product.stock === 0 ? 'text-red-600' : product.stock < 10 ? 'text-yellow-600' : 'text-green-600'}`}>
                           {product.stock || 0}
                         </span>
                         <p className="text-xs text-muted-foreground">Stock Actual</p>
                       </div>
-                      <Badge variant={product.stock === 0 ? "destructive" : product.stock < 10 ? "secondary" : "default"}>
+                      <Badge variant={product.stock === 0 ? "destructive" : product.stock < 10 ? "secondary" : "default"} className="text-xs">
                         {product.stock === 0 ? 'SIN STOCK' : product.stock < 10 ? 'BAJO' : 'DISPONIBLE'}
                       </Badge>
                     </div>
@@ -461,24 +461,25 @@ export default function InventoryReportsPage() {
               
               {/* Paginación */}
               {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-6 pt-4 border-t">
-                  <div className="flex items-center justify-between text-sm text-muted-foreground">
+                <div className="flex items-center justify-between mt-4 sm:mt-6 pt-3 sm:pt-4 border-t">
+                  <div className="flex items-center justify-between text-xs sm:text-sm text-muted-foreground">
                     <span>Mostrando {filteredProducts.length} de {allStoreProducts.length} productos</span>
                     {hasActiveFilters && (
                       <span>Filtrados</span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 sm:gap-2">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => loadStoreProducts(currentPage - 1)}
                       disabled={currentPage === 1 || isLoadingProducts}
+                      className="text-xs"
                     >
-                      <ChevronLeft className="h-4 w-4" />
-                      Anterior
+                      <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4" />
+                      <span className="hidden sm:inline">Anterior</span>
                     </Button>
-                    <span className="text-sm text-muted-foreground px-3">
+                    <span className="text-xs sm:text-sm text-muted-foreground px-2 sm:px-3">
                       Página {currentPage} de {totalPages}
                     </span>
                     <Button
@@ -486,9 +487,10 @@ export default function InventoryReportsPage() {
                       size="sm"
                       onClick={() => loadStoreProducts(currentPage + 1)}
                       disabled={currentPage === totalPages || isLoadingProducts}
+                      className="text-xs"
                     >
-                      Siguiente
-                      <ChevronRight className="h-4 w-4" />
+                      <span className="hidden sm:inline">Siguiente</span>
+                      <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4" />
                     </Button>
                   </div>
                 </div>

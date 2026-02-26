@@ -210,7 +210,7 @@ export function MainLayout({ children }: MainLayoutProps) {
       <AppHeader />
       <div className="flex flex-1">
         <AppSidebar />
-        <main key={currentStore?.id || 'no-store'} className="flex-1 p-4 md:p-6 md:ml-64 pb-14 md:pb-6">
+        <main key={currentStore?.id || 'no-store'} className="flex-1 p-4 md:p-6 md:ml-64 pt-20 md:pt-6">
           {children}
         </main>
       </div>

@@ -11,11 +11,19 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Edit, Trash2, Users as UsersIcon, ChevronLeft, ChevronRight, X, Building } from "lucide-react";
+import { Edit, Trash2, Users as UsersIcon, ChevronLeft, ChevronRight, X, Building, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
 import { UserDialog } from "./user-dialog";
 import { userService, type User } from "@/services/user.service";
 import { usePermissions } from "@/hooks/usePermissions";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 /**
  * SISTEMA DE GESTIÓN DE USUARIOS CON SOFT DELETE
@@ -53,6 +61,7 @@ export function UserTable({
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [showDeletedUsers, setShowDeletedUsers] = useState(false); // Por defecto ocultar eliminados
+  const [recoveryModalOpen, setRecoveryModalOpen] = useState(false);
   const itemsPerPage = 10;
 
   const handleEditClick = (user: User) => {
@@ -343,7 +352,7 @@ export function UserTable({
               <TableHead className="hidden xl:table-cell">Teléfono</TableHead>
               <TableHead className="hidden xl:table-cell">Creado</TableHead>
               <TableHead className="hidden xl:table-cell">Actualizado</TableHead>
-              <TableHead className="w-[100px] text-right">Acciones</TableHead>
+              <TableHead className="w-[100px] text-center">Acciones</TableHead>
             </TableRow>
           </TableHeader>
         <TableBody>
@@ -411,8 +420,8 @@ export function UserTable({
                 </div>
               </TableCell>
               <TableCell>
-                <div className="flex justify-end space-x-1">
-                  {canManageUsers() && (
+                <div className={user.status === 'DELETED' ? "flex justify-center" : "flex justify-end space-x-1"}>
+                  {canManageUsers() && user.status !== 'DELETED' && (
                     <Button 
                       variant="ghost" 
                       size="icon" 
@@ -424,7 +433,7 @@ export function UserTable({
                     </Button>
                   )}
 
-                  {canDeleteUsers() && (
+                  {canDeleteUsers() && user.status !== 'DELETED' && (
                     <Button
                       variant="ghost"
                       size="icon"
@@ -433,6 +442,18 @@ export function UserTable({
                       title="Desactivar usuario"
                     >
                       <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+
+                  {user.status === 'DELETED' && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setRecoveryModalOpen(true)}
+                      className="h-8 w-8 text-muted-foreground hover:text-muted-foreground/80"
+                      title="Información sobre usuario eliminado"
+                    >
+                      <HelpCircle className="h-4 w-4" />
                     </Button>
                   )}
                 </div>
@@ -534,6 +555,20 @@ export function UserTable({
         user={editingUser || undefined}
         onSuccess={handleSuccess}
       />
+
+      <Dialog open={recoveryModalOpen} onOpenChange={setRecoveryModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Usuario Eliminado</DialogTitle>
+            <DialogDescription>
+              Este usuario ha sido eliminado del sistema. Si necesita recuperarlo, por favor contacte al soporte técnico para asistencia.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setRecoveryModalOpen(false)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

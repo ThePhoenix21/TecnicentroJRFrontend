@@ -304,8 +304,96 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
       </CardHeader>
       <CardContent className="overflow-visible">
         <div className="mb-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 flex-1">
+          <div className="space-y-4">
+            {/* Usuario - Full width */}
+            <div className="w-full" ref={userFilterRef}>
+              <label className="text-sm text-muted-foreground">Usuario</label>
+              <div className="relative mt-1">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  value={userQuery}
+                  onChange={(e) => {
+                    setUserQuery(e.target.value);
+                    setShowUserSuggestions(true);
+                    if (!e.target.value) {
+                      setUserId("");
+                    }
+                  }}
+                  onFocus={() => setShowUserSuggestions(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      setUserNameFilter(userQuery);
+                      setShowUserSuggestions(false);
+                      setPage(1);
+                      loadMovements(1);
+                    }
+                    if (e.key === "Escape") {
+                      e.stopPropagation();
+                      setShowUserSuggestions(false);
+                      (e.currentTarget as HTMLInputElement).blur();
+                    }
+                  }}
+                  placeholder="Buscar usuario..."
+                  className="pl-8"
+                />
+                {userQuery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserQuery("");
+                      setUserId("");
+                      setUserNameFilter("");
+                      setShowUserSuggestions(false);
+                      setPage(1);
+                      loadMovements(1);
+                    }}
+                    className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+
+                {showUserSuggestions && filteredUserSuggestions.length > 0 && (
+                  <div className="absolute z-20 mt-1 w-full rounded-md border bg-background shadow">
+                    <div className="max-h-56 overflow-auto p-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserQuery("");
+                          setUserId("");
+                          setShowUserSuggestions(false);
+                          setPage(1);
+                          loadMovements(1);
+                        }}
+                        className="w-full text-left px-3 py-2 rounded hover:bg-muted"
+                      >
+                        Todos
+                      </button>
+                      {filteredUserSuggestions.map((item) => (
+                        <button
+                          type="button"
+                          key={item.id}
+                          onClick={() => {
+                            setUserQuery(item.name);
+                            setUserId(item.id);
+                            setShowUserSuggestions(false);
+                            setPage(1);
+                            loadMovements(1);
+                          }}
+                          className="w-full text-left px-3 py-2 rounded hover:bg-muted"
+                        >
+                          {item.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Producto and Tipo - Same row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="relative" ref={productFilterRef}>
                 <label className="text-sm text-muted-foreground">Producto</label>
                 <div className="relative mt-1">
@@ -396,118 +484,34 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
                   </Select>
                 </div>
               </div>
+            </div>
 
-              <div ref={userFilterRef}>
-                <label className="text-sm text-muted-foreground">Usuario</label>
-                <div className="relative mt-1">
-                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    value={userQuery}
-                    onChange={(e) => {
-                      setUserQuery(e.target.value);
-                      setShowUserSuggestions(true);
-                      if (!e.target.value) {
-                        setUserId("");
-                      }
-                    }}
-                    onFocus={() => setShowUserSuggestions(true)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        setUserNameFilter(userQuery);
-                        setShowUserSuggestions(false);
-                        setPage(1);
-                        loadMovements(1);
-                      }
-                      if (e.key === "Escape") {
-                        e.stopPropagation();
-                        setShowUserSuggestions(false);
-                        (e.currentTarget as HTMLInputElement).blur();
-                      }
-                    }}
-                    placeholder="Buscar usuario..."
-                    className="pl-8"
-                  />
-                  {userQuery && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUserQuery("");
-                        setUserId("");
-                        setUserNameFilter("");
-                        setShowUserSuggestions(false);
-                        setPage(1);
-                        loadMovements(1);
-                      }}
-                      className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
-
-                  {showUserSuggestions && filteredUserSuggestions.length > 0 && (
-                    <div className="absolute z-20 mt-1 w-full rounded-md border bg-background shadow">
-                      <div className="max-h-56 overflow-auto p-1">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setUserQuery("");
-                            setUserId("");
-                            setShowUserSuggestions(false);
-                            setPage(1);
-                            loadMovements(1);
-                          }}
-                          className="w-full text-left px-3 py-2 rounded hover:bg-muted"
-                        >
-                          Todos
-                        </button>
-                        {filteredUserSuggestions.map((item) => (
-                          <button
-                            type="button"
-                            key={item.id}
-                            onClick={() => {
-                              setUserQuery(item.name);
-                              setUserId(item.id);
-                              setShowUserSuggestions(false);
-                              setPage(1);
-                              loadMovements(1);
-                            }}
-                            className="w-full text-left px-3 py-2 rounded hover:bg-muted"
-                          >
-                            {item.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-sm text-muted-foreground">Desde</label>
-                  <Input 
-                  className="mt-1" 
-                  type="date" 
-                  value={fromDate} 
+            {/* Desde and Hasta - Same row, half width each */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm text-muted-foreground">Desde</label>
+                <Input
+                  className="mt-1"
+                  type="date"
+                  value={fromDate}
                   onClick={(e) => e.currentTarget.showPicker?.()}
-                  onChange={(e) => setFromDate(e.target.value)} 
-                  />
-                </div>
-                <div>
-                  <label className="text-sm text-muted-foreground">Hasta</label>
-                  <Input 
-                    className="mt-1" 
-                    type="date" 
-                    value={toDate} 
-                    onClick={(e) => e.currentTarget.showPicker?.()} 
-                    onChange={(e) => setToDate(e.target.value)} 
-                  />
-                </div>
+                  onChange={(e) => setFromDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-sm text-muted-foreground">Hasta</label>
+                <Input
+                  className="mt-1"
+                  type="date"
+                  value={toDate}
+                  onClick={(e) => e.currentTarget.showPicker?.()}
+                  onChange={(e) => setToDate(e.target.value)}
+                />
               </div>
             </div>
 
-            <div className="flex gap-2 pt-6">
+            {/* Limpiar button - Full width row below */}
+            <div className="flex justify-start">
               <Button variant="outline" onClick={clearFilters} disabled={isLoading}>
                 Limpiar
               </Button>

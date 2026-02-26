@@ -53,6 +53,17 @@ function getThisMonthRange() {
   return { from: toInputDate(start), to: toInputDate(tomorrow) };
 }
 
+function getThisWeekRange() {
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+  const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const start = new Date(today);
+  start.setDate(today.getDate() - daysToSubtract);
+  return { from: toInputDate(start), to: toInputDate(tomorrow) };
+}
+
 function toNumber(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {
@@ -353,7 +364,7 @@ export default function DashboardPage() {
   const [compareTo, setCompareTo] = useState("");
 
   useEffect(() => {
-    const range = getThisMonthRange();
+    const range = getThisWeekRange();
     setFrom(range.from);
     setTo(range.to);
   }, []);
@@ -797,42 +808,54 @@ export default function DashboardPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="min-w-[120px]">Fecha</TableHead>
-                        <TableHead className="min-w-[80px]">Tipo</TableHead>
-                        <TableHead className="min-w-[150px]">Concepto</TableHead>
-                        <TableHead className="min-w-[120px]">Fuente</TableHead>
-                        <TableHead className="min-w-[100px] text-right">Monto</TableHead>
+                        <TableHead className="w-[100px] text-xs font-medium px-2">Fecha</TableHead>
+                        <TableHead className="w-[60px] text-xs font-medium px-2 text-center">Tipo</TableHead>
+                        {/* Hide Concepto and Fuente in mobile */}
+                        <TableHead className="hidden sm:table-cell min-w-[150px] text-xs font-medium px-2">Concepto</TableHead>
+                        <TableHead className="hidden md:table-cell min-w-[120px] text-xs font-medium px-2">Fuente</TableHead>
+                        <TableHead className="w-[100px] text-xs font-medium px-2 text-right">Monto</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {(netProfit?.timeline ?? []).length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                          <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
                             No hay movimientos para este rango.
                           </TableCell>
                         </TableRow>
                       ) : (
                         (netProfit?.timeline ?? []).map((item) => (
-                          <TableRow key={`${item.sourceId}-${item.date}`}>
-                            <TableCell className="text-sm">
+                          <TableRow key={`${item.sourceId}-${item.date}`} className="h-10">
+                            <TableCell className="px-2 py-2 text-xs">
                               <div className="font-medium">{new Date(item.date).toLocaleDateString()}</div>
                               <div className="text-xs text-muted-foreground">{new Date(item.date).toLocaleTimeString()}</div>
                             </TableCell>
-                            <TableCell>
-                              <Badge
-                                variant={item.type === "INCOME" ? "secondary" : "destructive"}
-                                className={item.type === "INCOME" ? "bg-green-500 text-white hover:bg-green-600" : ""}
-                              >
-                                {item.type === "INCOME" ? "Ingreso" : "Egreso"}
-                              </Badge>
+                            <TableCell className="px-2 py-2">
+                              <div className="flex items-center justify-center">
+                                <div className="hidden sm:flex">
+                                  <Badge
+                                    variant={item.type === "INCOME" ? "secondary" : "destructive"}
+                                    className={item.type === "INCOME" ? "bg-green-500 text-white hover:bg-green-600" : ""}
+                                  >
+                                    {item.type === "INCOME" ? "Ingreso" : "Egreso"}
+                                  </Badge>
+                                </div>
+                                <div className="sm:hidden flex items-center justify-center">
+                                  {item.type === "INCOME" ? (
+                                    <TrendingUp className="h-4 w-4 text-green-600" />
+                                  ) : (
+                                    <TrendingDown className="h-4 w-4 text-red-600" />
+                                  )}
+                                </div>
+                              </div>
                             </TableCell>
-                            <TableCell className="max-w-[200px] truncate" title={item.concept}>
+                            <TableCell className="hidden sm:table-cell max-w-[200px] truncate px-2 py-2 text-sm" title={item.concept}>
                               {item.concept}
                             </TableCell>
-                            <TableCell className="text-sm">
+                            <TableCell className="hidden md:table-cell px-2 py-2 text-xs">
                               {item.source === "PAYMENT_METHOD" ? "Pago de orden" : "Movimiento de caja"}
                             </TableCell>
-                            <TableCell className="text-right font-medium">
+                            <TableCell className="px-2 py-2 text-right font-medium text-sm">
                               {formatCurrency(item.amount)}
                             </TableCell>
                           </TableRow>

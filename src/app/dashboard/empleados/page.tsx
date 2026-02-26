@@ -1219,7 +1219,7 @@ export default function EmpleadosPage() {
                         />
                       </TableHead>
                       <TableHead className="min-w-[120px]">Nombres</TableHead>
-                      <TableHead className="min-w-[120px]">Apellidos</TableHead>
+                      <TableHead className="hidden sm:table-cell min-w-[120px]">Apellidos</TableHead>
                       {/* Hide Cargo, Estado, Tienda asignada, Almacén asignado in mobile */}
                       <TableHead className="hidden sm:table-cell min-w-[100px]">Cargo</TableHead>
                       <TableHead className="hidden md:table-cell min-w-[80px]">Estado</TableHead>
@@ -1254,7 +1254,7 @@ export default function EmpleadosPage() {
                             />
                           </TableCell>
                           <TableCell className="font-medium">{e.firstName}</TableCell>
-                          <TableCell>{e.lastName}</TableCell>
+                          <TableCell className="hidden sm:table-cell">{e.lastName}</TableCell>
                           <TableCell className="hidden sm:table-cell text-sm">{e.position}</TableCell>
                           <TableCell className="hidden md:table-cell">
                             <span
