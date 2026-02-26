@@ -10,6 +10,17 @@ interface UploadResponse {
   path: string;
 }
 
+const getApiBaseUrl = (): string => {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+  return baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+};
+
+const joinUrl = (baseUrl: string, path: string): string => {
+  if (!baseUrl) return path;
+  if (!path) return baseUrl;
+  return `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
+};
+
 export const uploadImage = async (
   file: File,
   onProgress?: (progress: UploadProgress) => void
@@ -33,7 +44,7 @@ export const uploadImage = async (
     const xhr = new XMLHttpRequest();
     
     return new Promise((resolve, reject) => {
-      xhr.open('POST', `${process.env.NEXT_PUBLIC_API_URL || ''}images/upload`, true);
+      xhr.open('POST', joinUrl(getApiBaseUrl(), '/images/upload'), true);
       
       // Configurar el manejador de progreso
       xhr.upload.onprogress = (event) => {
@@ -175,5 +186,5 @@ export const uploadImages = async (
 // Función auxiliar para obtener la URL de la API
 export const getApiUrl = (): string => {
   if (typeof window === 'undefined') return ''; // Para SSR
-  return process.env.NEXT_PUBLIC_API_URL || window.location.origin;
+  return getApiBaseUrl() || window.location.origin;
 };

@@ -64,6 +64,13 @@ function getThisWeekRange() {
   return { from: toInputDate(start), to: toInputDate(tomorrow) };
 }
 
+function getTodayRange() {
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  return { from: toInputDate(today), to: toInputDate(tomorrow) };
+}
+
 function toNumber(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {
@@ -363,8 +370,15 @@ export default function DashboardPage() {
   const [compareFrom, setCompareFrom] = useState("");
   const [compareTo, setCompareTo] = useState("");
 
+  const applyQuickRange = useCallback((range: { from: string; to: string }) => {
+    setFrom(range.from);
+    setTo(range.to);
+    setCompareFrom("");
+    setCompareTo("");
+  }, []);
+
   useEffect(() => {
-    const range = getThisWeekRange();
+    const range = getThisMonthRange();
     setFrom(range.from);
     setTo(range.to);
   }, []);
@@ -551,6 +565,38 @@ export default function DashboardPage() {
         </TabsList>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-2">
+          <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:items-center">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => applyQuickRange(getTodayRange())}
+              disabled={allLoading}
+              className="w-full sm:w-auto"
+            >
+              Hoy
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => applyQuickRange(getThisWeekRange())}
+              disabled={allLoading}
+              className="w-full sm:w-auto"
+            >
+              Última semana
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => applyQuickRange(getThisMonthRange())}
+              disabled={allLoading}
+              className="w-full sm:w-auto"
+            >
+              Este mes
+            </Button>
+          </div>
           <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-2">
             <div>
               <label className="text-sm font-medium block sm:hidden">Desde</label>
