@@ -503,232 +503,234 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
 
   return (
     <Form {...form}>
-      <form
-        onSubmit={form.handleSubmit(onSubmit as any)}
-        className="space-y-6"
-      >
-        <div className="max-h-[calc(100vh-220px)] overflow-y-auto pr-2">
-          {/* Loading state for stores */}
-          {isLoadingStores && (
-            <div className="flex items-center justify-center py-8">
-              <div className="text-sm text-muted-foreground">Cargando tiendas...</div>
-            </div>
-          )}
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="flex flex-col max-h-[calc(100vh-220px)]">
+        <form
+          onSubmit={form.handleSubmit(onSubmit as any)}
+          className="flex-1 overflow-y-auto pr-2"
+        >
+          <div className="space-y-6 pb-6">
+            {/* Loading state for stores */}
+            {isLoadingStores && (
+              <div className="flex items-center justify-center py-8">
+                <div className="text-sm text-muted-foreground">Cargando tiendas...</div>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FormField
+                control={form.control as UserFormControl}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nombre completo</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Nombre del usuario" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
             <FormField
               control={form.control as UserFormControl}
-              name="name"
+              name="username"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Nombre completo</FormLabel>
+                  <FormLabel>Alias (opcional)</FormLabel>
                   <FormControl>
-                    <Input placeholder="Nombre del usuario" {...field} />
+                    <Input
+                      placeholder="alias"
+                      autoComplete="nickname"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
 
-          <FormField
-            control={form.control as UserFormControl}
-            name="username"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Alias (opcional)</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="alias"
-                    autoComplete="nickname"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control as UserFormControl}
-            name="email"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Correo electrónico</FormLabel>
-                <FormControl>
-                  <Input type="email" placeholder="usuario@ejemplo.com" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control as UserFormControl}
-            name="phone"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Teléfono</FormLabel>
-                <FormControl>
-                  <Input type="tel" placeholder="+51 987 654 321" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Campo de rol solo visible en creación */}
-          {!initialData?.id && (
             <FormField
               control={form.control as UserFormControl}
-              name="role"
+              name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Rol</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecciona un rol" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="ADMIN">Administrador</SelectItem>
-                      <SelectItem value="USER">Usuario</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <FormLabel>Correo electrónico</FormLabel>
+                  <FormControl>
+                    <Input type="email" placeholder="usuario@ejemplo.com" {...field} />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-          )}
 
-          {/* Selector de tienda visible para USER en creación, o para edición de USER */}
-          {((!initialData?.id && form.watch('role') === 'USER') || 
-            (initialData?.id && initialData.role === 'USER')) && (
-            shouldShowStoreSelect(storesCount, stores) && (
+            <FormField
+              control={form.control as UserFormControl}
+              name="phone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Teléfono</FormLabel>
+                  <FormControl>
+                    <Input type="tel" placeholder="+51 987 654 321" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Campo de rol solo visible en creación */}
+            {!initialData?.id && (
               <FormField
                 control={form.control as UserFormControl}
-                name="storeId"
+                name="role"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Tienda asignada</FormLabel>
+                    <FormLabel>Rol</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Selecciona una tienda" />
+                          <SelectValue placeholder="Selecciona un rol" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {stores.map((store) => (
-                          <SelectItem key={store.id} value={store.id}>
-                            {store.name}
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="ADMIN">Administrador</SelectItem>
+                        <SelectItem value="USER">Usuario</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            )
-          )}
+            )}
 
-          {/* Sección de Permisos */}
-          {form.watch('role') === 'USER' && (
-            <PermissionsSelectorForm
-                name="permissions"
-                availablePermissions={availablePermissions}
-                isLoading={isLoadingPermissions}
-                title="Permisos"
-                description="Selecciona los permisos que tendrá este usuario"
-                columns={3}
-                maxHeight="max-h-64"
-                className="md:col-span-2 space-y-4 border rounded-lg p-4"
-              />
-          )}
+            {/* Selector de tienda visible para USER en creación, o para edición de USER */}
+            {((!initialData?.id && form.watch('role') === 'USER') || 
+              (initialData?.id && initialData.role === 'USER')) && (
+              shouldShowStoreSelect(storesCount, stores) && (
+                <FormField
+                  control={form.control as UserFormControl}
+                  name="storeId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tienda asignada</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona una tienda" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {stores.map((store) => (
+                            <SelectItem key={store.id} value={store.id}>
+                              {store.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )
+            )}
 
-          {/* Campos de contraseña solo visibles en creación */}
-          {!initialData?.id && (
-            <>
-              <FormField
-                control={form.control as UserFormControl}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Contraseña</FormLabel>
-                    <FormControl>
-                      <Input type="password" placeholder="••••••••" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            {/* Sección de Permisos */}
+            {form.watch('role') === 'USER' && (
+              <PermissionsSelectorForm
+                  name="permissions"
+                  availablePermissions={availablePermissions}
+                  isLoading={isLoadingPermissions}
+                  title="Permisos"
+                  description="Selecciona los permisos que tendrá este usuario"
+                  columns={3}
+                  maxHeight="max-h-64"
+                  className="md:col-span-2 space-y-4 border rounded-lg p-4"
+                />
+            )}
 
-              <FormField
-                control={form.control as UserFormControl}
-                name="confirmPassword"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Confirmar contraseña</FormLabel>
-                    <FormControl>
-                      <Input type="password" placeholder="••••••••" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </>
-          )}
+            {/* Campos de contraseña solo visibles en creación */}
+            {!initialData?.id && (
+              <>
+                <FormField
+                  control={form.control as UserFormControl}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Contraseña</FormLabel>
+                      <FormControl>
+                        <Input type="password" placeholder="••••••••" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-          {form.watch('password') && (
-            <div className="md:col-span-2 mt-4">
-              <div className="bg-muted/30 rounded-lg p-4 border border-muted">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                  <span className="text-sm font-semibold text-foreground">
-                    Requisitos de la contraseña
-                  </span>
-                </div>
-                <div className="space-y-2">
-                  {passwordRequirements.map((requirement) => {
-                    const isValid = validatePasswordRequirement(form.watch('password') || '', requirement.key);
-                    return (
-                      <div
-                        key={requirement.key}
-                        className={`flex items-center gap-3 text-sm p-2 rounded-md transition-all duration-200 ${
-                          isValid
-                            ? 'bg-green-50/80 text-green-700 border border-green-200/50'
-                            : 'bg-amber-50/80 text-amber-700 border border-amber-200/50'
-                        }`}
-                        title={requirement.description}
-                      >
-                        <div className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-colors ${
-                          isValid
-                            ? 'bg-green-500 text-white'
-                            : 'bg-amber-400 text-white'
-                        }`}>
-                          {isValid ? (
-                            <CheckCircle className="h-3 w-3" />
-                          ) : (
-                            <XCircle className="h-3 w-3" />
-                          )}
+                <FormField
+                  control={form.control as UserFormControl}
+                  name="confirmPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Confirmar contraseña</FormLabel>
+                      <FormControl>
+                        <Input type="password" placeholder="••••••••" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </>
+            )}
+
+            {form.watch('password') && (
+              <div className="md:col-span-2 mt-4">
+                <div className="bg-muted/30 rounded-lg p-4 border border-muted">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    <span className="text-sm font-semibold text-foreground">
+                      Requisitos de la contraseña
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {passwordRequirements.map((requirement) => {
+                      const isValid = validatePasswordRequirement(form.watch('password') || '', requirement.key);
+                      return (
+                        <div
+                          key={requirement.key}
+                          className={`flex items-center gap-3 text-sm p-2 rounded-md transition-all duration-200 ${
+                            isValid
+                              ? 'bg-green-50/80 text-green-700 border border-green-200/50'
+                              : 'bg-amber-50/80 text-amber-700 border border-amber-200/50'
+                          }`}
+                          title={requirement.description}
+                        >
+                          <div className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-colors ${
+                            isValid
+                              ? 'bg-green-500 text-white'
+                              : 'bg-amber-400 text-white'
+                          }`}>
+                            {isValid ? (
+                              <CheckCircle className="h-3 w-3" />
+                            ) : (
+                              <XCircle className="h-3 w-3" />
+                            )}
+                          </div>
+                          <span className={`font-medium ${isValid ? 'line-through opacity-70' : ''}`}>
+                            {requirement.label}
+                          </span>
                         </div>
-                        <span className={`font-medium ${isValid ? 'line-through opacity-70' : ''}`}>
-                          {requirement.label}
-                        </span>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
+            )}
             </div>
-          )}
           </div>
-        </div>
+        </form>
 
-        <div className="flex justify-end space-x-4">
+        <div className="flex-shrink-0 border-t bg-background pt-4 mt-6 flex justify-end space-x-4">
           <Button
             type="button"
             variant="outline"
@@ -738,11 +740,11 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
             Cancelar
           </Button>
           
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" disabled={isSubmitting} onClick={form.handleSubmit(onSubmit as any)}>
             {isSubmitting ? 'Guardando...' : 'Guardar usuario'}
           </Button>
         </div>
-      </form>
+      </div>
     </Form>
   );
 }

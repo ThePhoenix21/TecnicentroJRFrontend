@@ -237,13 +237,13 @@ function ClientesContent() {
       <Card className="overflow-hidden">
         <CardHeader className="pb-2 sm:pb-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <CardTitle className="text-lg sm:text-xl">Lista de Clientes</CardTitle>
+            <CardTitle className="text-base sm:text-lg">Lista de Clientes</CardTitle>
           </div>
 
           <div className="rounded-md border bg-muted/30 p-4 space-y-4 mt-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
               <div className="space-y-1">
-                <span className="text-xs font-medium text-muted-foreground invisible">Nombre</span>
+                <span className="text-[10px] sm:text-xs font-medium text-muted-foreground invisible">Nombre</span>
                 <div className="relative">
                   <Input
                     placeholder="Nombre..."
@@ -291,7 +291,7 @@ function ClientesContent() {
               </div>
 
               <div className="space-y-1">
-                <span className="text-xs font-medium text-muted-foreground invisible">Teléfono</span>
+                <span className="text-[10px] sm:text-xs font-medium text-muted-foreground invisible">Teléfono</span>
                 <div className="relative">
                   <Input
                     placeholder="Teléfono..."
@@ -339,7 +339,7 @@ function ClientesContent() {
               </div>
 
               <div className="space-y-1">
-                <span className="text-xs font-medium text-muted-foreground invisible">DNI</span>
+                <span className="text-[10px] sm:text-xs font-medium text-muted-foreground invisible">DNI</span>
                 <div className="relative">
                   <Input
                     placeholder="DNI..."
@@ -387,7 +387,7 @@ function ClientesContent() {
               </div>
 
               <div className="space-y-1">
-                <span className="text-xs font-medium text-muted-foreground">Desde</span>
+                <span className="text-[10px] sm:text-xs font-medium text-muted-foreground">Desde</span>
                 <Input 
                   type="date" 
                   value={fromDate} 
@@ -397,7 +397,7 @@ function ClientesContent() {
                 />
               </div>
               <div className="space-y-1">
-                <span className="text-xs font-medium text-muted-foreground">Hasta</span>
+                <span className="text-[10px] sm:text-xs font-medium text-muted-foreground">Hasta</span>
                 <Input 
                   type="date" 
                   value={toDate} 
@@ -445,12 +445,12 @@ function ClientesContent() {
                 <Table className="[&_td]:py-2 [&_th]:py-2">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="min-w-[140px] text-xs">Nombre</TableHead>
-                      <TableHead className="hidden sm:table-cell text-xs">Contacto</TableHead>
-                      <TableHead className="min-w-[110px] text-xs">Documento</TableHead>
+                      <TableHead className="min-w-[140px] text-xs sm:text-sm">Nombre</TableHead>
+                      <TableHead className="hidden sm:table-cell">Contacto</TableHead>
+                      <TableHead className="min-w-[110px] text-xs sm:text-sm">Documento</TableHead>
                       {/* Hide Historial and Registro in mobile */}
-                      <TableHead className="hidden md:table-cell text-xs">Historial</TableHead>
-                      <TableHead className="hidden lg:table-cell text-xs">Registro</TableHead>
+                      <TableHead className="hidden md:table-cell">Historial</TableHead>
+                      <TableHead className="hidden lg:table-cell">Registro</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -460,25 +460,25 @@ function ClientesContent() {
                         className={`h-12 ${canManageClients ? 'hover:bg-accent/50 cursor-pointer' : undefined}`}
                         onClick={canManageClients ? () => openDetails(client.id) : undefined}
                       >
-                        <TableCell className="font-medium text-[11px] px-3">{client.name}</TableCell>
+                        <TableCell className="font-medium text-[11px] sm:text-sm px-3">{client.name}</TableCell>
                         <TableCell className="hidden sm:table-cell px-3">
                           <div className="space-y-0.5">
-                            {client.email && <div className="text-[11px]">{client.email}</div>}
-                            {client.phone && <div className="text-[11px] text-muted-foreground">{client.phone}</div>}
+                            {client.email && <div>{client.email}</div>}
+                            {client.phone && <div className="text-muted-foreground">{client.phone}</div>}
                           </div>
                         </TableCell>
-                        <TableCell className="text-[11px] px-3">
-                          {client.dni && <div className="text-[11px]">DNI: {client.dni}</div>}
+                        <TableCell className="text-[11px] sm:text-sm px-3">
+                          {client.dni && <div className="text-[11px] sm:text-sm">DNI: {client.dni}</div>}
                         </TableCell>
                         <TableCell className="hidden md:table-cell px-3">
-                          <div className="space-y-0.5 text-xs">
+                          <div className="space-y-0.5">
                             <div>Ventas: <span className="font-semibold">{client.salesCount ?? 0}</span></div>
                             <div className="text-destructive">
                               Anuladas: <span className="font-semibold">{client.cancelledCount ?? 0}</span>
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell whitespace-nowrap px-3 text-xs">
+                        <TableCell className="hidden lg:table-cell whitespace-nowrap px-3">
                           {client.createdAt ? format(new Date(client.createdAt), 'dd/MM/yy') : 'N/A'}
                         </TableCell>
                       </TableRow>
