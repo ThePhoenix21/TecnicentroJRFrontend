@@ -185,16 +185,6 @@ export function AppSidebar() {
   const sidebarItems = getSidebarItems(hasPermissionHook, tenantFeatures, tenantFeaturesLoaded);
 
   const canSelectStore = (user?.stores?.length || 0) > 1;
-
-  console.log('🔍 Sidebar Debug:', {
-    user,
-    sidebarItems,
-    currentStore,
-    storeName: currentStore?.name,
-    storeId: currentStore?.id,
-    tenantFeaturesLoaded,
-    tenantFeatures
-  });
   
   return (
     <>

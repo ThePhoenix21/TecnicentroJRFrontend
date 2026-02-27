@@ -83,12 +83,8 @@ export function UserTable({
   const fetchUsers = useCallback(async () => {
     try {
       setIsLoading(true);
-      console.log('🔥 Iniciando fetchUsers con searchTerm:', searchTerm, 'storeId:', storeId);
-      console.log('🔍 showDeletedUsers:', showDeletedUsers);
       
       const data = await userService.getAllUsers(searchTerm);
-      console.log('📥 Respuesta del backend (todos los usuarios):', data);
-      console.log('📊 Total usuarios del backend:', data.length);
 
       let filteredUsers = data.filter((user: User) => {
         // Filtrar por tienda solo si se especifica una tienda específica (no "all")
@@ -99,17 +95,10 @@ export function UserTable({
         return true;
       });
 
-      console.log('🏪 Usuarios después de filtro de tienda:', filteredUsers.length);
-
       // Filtrar usuarios eliminados si el filtro está desactivado
       if (!showDeletedUsers) {
         const beforeDeletedFilter = filteredUsers.length;
         filteredUsers = filteredUsers.filter(user => user.status !== 'DELETED');
-        console.log('🗑️ Usuarios eliminados filtrados:', beforeDeletedFilter - filteredUsers.length);
-        console.log('📋 Estados de TODOS los usuarios:', data.map(u => ({ name: u.name, status: u.status })));
-        console.log('📋 Usuarios con status DELETED:', data.filter(u => u.status === 'DELETED').map(u => ({ name: u.name, status: u.status })));
-      } else {
-        console.log('✅ Filtro de eliminados DESACTIVADO - mostrando todos');
       }
 
       // Aplicar búsqueda si hay searchTerm
@@ -128,12 +117,8 @@ export function UserTable({
           );
         });
 
-        console.log('🔍 Usuarios después de búsqueda:', filteredUsers.length);
       }
 
-      console.log('� Usuarios finales después de todos los filtros:', filteredUsers.length);
-      console.log('� Usuarios finales:', filteredUsers.map(u => ({ name: u.name, email: u.email, status: u.status })));
-      
       setUsers(filteredUsers);
       setError(null);
     } catch (err) {
@@ -211,7 +196,6 @@ export function UserTable({
       // Actualizar la lista de usuarios
       await fetchUsers();
 
-      console.log('�️ Usuario eliminado correctamente:', userId);
       toast.success("¡Usuario eliminado correctamente!");
     } catch (err) {
       console.error("Error al eliminar usuario:", err);

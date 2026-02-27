@@ -156,7 +156,6 @@ export default function ProductsPage() {
 
     const storeId = selectedStoreId || currentStore?.id;
     if (!storeId) {
-      console.log('❌ No hay storeId seleccionado, abortando fetchStoreProducts');
       return;
     }
 
@@ -164,7 +163,6 @@ export default function ProductsPage() {
       setStoreProducts([]);
       return;
     }
-    console.log('🚀 Iniciando fetchStoreProducts para tienda:', storeId);
     
     try {
       setLoading(true);
@@ -200,7 +198,6 @@ export default function ProductsPage() {
       }
     } finally {
       setLoading(false);
-      console.log('🏁 fetchStoreProducts finalizado');
     }
   }, [isAuthenticated, selectedStoreId, currentStore?.id, nameFilter, hideOutOfStock, toast, canViewProducts]);
 
@@ -306,17 +303,6 @@ export default function ProductsPage() {
 
   // Debug: verificar estado actual
   useEffect(() => {
-    console.log('🔍 Estado de productos:', {
-      loading,
-      storeProductsCount: storeProducts.length,
-      total,
-      page,
-      totalPages,
-      isAuthenticated,
-      currentStoreId: currentStore?.id,
-      selectedStoreId,
-      nameFilter
-    });
   }, [loading, storeProducts.length, total, page, totalPages, isAuthenticated, currentStore?.id, selectedStoreId, nameFilter]);
 
   const visibleProducts = useMemo(() => {
@@ -397,13 +383,6 @@ export default function ProductsPage() {
         if (canManageInventory) {
           updateData.stock = formData.stock;
         }
-
-        console.log('🔍 IDs para actualizar:', {
-          storeProductId: currentStoreProduct.id,
-          productId: currentStoreProduct.productId,
-          endpointId: currentStoreProduct.id
-        });
-        console.log('📦 Datos de actualización:', updateData);
         await storeProductService.updateStoreProduct(currentStoreProduct.id, updateData);
 
         toast({
@@ -436,7 +415,6 @@ export default function ProductsPage() {
         } as CreateStoreProductRequest;
 
         const response = await storeProductService.createStoreProduct(productData);
-        console.log('📦 Producto creado (respuesta backend):', response);
 
         // Manejar si el backend devuelve un array o un objeto
         const createdProduct = Array.isArray(response) ? response[0] : response;

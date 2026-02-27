@@ -135,9 +135,6 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
   const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
   const hasFeature = (feature: string) => !tenantFeaturesLoaded || normalizedTenantFeatures.includes(feature);
 
-  console.log('🔍 Features del tenant:', tenantFeatures);
-  console.log('🔍 Features normalizados:', normalizedTenantFeatures);
-
   const allowedPermissionsSet = (() => {
     if (!tenantFeaturesLoaded) return null;
 
@@ -293,9 +290,7 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
   useEffect(() => {
     const fetchUserComplete = async () => {
       try {
-        console.log('🔍 Obteniendo usuario completo con getUserById...');
         const completeUser = await userService.getUserById(user.id);
-        console.log('🔍 Usuario completo obtenido:', completeUser);
         setUserComplete(completeUser);
       } catch (error) {
         console.error('❌ Error al obtener usuario completo:', error);
@@ -354,22 +349,14 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
 
     const current = form.getValues('permissions') || [];
     
-    console.log('🔍 Permisos actuales del usuario:', current);
-    console.log('🔍 Permisos permitidos por tenant:', Array.from(allowedPermissionsSet));
-    
     // NO filtrar los permisos existentes del usuario
     // Solo mostrar advertencia si hay permisos no permitidos
     const nonAllowedPermissions = current.filter((p: string) => !allowedPermissionsSet.has(p));
-    if (nonAllowedPermissions.length > 0) {
-      console.log('⚠️ Permisos no permitidos por tenant:', nonAllowedPermissions);
-    }
   }, [allowedPermissionsSet, form]);
 
   const onSubmit = async (data: any) => {
     try {
       setIsSubmitting(true);
-
-      console.log('🚀 Actualizando usuario:', data);
 
       // Construir payload según el rol del usuario
       const updatePayload: UpdateUserDto = {
@@ -387,10 +374,7 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
         permissions: data.permissions,
       };
 
-      console.log('📝 Payload para actualizar:', updatePayload);
-
       const updatedUser = await userService.updateUser(user.id, updatePayload);
-      console.log('✅ Usuario actualizado correctamente:', updatedUser);
 
       toast.success('Usuario actualizado correctamente');
       onSuccess();

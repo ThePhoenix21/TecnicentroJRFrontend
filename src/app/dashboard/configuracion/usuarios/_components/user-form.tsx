@@ -372,7 +372,6 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
           const count = await tenantService.getStoresCount();
           setStoresCount(count);
         } catch (error) {
-          console.error('Error loading stores count:', error);
           setStoresCount(null);
         }
         
@@ -396,7 +395,6 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
         setAvailablePermissions(permissions);
         
       } catch (error) {
-        console.error('Error loading data:', error);
       } finally {
         setIsLoadingStores(false);
         setIsLoadingPermissions(false);
@@ -424,16 +422,10 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
 
 
   const onSubmit = async (data: UserFormValues) => {
-    console.log('🚀 onSubmit se ejecutó con datos:', data);
     try {
       setIsSubmitting(true);
 
-      console.log('=== DEBUG: Datos del formulario ===');
-      console.log('initialData:', initialData);
-      console.log('initialData?.id:', initialData?.id);
-
       if (initialData?.id) {
-        console.log(' Ejecutando flujo de ACTUALIZACIÓN');
         
         // Para actualizaciones, solo enviar campos permitidos
         const updateUserData: UpdateUserDto = {
@@ -448,11 +440,8 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
           permissions: data.permissions,
         };
 
-        console.log('📝 Datos para actualización:', updateUserData);
         const updatedUser = await userService.updateUser(initialData.id, updateUserData);
-        console.log('✅ Usuario actualizado correctamente:', updatedUser);
       } else {
-        console.log('🚀 Ejecutando flujo de CREACIÓN');
         if (!data.password) {
           throw new Error('La contraseña es requerida');
         }
@@ -470,9 +459,7 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
             permissions: data.permissions,
           };
 
-          console.log('🔐 Creando administrador:', adminData);
           const createdAdmin = await adminRegisterService.createAdmin(adminData);
-          console.log('✅ Administrador creado exitosamente:', createdAdmin);
         } else {
           // Crear usuario regular usando userService
           const userData: CreateUserRegularDto = {
@@ -487,9 +474,7 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
             permissions: data.permissions,
           };
 
-          console.log('👤 Creando usuario regular:', userData);
           const createdUser = await userService.createUser(userData);
-          console.log('✅ Usuario creado exitosamente:', createdUser);
         }
       }
 
@@ -502,7 +487,6 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
       );
       onSuccess?.();
     } catch (error) {
-      console.error(' Error al guardar:', error);
       toast.error(error instanceof Error ? error.message : 'Error al guardar el usuario');
     } finally {
       setIsSubmitting(false);

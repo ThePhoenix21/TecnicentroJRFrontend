@@ -22,12 +22,6 @@ export default function PWA() {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator && window.workbox) {
       const wb = window.workbox;
       
-      // Añadir un manejador para cuando el service worker esté listo
-      wb.addEventListener('installed', (event: Event) => {
-        console.log(`Event ${event.type} is triggered.`);
-        console.log(event);
-      });
-
       // Registrar el service worker después de que la página se cargue
       wb.register().catch(console.error);
     }

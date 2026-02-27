@@ -403,8 +403,6 @@ export const orderService = {
     }>;
     cashSessionId: string; // ✅ OBLIGATORIO
   }): Promise<Order> {
-    console.log('=== INICIO: Datos recibidos en orderService.createOrder ===');
-    console.log('Datos completos recibidos:', JSON.stringify(orderData, null, 2));
 
     const normalizedClientInfo = orderData.clientInfo
       ? {
@@ -515,23 +513,12 @@ export const orderService = {
         cashSessionId: orderData.cashSessionId // ✅ OBLIGATORIO
       };
 
-      console.group('Sending Order Data to Backend');
-      console.log('Endpoint:', 'orders/create');
-      console.log('Method:', 'POST');
-      console.log('Request Data:', JSON.stringify(requestData, null, 2));
-      console.groupEnd();
-
       const response = await api.post<Order>('orders/create', requestData, {
         headers: {
           "Content-Type": "application/json",
           ...(token && { Authorization: `Bearer ${token}` })
         }
       });
-
-      console.group("Order Created Successfully");
-      console.log("Response Status:", response.status);
-      console.log("Response Data:", response.data);
-      console.groupEnd();
 
       return response.data;
     } catch (error) {

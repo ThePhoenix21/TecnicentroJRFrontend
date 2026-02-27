@@ -27,29 +27,17 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   useEffect(() => {
     const checkAuth = async () => {
-      console.log('🔄 useEffect triggered - Dependencies changed:', {
-        pathname,
-        isAuthenticated,
-        isPublicRoute,
-        loading,
-        userRole: user?.role,
-        hasStoreSelected,
-        tenantFeaturesLoaded,
-        tenantFeatures
-      });
       
       setIsClient(true);
       setAuthChecked(false); // Resetear verificación cuando cambian las dependencias
       
       // Esperar a que el estado de autenticación se cargue completamente
       if (loading) {
-        console.log('⏳ Still loading, waiting...');
         return;
       }
 
       // Si no está autenticado y no está en una ruta pública, redirigir al login
       if (!isAuthenticated && !isPublicRoute) {
-        console.log('No autenticado, redirigiendo al login');
         router.push("/login");
         return;
       }
@@ -57,26 +45,20 @@ export function MainLayout({ children }: MainLayoutProps) {
       // Si está autenticado, verificar tienda seleccionada y permisos
       if (isAuthenticated) {
         if (!user) {
-          console.log('Usuario no encontrado, redirigiendo al login');
           router.push("/login");
           return;
         }
 
         // Esperar a que carguen los features del tenant antes de decidir navegación
         if (!tenantFeaturesLoaded) {
-          console.log('⏳ Esperando tenantFeaturesLoaded...');
           return;
         }
 
         // Verificar si hay tienda seleccionada (excepto para store-selection y rutas USER)
         if (!hasStoreSelected && pathname !== '/store-selection' && user.role?.toUpperCase() !== 'USER') {
-          console.log('❌ No hay tienda seleccionada, redirigiendo a store-selection');
-          console.log('📍 Pathname actual:', pathname);
-          console.log('🏪 hasStoreSelected:', hasStoreSelected);
           router.push("/store-selection");
           return;
         } else if (hasStoreSelected || user.role?.toUpperCase() === 'USER') {
-          console.log('✅ Tienda seleccionada detectada o es usuario USER, continuando...');
         }
 
         const userRole = user.role?.toUpperCase() || 'USER';
@@ -168,7 +150,6 @@ export function MainLayout({ children }: MainLayoutProps) {
         // Si es USER e intenta acceder a una ruta no permitida (que no sea pública), redirigir a su ruta por defecto
         if (userRole === 'USER' && !isUserRoute && !isPublicRoute) {
           const target = getDefaultUserRoute();
-          console.log('Usuario USER no autorizado para esta ruta, redirigiendo a ruta por defecto:', target);
           router.push(target);
           return;
         }
@@ -176,14 +157,12 @@ export function MainLayout({ children }: MainLayoutProps) {
         // Guard adicional: si la ruta está bloqueada por features del tenant, redirigir
         if (!isPublicRoute && !isRouteAllowedByTenant(pathname)) {
           const target = userRole === 'ADMIN' ? getDefaultAdminRoute() : getDefaultUserRoute();
-          console.log('Ruta no permitida por tenant features, redirigiendo a:', target);
           router.push(target);
           return;
         }
       }
       
       // Si llegamos aquí, la verificación de autenticación está completa
-      console.log('Autenticación verificada con éxito');
       setAuthChecked(true);
     };
 

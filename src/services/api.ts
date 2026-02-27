@@ -25,9 +25,6 @@ const api: AxiosInstance = axios.create({
   timeout: 10000, // 10 segundos de tiempo de espera
 });
 
-// Registrar la URL base para depuración
-console.log('API Base URL:', getApiBaseUrl());
-
 // Interceptor de solicitud para agregar token de autenticación
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {

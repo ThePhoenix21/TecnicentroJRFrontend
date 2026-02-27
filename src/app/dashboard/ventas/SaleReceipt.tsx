@@ -187,9 +187,6 @@ interface SaleReceiptProps {
 }
 
 const SaleReceipt: React.FC<SaleReceiptProps> = ({ saleData, businessInfo }) => {
-  console.log("🔍 SaleReceipt renderizado con datos:", saleData);
-  console.log("🔍 BusinessInfo:", businessInfo);
-  console.log("🔍 Items en saleData:", saleData.items);
 
   const currentDate = new Date();
   const formattedDate = format(currentDate, "dd 'de' MMMM 'de' yyyy", { locale: es });

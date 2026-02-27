@@ -210,8 +210,6 @@ export default function VentasPage() {
       if (currentStore) {
         // Usar directamente currentStore.id - ya está sincronizado con el selector
         const effectiveStoreId = currentStore.id;
-        
-        console.log('🏪 Usando storeId desde currentStore:', effectiveStoreId);
 
         try {
           let resolvedSessionId: string | null = null;

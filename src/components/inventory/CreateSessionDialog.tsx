@@ -29,7 +29,6 @@ export function CreateSessionDialog({ onSessionCreated }: CreateSessionDialogPro
   const canStartPhysicalInventory = isAdmin || can(PERMISSIONS.START_PHYSICAL_INVENTORY);
   
   // Log para depurar permisos
-  console.log("CreateSessionDialog - User Role:", user?.role, "IsAdmin:", isAdmin);
 
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -45,12 +44,10 @@ export function CreateSessionDialog({ onSessionCreated }: CreateSessionDialogPro
 
     setIsLoading(true);
     try {
-      console.log("Intentando crear sesión:", { name: sessionName, storeId: currentStore.id });
       await inventoryService.createCountSession({
         name: sessionName,
         storeId: currentStore.id
       });
-      console.log("Sesión creada exitosamente");
 
       toast({
         title: "Sesión creada",

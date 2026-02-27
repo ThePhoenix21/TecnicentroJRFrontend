@@ -22,25 +22,18 @@ export default function StoreSelectionPage() {
 
     // Si no está autenticado, redirigir al login
     if (!isAuthenticated || !user) {
-      console.log('No autenticado o sin usuario, redirigiendo al login');
       router.push('/login');
       return;
     }
 
-    console.log('Usuario en store-selection:', user);
-    console.log('Rol:', user.role);
-    console.log('Tiendas:', user.stores);
-
     if (user.role?.toLowerCase() !== 'admin') {
       const target = getFirstAccessibleRouteFromPermissions(user.permissions) || '/dashboard';
-      console.log('No es admin, redirigiendo a ruta por defecto de USER:', target);
       router.push(target);
       return;
     }
 
     // Si ADMIN tiene una sola tienda, seleccionarla automáticamente
     if (user.stores && user.stores.length === 1) {
-      console.log('Admin tiene una sola tienda, seleccionando automáticamente');
       selectStore(user.stores[0]);
       const target = getFirstAccessibleRouteFromPermissions(user.permissions) || '/dashboard';
       router.push(target);
@@ -87,11 +80,8 @@ export default function StoreSelectionPage() {
   const handleStoreSelect = async (store: { id: string; name: string }) => {
     setIsLoading(true);
     try {
-      console.log('🏪 Store seleccionada antes de selectStore:', store);
       selectStore(store);
-      console.log('✅ Store seleccionada después de selectStore');
       const target = getFirstAccessibleRouteFromPermissions(user?.permissions) || '/dashboard';
-      console.log('📍 Redirigiendo a ruta permitida después de seleccionar tienda:', target);
       router.push(target);
     } catch (error) {
       console.error('❌ Error al seleccionar tienda:', error);
