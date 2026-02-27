@@ -22,11 +22,13 @@ import {
   CheckCircle,
   Printer,
   Search,
-  X
+  X,
+  ArrowLeft
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cashSessionService } from '@/services/cash-session.service';
 import { cashService } from '@/services/cash.service';
+import { api } from '@/services/api';
 import { clientService } from '@/services/client.service';
 import { CashSession, CashBalance, CashMovement, CashMovementListItem, CashMovementLookupItem } from '@/types/cash.types';
 import { useAuth } from '@/contexts/auth-context';
@@ -121,7 +123,7 @@ export default function CajaPage() {
   const [isPrintingHistorical, setIsPrintingHistorical] = useState(false);
   const [historicalSessionToPrint, setHistoricalSessionToPrint] = useState<CashSession | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'open' | 'history'>('open');
+  const [activeTab, setActiveTab] = useState<'open' | 'history' | 'open-sessions'>('open');
 
   // Estado para filtros y paginación del historial
   const defaultFromDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]; // Primer día del mes actual
@@ -151,6 +153,19 @@ export default function CajaPage() {
   const [selectedMovementsTotalPages, setSelectedMovementsTotalPages] = useState(1);
   const [selectedMovementsTotal, setSelectedMovementsTotal] = useState(0);
 
+  const [openSessions, setOpenSessions] = useState<CashSession[]>([]);
+  const [openSessionsLoading, setOpenSessionsLoading] = useState(false);
+  const [selectedOpenSession, setSelectedOpenSession] = useState<CashSession | null>(null);
+  const [selectedOpenSessionBalance, setSelectedOpenSessionBalance] = useState<CashBalance | null>(null);
+  const [selectedOpenMovements, setSelectedOpenMovements] = useState<CashMovementListItem[]>([]);
+  const [selectedOpenMovementsLoading, setSelectedOpenMovementsLoading] = useState(false);
+  const [selectedOpenMovementsPage, setSelectedOpenMovementsPage] = useState(1);
+  const [selectedOpenMovementsTotalPages, setSelectedOpenMovementsTotalPages] = useState(1);
+  const [selectedOpenMovementsTotal, setSelectedOpenMovementsTotal] = useState(0);
+  const [openSessionPaymentFilter, setOpenSessionPaymentFilter] = useState('');
+  const [openSessionOperationFilter, setOpenSessionOperationFilter] = useState('');
+  const [openSessionClientNameFilter, setOpenSessionClientNameFilter] = useState('');
+
   // =====================
   // Movimientos (nuevo listado paginado con filtros)
   // =====================
@@ -174,8 +189,18 @@ export default function CajaPage() {
     return !!(paymentFilter.trim() || operationFilter.trim() || clientNameFilter.trim());
   }, [paymentFilter, operationFilter, clientNameFilter]);
 
+  const openSessionFiltersActive = useMemo(() => {
+    return !!(
+      openSessionPaymentFilter.trim() ||
+      openSessionOperationFilter.trim() ||
+      openSessionClientNameFilter.trim()
+    );
+  }, [openSessionPaymentFilter, openSessionOperationFilter, openSessionClientNameFilter]);
+
   const movementsPageSize = filtersActive ? 20 : 50;
   const closedSessionMovementsPageSize = 50;
+
+  const openSessionMovementsPageSize = openSessionFiltersActive ? 20 : 50;
 
   const clearFilters = () => {
     setPaymentFilter('');
@@ -185,6 +210,13 @@ export default function CajaPage() {
     setShowClientSuggestions(false);
     setMovementsPage(1);
     loadMovementsRef.current?.(1);
+  };
+
+  const clearOpenSessionFilters = () => {
+    setOpenSessionPaymentFilter('');
+    setOpenSessionOperationFilter('');
+    setOpenSessionClientNameFilter('');
+    setSelectedOpenMovementsPage(1);
   };
 
   const loadMovements = useCallback(async (targetPage: number) => {
@@ -242,6 +274,60 @@ export default function CajaPage() {
       setSelectedMovementsLoading(false);
     }
   }, [canViewHistory, closedSessionMovementsPageSize]);
+
+  const loadOpenSessions = useCallback(async () => {
+    if (!currentStore?.id) return;
+
+    setOpenSessionsLoading(true);
+    try {
+      const response = await api.get(`/cash-session/store/${currentStore.id}/open/all`);
+      const sessions = Array.isArray(response.data) ? response.data : [];
+      const normalized: CashSession[] = sessions.map((session: any) => ({
+        ...session,
+        openingAmount: Number(session?.openingAmount || 0),
+        closingAmount: Number(session?.closingAmount || 0),
+        openedByName: session?.openedByName || session?.User?.name,
+      }));
+      setOpenSessions(normalized);
+    } catch (error) {
+      console.error('Error al cargar sesiones de caja abiertas:', error);
+      setOpenSessions([]);
+      toast.error('No se pudieron cargar las sesiones de caja abiertas');
+    } finally {
+      setOpenSessionsLoading(false);
+    }
+  }, [currentStore?.id]);
+
+  const loadSelectedOpenSessionData = useCallback(async (sessionId: string, targetPage: number = 1) => {
+    setSelectedOpenMovementsLoading(true);
+    try {
+      const [balanceResponse, movementResponse] = await Promise.all([
+        cashService.getCashBalance(sessionId),
+        cashService.getCashMovementsList({
+          sessionId,
+          page: targetPage,
+          pageSize: openSessionMovementsPageSize,
+          payment: openSessionPaymentFilter.trim() || undefined,
+          operation: openSessionOperationFilter.trim() || undefined,
+          clientName: openSessionClientNameFilter.trim() || undefined,
+        }),
+      ]);
+
+      setSelectedOpenSessionBalance(balanceResponse);
+      setSelectedOpenMovements(Array.isArray(movementResponse.data) ? movementResponse.data : []);
+      setSelectedOpenMovementsTotal(movementResponse.total || 0);
+      setSelectedOpenMovementsTotalPages(movementResponse.totalPages || 1);
+      setSelectedOpenMovementsPage(movementResponse.page || targetPage);
+    } catch (error) {
+      console.error('Error al cargar datos de sesión abierta seleccionada:', error);
+      setSelectedOpenMovements([]);
+      setSelectedOpenMovementsTotal(0);
+      setSelectedOpenMovementsTotalPages(1);
+      toast.error('No se pudieron cargar los datos de la sesión abierta seleccionada');
+    } finally {
+      setSelectedOpenMovementsLoading(false);
+    }
+  }, [openSessionMovementsPageSize, openSessionPaymentFilter, openSessionOperationFilter, openSessionClientNameFilter]);
 
   const loadMovementsRef = useRef(loadMovements);
 
@@ -444,6 +530,21 @@ export default function CajaPage() {
     // Solo cargar cuando el usuario haga clic en "Buscar"
   }, [activeTab, canViewHistory]);
 
+  useEffect(() => {
+    if (activeTab !== 'open-sessions') return;
+    if (!currentStore?.id) return;
+    void loadOpenSessions();
+  }, [activeTab, currentStore?.id, loadOpenSessions]);
+
+  useEffect(() => {
+    if (!selectedOpenSession?.id) return;
+    const timer = setTimeout(() => {
+      void loadSelectedOpenSessionData(selectedOpenSession.id, 1);
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [selectedOpenSession?.id, openSessionPaymentFilter, openSessionOperationFilter, openSessionClientNameFilter, loadSelectedOpenSessionData]);
+
   const handleOpenCashSession = async () => {
     if (!canManageCash) {
       toast.error('No tienes permisos para abrir la caja (MANAGE_CASH requerido)');
@@ -595,6 +696,30 @@ export default function CajaPage() {
     return description.replace(/ - Orden [0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/i, '');
   };
 
+  const handleSelectOpenSession = useCallback((session: CashSession) => {
+    setSelectedOpenSession(session);
+    setSelectedOpenMovements([]);
+    setSelectedOpenMovementsPage(1);
+    setSelectedOpenMovementsTotal(0);
+    setSelectedOpenMovementsTotalPages(1);
+    setOpenSessionPaymentFilter('');
+    setOpenSessionOperationFilter('');
+    setOpenSessionClientNameFilter('');
+    void loadSelectedOpenSessionData(session.id, 1);
+  }, [loadSelectedOpenSessionData]);
+
+  const handleBackToOpenSessions = useCallback(() => {
+    setSelectedOpenSession(null);
+    setSelectedOpenSessionBalance(null);
+    setSelectedOpenMovements([]);
+    setSelectedOpenMovementsPage(1);
+    setSelectedOpenMovementsTotal(0);
+    setSelectedOpenMovementsTotalPages(1);
+    setOpenSessionPaymentFilter('');
+    setOpenSessionOperationFilter('');
+    setOpenSessionClientNameFilter('');
+  }, []);
+
   const handlePrintHistoricalClose = async () => {
     if (!historicalCashId.trim()) {
       toast.error('Por favor ingrese el ID de la caja cerrada');
@@ -700,10 +825,11 @@ export default function CajaPage() {
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'open' | 'history')}>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'open' | 'history' | 'open-sessions')}>
         <TabsList>
           <TabsTrigger value="open">Caja abierta</TabsTrigger>
           {canViewHistory && <TabsTrigger value="history">Historial de cajas</TabsTrigger>}
+          <TabsTrigger value="open-sessions">Sesiones abiertas</TabsTrigger>
         </TabsList>
 
         <TabsContent value="open">
@@ -1797,6 +1923,338 @@ export default function CajaPage() {
                 </div>
               </div>
             )}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="open-sessions">
+          {selectedOpenSession ? (
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <Button
+                  variant="default"
+                  onClick={handleBackToOpenSessions}
+                  className="w-full md:w-auto bg-amber-500 text-black hover:bg-amber-600"
+                >
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Volver a sesiones abiertas
+                </Button>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Estado de Caja</CardTitle>
+                    <DollarSign className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={selectedOpenSession.status === 'OPEN' ? 'default' : 'secondary'}>
+                        {selectedOpenSession.status === 'OPEN' ? 'Abierta' : selectedOpenSession.status}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Abierta: {new Date(selectedOpenSession.openedAt).toLocaleString()}
+                    </p>
+                    <p className="text-xs font-semibold text-primary mt-1">
+                      {selectedOpenSession.User?.name || selectedOpenSession.openedByName || 'Usuario no disponible'}
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Monto Inicial</CardTitle>
+                    <DollarSign className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {formatCurrency(Number(selectedOpenSession.openingAmount || 0))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Fondo inicial</p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total Ingresos</CardTitle>
+                    <TrendingUp className="h-4 w-4 text-green-500" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-green-600">
+                      {formatCurrency(selectedOpenSessionBalance?.balance?.totalIngresos || 0)}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total Egresos</CardTitle>
+                    <TrendingDown className="h-4 w-4 text-red-500" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-red-600">
+                      {formatCurrency(selectedOpenSessionBalance?.balance?.totalSalidas || 0)}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {selectedOpenSessionBalance && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Calculator className="h-5 w-5" />
+                      Cuadre de Caja
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-4 md:grid-cols-4">
+                      <div className="text-center p-4 bg-muted rounded-lg">
+                        <p className="text-sm text-muted-foreground">Balance Actual</p>
+                        <p className="text-2xl font-bold text-primary">
+                          {formatCurrency(selectedOpenSessionBalance.balance.balanceActual || 0)}
+                        </p>
+                      </div>
+                      <div className="text-center p-4 bg-green-50 rounded-lg">
+                        <p className="text-sm text-muted-foreground">Ingresos</p>
+                        <p className="text-2xl font-bold text-green-600">
+                          {formatCurrency(selectedOpenSessionBalance.balance.totalIngresos || 0)}
+                        </p>
+                      </div>
+                      <div className="text-center p-4 bg-red-50 rounded-lg">
+                        <p className="text-sm text-muted-foreground">Egresos</p>
+                        <p className="text-2xl font-bold text-red-600">
+                          {formatCurrency(selectedOpenSessionBalance.balance.totalSalidas || 0)}
+                        </p>
+                      </div>
+                      <div className="text-center p-4 bg-blue-50 rounded-lg">
+                        <p className="text-sm text-muted-foreground">Inicial</p>
+                        <p className="text-2xl font-bold text-blue-600">
+                          {formatCurrency(selectedOpenSessionBalance.balance.openingAmount || 0)}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Movimientos de la sesión abierta</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Cliente</label>
+                        <Input
+                          value={openSessionClientNameFilter}
+                          onChange={(e) => setOpenSessionClientNameFilter(e.target.value)}
+                          placeholder="Buscar cliente..."
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Tipo</label>
+                        <Select value={openSessionOperationFilter} onValueChange={(v) => setOpenSessionOperationFilter(v === '__ALL__' ? '' : v)}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Todos" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__ALL__">Todos</SelectItem>
+                            {operationLookup.map((item) => (
+                              <SelectItem key={item.id} value={item.value}>
+                                {item.value}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Método de pago</label>
+                        <Select value={openSessionPaymentFilter} onValueChange={(v) => setOpenSessionPaymentFilter(v === '__ALL__' ? '' : v)}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Todos" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__ALL__">Todos</SelectItem>
+                            {paymentLookup.map((item) => (
+                              <SelectItem key={item.id} value={item.value}>
+                                {item.value}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <ActiveFilters
+                      hasActiveFilters={openSessionFiltersActive}
+                      onClearFilters={clearOpenSessionFilters}
+                    />
+
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
+                      <p>Mostrando {selectedOpenMovements.length} de {selectedOpenMovementsTotal} movimientos</p>
+                      <p>Página {selectedOpenMovementsPage} de {selectedOpenMovementsTotalPages}</p>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (!selectedOpenSession) return;
+                          const next = selectedOpenMovementsPage - 1;
+                          if (next < 1) return;
+                          void loadSelectedOpenSessionData(selectedOpenSession.id, next);
+                        }}
+                        disabled={selectedOpenMovementsLoading || selectedOpenMovementsPage <= 1}
+                      >
+                        Anterior
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (!selectedOpenSession) return;
+                          const next = selectedOpenMovementsPage + 1;
+                          if (next > selectedOpenMovementsTotalPages) return;
+                          void loadSelectedOpenSessionData(selectedOpenSession.id, next);
+                        }}
+                        disabled={selectedOpenMovementsLoading || selectedOpenMovementsPage >= selectedOpenMovementsTotalPages}
+                      >
+                        Siguiente
+                      </Button>
+                    </div>
+
+                    {selectedOpenMovementsLoading ? (
+                      <div className="py-10 text-center text-sm text-muted-foreground">Cargando movimientos...</div>
+                    ) : selectedOpenMovements.length === 0 ? (
+                      <div className="py-10 text-center text-sm text-muted-foreground">
+                        No hay movimientos para la sesión seleccionada.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {selectedOpenMovements.map((movement) => (
+                          <div
+                            key={movement.id}
+                            className="flex items-center justify-between p-3 border rounded-lg"
+                          >
+                            <div className="flex items-center gap-3 flex-1">
+                              <div className={`p-3 rounded-full flex items-center justify-center w-14 h-14 flex-shrink-0 ${
+                                movement.type === 'INCOME'
+                                  ? 'bg-green-100 text-green-600'
+                                  : 'bg-red-100 text-red-600'
+                              }`}>
+                                {movement.type === 'INCOME' ? (
+                                  <TrendingUp className="h-6 w-6" />
+                                ) : (
+                                  <TrendingDown className="h-6 w-6" />
+                                )}
+                              </div>
+                              <div className="space-y-1 flex-1">
+                                <p className="font-medium">{formatDescription(movement.description)}</p>
+                                {movement.clientName && (
+                                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                                    <span>{movement.clientName}</span>
+                                  </div>
+                                )}
+                                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                                  <span>{movement.payment}</span>
+                                  <span>•</span>
+                                  <span>{new Date(movement.createdAt).toLocaleString()}</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className={`font-bold ${movement.type === 'INCOME' ? 'text-green-600' : 'text-red-600'}`}>
+                                {movement.type === 'INCOME' ? '+' : '-'} {formatCurrency(parseFloat(movement.amount || '0'))}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  Sesiones abiertas de la tienda actual: {openSessions.length}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void loadOpenSessions()}
+                  disabled={openSessionsLoading}
+                >
+                  {openSessionsLoading ? 'Actualizando...' : 'Actualizar'}
+                </Button>
+              </div>
+
+              {openSessionsLoading ? (
+                <div className="py-10 text-center text-sm text-muted-foreground">Cargando sesiones abiertas...</div>
+              ) : openSessions.length === 0 ? (
+                <div className="py-10 text-center text-sm text-muted-foreground">
+                  No hay sesiones de caja abiertas para la tienda seleccionada.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {openSessions.map((session) => (
+                    <Card
+                      key={session.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleSelectOpenSession(session)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleSelectOpenSession(session);
+                        }
+                      }}
+                      className="cursor-pointer transition-all duration-200 border border-border/60 hover:border-primary hover:border-2 hover:bg-muted/60 hover:shadow-md"
+                    >
+                      <CardHeader className="pb-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <CardTitle className="text-base">Caja abierta</CardTitle>
+                            <p className="text-xs text-muted-foreground">
+                              Abierta: {new Date(session.openedAt).toLocaleString()}
+                            </p>
+                          </div>
+                          <Badge>OPEN</Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid gap-3 md:grid-cols-3">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Abierta por</p>
+                            <p className="text-base font-bold text-primary">
+                              {session.User?.name || session.openedByName || 'Usuario no disponible'}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {session.User?.email || '-'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Monto inicial</p>
+                            <p className="text-sm font-medium">{formatCurrency(Number(session.openingAmount || 0))}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">ID de sesión</p>
+                            <p className="text-xs font-mono break-all">{session.id}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </TabsContent>
