@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Building, Store, ArrowRight, LogOut } from 'lucide-react';
 
 export default function StoreSelectionPage() {
-  const { user, selectStore, logout, loading, isAuthenticated } = useAuth();
+  const { user, selectStore, selectWarehouse, logout, loading, isAuthenticated } = useAuth();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -85,6 +85,18 @@ export default function StoreSelectionPage() {
       router.push(target);
     } catch (error) {
       console.error('❌ Error al seleccionar tienda:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleWarehouseSelect = async (warehouse: { id: string; name: string }) => {
+    setIsLoading(true);
+    try {
+      selectWarehouse(warehouse);
+      router.push('/dashboard/warehouses');
+    } catch (error) {
+      console.error('❌ Error al seleccionar almacén:', error);
     } finally {
       setIsLoading(false);
     }
@@ -179,6 +191,62 @@ export default function StoreSelectionPage() {
             </Card>
           ))}
         </div>
+
+        {/* Warehouse Cards */}
+        {user.warehouses && user.warehouses.length > 0 && (
+          <>
+            <div className="mt-12 text-center mb-8">
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                Selecciona un almacén
+              </h2>
+              <p className="text-lg text-gray-600">
+                También puedes seleccionar un almacén para gestionar inventario y suministros.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {user.warehouses.map((warehouse) => (
+                <Card 
+                  key={warehouse.id} 
+                  className="hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-primary/50"
+                  onClick={() => handleWarehouseSelect(warehouse)}
+                >
+                  <CardHeader className="text-center pb-4">
+                    <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-3">
+                      <Building className="h-6 w-6 text-primary" />
+                    </div>
+                    <CardTitle className="text-lg">{warehouse.name}</CardTitle>
+                    <CardDescription>
+                      Almacén #{warehouse.id.slice(-8)}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <Button 
+                      className="w-full" 
+                      disabled={isLoading}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleWarehouseSelect(warehouse);
+                      }}
+                    >
+                      {isLoading ? (
+                        <div className="flex items-center">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          Seleccionando...
+                        </div>
+                      ) : (
+                        <>
+                          Seleccionar almacén
+                          <ArrowRight className="ml-2 h-4 w-4" />
+                        </>
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </>
+        )}
 
         {/* Info Card */}
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">

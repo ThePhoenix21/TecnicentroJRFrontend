@@ -134,16 +134,22 @@ type UserFormValues = z.infer<typeof userFormSchema>;
 type UserFormControl = Control<UserFormValues>;
 
 const DEFAULT_USER_PERMISSIONS = [
-  'VIEW_INVENTORY',
   'VIEW_PRODUCTS',
   'MANAGE_PRODUCTS',
+  'MANAGE_PRICES',
+  'VIEW_PRODUCT_PRICES',
   'VIEW_SERVICES',
-  'VIEW_ALL_SERVICES',
+  'DETAIL_SERVICES',
   'MANAGE_SERVICES',
   'VIEW_ORDERS',
   'MANAGE_ORDERS',
+  'DETAIL_ORDERS',
+  'VIEW_OWN_ORDERS_HISTORY',
+  'VIEW_OWN_CASH_HISTORY',
   'VIEW_CASH',
   'MANAGE_CASH',
+  'VIEW_SUPPORT',
+  'MANAGE_SUPPORT',
 ];
 
 const formatPermissionLabel = (permission: string): string => {
@@ -185,6 +191,7 @@ const formatPermissionLabel = (permission: string): string => {
     stores: 'Tiendas',
     store: 'Tienda',
     dashboard: 'Dashboard',
+    analytics: 'Analíticas',
     reports: 'Reportes',
     report: 'Reporte',
     clients: 'Clientes',
@@ -196,6 +203,7 @@ const formatPermissionLabel = (permission: string): string => {
 
     // acciones
     read: 'Ver',
+    detail: 'Detalle',
     view: 'Ver',
     list: 'Listar',
     create: 'Crear',

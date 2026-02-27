@@ -58,6 +58,11 @@ const formatPermissionLabel = (permission: string): string => {
   if (permission === "START_PHYSICAL_INVENTORY") return "Iniciar inventario físico";
   if (permission === "VIEW_CLIENTS") return "Ver clientes";
   if (permission === "MANAGE_CLIENTS") return "Gestionar clientes";
+  if (permission === "VIEW_ANALYTICS") return "Ver analíticas";
+  if (permission === "DETAIL_SERVICES") return "Detalle de servicios";
+  if (permission === "VIEW_ALL_CASH_OPEN") return "Ver todas las cajas abiertas";
+  if (permission === "VIEW_ALL_SERVICES") return "Ver todos los servicios";
+  if (permission === "RECREATE_EMPLOYEE") return "Recrear empleado";
 
   const tokens = permission
     .toLowerCase()
