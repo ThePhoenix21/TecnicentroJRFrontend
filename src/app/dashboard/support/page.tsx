@@ -287,8 +287,8 @@ export default function SupportPage() {
           <div className="flex flex-col space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="space-y-1">
-                <CardTitle className="text-xl sm:text-2xl font-semibold tracking-tight">Soporte Técnico</CardTitle>
-                <p className="text-sm text-muted-foreground">Lista de tickets creados por tu usuario</p>
+                <CardTitle className="text-lg sm:text-2xl font-semibold tracking-tight">Soporte Técnico</CardTitle>
+                <p className="text-xs sm:text-sm text-muted-foreground">Lista de tickets creados por tu usuario</p>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
@@ -313,7 +313,7 @@ export default function SupportPage() {
                   <Input
                     type="search"
                     placeholder="Buscar por asunto, estado o prioridad..."
-                    className="pl-9 pr-10 w-full"
+                    className="pl-9 pr-10 w-full text-xs sm:text-sm"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
@@ -350,14 +350,14 @@ export default function SupportPage() {
               <Table>
                 <TableHeader className="bg-muted/50">
                   <TableRow>
-                    <TableHead className="min-w-[150px] text-xs">Asunto</TableHead>
+                    <TableHead className="min-w-[150px] text-xs sm:text-sm">Asunto</TableHead>
                     <TableHead className="min-w-[100px] text-xs">Estado</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredTickets.map((t) => (
                     <TableRow key={t.id} className="cursor-pointer h-10" onClick={() => openDetail(t.id)}>
-                      <TableCell className="font-medium text-xs px-3">{t.subject}</TableCell>
+                      <TableCell className="font-medium text-xs sm:text-sm px-3">{t.subject}</TableCell>
                       <TableCell className="px-3">
                         <span className={`text-[10px] px-2 py-1 rounded-full ${getStatusClasses(t.status)}`}>
                           {statusLabel[t.status]}

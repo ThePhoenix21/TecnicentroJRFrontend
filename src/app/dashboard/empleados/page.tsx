@@ -76,8 +76,8 @@ type StoreOption = { id: string; name: string };
 type WarehouseOption = { id: string; name: string };
 
 const toUtcRange = (from: string, to: string) => {
-  const fromDate = `${from}T00:00:00.000Z`;
-  const toDate = `${to}T23:59:59.999Z`;
+  const fromDate = new Date(`${from}T00:00:00`).toISOString();
+  const toDate = new Date(`${to}T23:59:59.999`).toISOString();
   return { fromDate, toDate };
 };
 

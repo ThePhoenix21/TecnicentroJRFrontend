@@ -47,29 +47,29 @@ function toInputDate(date: Date): string {
 
 function getThisMonthRange() {
   const today = new Date();
-  const tomorrow = new Date(today);
-  tomorrow.setDate(today.getDate() + 1);
   const start = new Date(today.getFullYear(), today.getMonth(), 1);
-  return { from: toInputDate(start), to: toInputDate(tomorrow) };
+  return { from: toInputDate(start), to: toInputDate(today) };
 }
 
 function getThisWeekRange() {
   const today = new Date();
-  const tomorrow = new Date(today);
-  tomorrow.setDate(today.getDate() + 1);
   const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
-  const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Go back to Monday
   const start = new Date(today);
   start.setDate(today.getDate() - daysToSubtract);
-  return { from: toInputDate(start), to: toInputDate(tomorrow) };
+  return { from: toInputDate(start), to: toInputDate(today) };
 }
 
 function getTodayRange() {
   const today = new Date();
-  const tomorrow = new Date(today);
-  tomorrow.setDate(today.getDate() + 1);
-  return { from: toInputDate(today), to: toInputDate(tomorrow) };
+  return { from: toInputDate(today), to: toInputDate(today) };
 }
+
+const toUtcRange = (from: string, to: string) => {
+  const fromDate = new Date(`${from}T00:00:00`).toISOString();
+  const toDate = new Date(`${to}T23:59:59.999`).toISOString();
+  return { fromDate, toDate };
+};
 
 function toNumber(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -384,13 +384,17 @@ export default function DashboardPage() {
   }, []);
 
   const commonParams = useMemo(() => {
+    const dateRange = from && to ? toUtcRange(from, to) : null;
     const params: AnalyticsQueryParams = {
-      from,
-      to,
+      from: dateRange?.fromDate,
+      to: dateRange?.toDate,
       storeId: currentStore?.id,
     };
-    if (compareFrom) params.compareFrom = compareFrom;
-    if (compareTo) params.compareTo = compareTo;
+    if (compareFrom && compareTo) {
+      const compareRange = toUtcRange(compareFrom, compareTo);
+      params.compareFrom = compareRange.fromDate;
+      params.compareTo = compareRange.toDate;
+    }
     return params;
   }, [from, to, currentStore?.id, compareFrom, compareTo]);
 

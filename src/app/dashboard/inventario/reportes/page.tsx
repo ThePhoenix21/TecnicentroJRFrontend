@@ -82,10 +82,11 @@ export default function InventoryReportsPage() {
     setIsLoading(true);
     setSummaryError(null);
     try {
+      const dateRange = toUtcRange(formatDateForInput(fromDate), formatDateForInput(toDate));
       const data = await inventoryService.getMovementsSummary({
         storeId: currentStore.id,
-        fromDate,
-        toDate,
+        fromDate: dateRange.fromDate,
+        toDate: dateRange.toDate,
       });
       setSummary(data);
     } catch (error) {
@@ -119,35 +120,30 @@ export default function InventoryReportsPage() {
     return `${year}-${month}-${day}`;
   };
 
-  const toStartOfDayISO = (dateString: string) => {
-    const [year, month, day] = dateString.split("-").map(Number);
-    const date = new Date(year, (month || 1) - 1, day || 1, 0, 0, 0, 0);
-    return date.toISOString();
-  };
-
-  const toEndOfDayISO = (dateString: string) => {
-    const [year, month, day] = dateString.split("-").map(Number);
-    const date = new Date(year, (month || 1) - 1, day || 1, 23, 59, 59, 999);
-    return date.toISOString();
+  const toUtcRange = (from: string, to: string) => {
+    const fromDate = new Date(`${from}T00:00:00`).toISOString();
+    const toDate = new Date(`${to}T23:59:59.999`).toISOString();
+    return { fromDate, toDate };
   };
 
   const handleFromDateChange = (value: string) => {
     if (!value) return;
-    const newFromDate = toStartOfDayISO(value);
-    setFromDate(newFromDate);
+    const utcRange = toUtcRange(value, formatDateForInput(toDate));
+    setFromDate(utcRange.fromDate);
     const currentToDate = new Date(toDate);
-    if (new Date(newFromDate) > currentToDate) {
-      setToDate(toEndOfDayISO(value));
+    if (new Date(utcRange.fromDate) > currentToDate) {
+      setToDate(utcRange.toDate);
     }
   };
 
   const handleToDateChange = (value: string) => {
     if (!value) return;
-    const newToDate = toEndOfDayISO(value);
-    if (new Date(newToDate) < new Date(fromDate)) {
-      setFromDate(toStartOfDayISO(value));
+    const utcRange = toUtcRange(formatDateForInput(fromDate), value);
+    if (new Date(utcRange.toDate) < new Date(fromDate)) {
+      const newUtcRange = toUtcRange(value, value);
+      setFromDate(newUtcRange.fromDate);
     }
-    setToDate(newToDate);
+    setToDate(utcRange.toDate);
   };
 
   const resetDateRange = () => {

@@ -437,8 +437,8 @@ export default function CajaPage() {
     if (!canViewHistory) return;
     if (!currentStore?.id) return;
 
-    const from = historyFilters.from ? new Date(`${historyFilters.from}T00:00:00.000Z`).toISOString() : undefined;
-    const to = historyFilters.to ? new Date(`${historyFilters.to}T23:59:59.999Z`).toISOString() : undefined;
+    const from = historyFilters.from ? new Date(`${historyFilters.from}T00:00:00`).toISOString() : undefined;
+    const to = historyFilters.to ? new Date(`${historyFilters.to}T23:59:59.999`).toISOString() : undefined;
     let openedByName = historyFilters.openedByName.trim() || undefined;
     const storeId = isAdmin ? (currentStore?.id || undefined) : undefined;
 
