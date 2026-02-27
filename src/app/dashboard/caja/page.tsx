@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ActiveFilters } from '@/components/ui/active-filters';
@@ -165,6 +165,13 @@ export default function CajaPage() {
   const [openSessionPaymentFilter, setOpenSessionPaymentFilter] = useState('');
   const [openSessionOperationFilter, setOpenSessionOperationFilter] = useState('');
   const [openSessionClientNameFilter, setOpenSessionClientNameFilter] = useState('');
+  const [showForceCloseWarningModal, setShowForceCloseWarningModal] = useState(false);
+  const [showForceCloseCredentialsModal, setShowForceCloseCredentialsModal] = useState(false);
+  const [forceCloseCredentials, setForceCloseCredentials] = useState({
+    email: '',
+    password: ''
+  });
+  const [isForceClosingSession, setIsForceClosingSession] = useState(false);
 
   // =====================
   // Movimientos (nuevo listado paginado con filtros)
@@ -719,6 +726,46 @@ export default function CajaPage() {
     setOpenSessionOperationFilter('');
     setOpenSessionClientNameFilter('');
   }, []);
+
+  const handleForceCloseOpenSession = useCallback(async () => {
+    if (!isAdmin) {
+      toast.error('Solo los administradores pueden forzar el cierre de caja');
+      return;
+    }
+
+    if (!selectedOpenSession?.id) {
+      toast.error('No hay una sesión seleccionada para cerrar');
+      return;
+    }
+
+    if (!forceCloseCredentials.email.trim() || !forceCloseCredentials.password.trim()) {
+      toast.error('Debes ingresar usuario y contraseña de administrador');
+      return;
+    }
+
+    try {
+      setIsForceClosingSession(true);
+
+      await cashSessionService.closeCashSession(selectedOpenSession.id, {
+        email: forceCloseCredentials.email.trim(),
+        password: forceCloseCredentials.password,
+        declaredAmount: 0,
+      });
+
+      toast.success('Caja cerrada forzosamente con monto declarado en 0');
+      setShowForceCloseCredentialsModal(false);
+      setShowForceCloseWarningModal(false);
+      setForceCloseCredentials({ email: '', password: '' });
+      handleBackToOpenSessions();
+      await loadOpenSessions();
+      await loadCurrentSession();
+    } catch (error: any) {
+      console.error('Error al forzar cierre de caja:', error);
+      toast.error(error?.response?.data?.message || 'No se pudo forzar el cierre de la caja');
+    } finally {
+      setIsForceClosingSession(false);
+    }
+  }, [isAdmin, selectedOpenSession?.id, forceCloseCredentials.email, forceCloseCredentials.password, handleBackToOpenSessions, loadOpenSessions, loadCurrentSession]);
 
   const handlePrintHistoricalClose = async () => {
     if (!historicalCashId.trim()) {
@@ -1931,14 +1978,26 @@ export default function CajaPage() {
           {selectedOpenSession ? (
             <div className="space-y-4">
               <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <Button
-                  variant="default"
-                  onClick={handleBackToOpenSessions}
-                  className="w-full md:w-auto bg-amber-500 text-black hover:bg-amber-600"
-                >
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Volver a sesiones abiertas
-                </Button>
+                <div className="flex w-full flex-col gap-2 md:w-auto md:flex-row">
+                  <Button
+                    variant="default"
+                    onClick={handleBackToOpenSessions}
+                    className="w-full md:w-auto bg-amber-500 text-black hover:bg-amber-600"
+                  >
+                    <ArrowLeft className="h-4 w-4 mr-2" />
+                    Volver a sesiones abiertas
+                  </Button>
+                  {isAdmin && (
+                    <Button
+                      variant="destructive"
+                      onClick={() => setShowForceCloseWarningModal(true)}
+                      className="w-full md:w-auto"
+                    >
+                      <Power className="h-4 w-4 mr-2" />
+                      Forzar cierre de caja
+                    </Button>
+                  )}
+                </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -2259,6 +2318,118 @@ export default function CajaPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {isAdmin && (
+        <Dialog
+          open={showForceCloseWarningModal}
+          onOpenChange={(open) => {
+            setShowForceCloseWarningModal(open);
+            if (!open) {
+              setForceCloseCredentials({ email: '', password: '' });
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="text-red-600">Advertencia: cierre forzado de caja</DialogTitle>
+              <DialogDescription>
+                Si cierras la caja por este método, el usuario que la abrió no podrá declarar su monto de cierre.
+                Esta sesión se cerrará con monto declarado en <strong>0</strong>.
+              </DialogDescription>
+            </DialogHeader>
+
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Esta acción debe usarse solo en contingencias y únicamente por administradores.
+              </AlertDescription>
+            </Alert>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setShowForceCloseWarningModal(false)}
+                disabled={isForceClosingSession}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setShowForceCloseWarningModal(false);
+                  setShowForceCloseCredentialsModal(true);
+                }}
+                disabled={isForceClosingSession}
+              >
+                Entiendo, continuar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {isAdmin && (
+        <Dialog
+          open={showForceCloseCredentialsModal}
+          onOpenChange={(open) => {
+            setShowForceCloseCredentialsModal(open);
+            if (!open) {
+              setForceCloseCredentials({ email: '', password: '' });
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Validación de administrador</DialogTitle>
+              <DialogDescription>
+                Ingresa las credenciales de un administrador para confirmar el cierre forzado.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Usuario (email)</label>
+                <Input
+                  type="email"
+                  placeholder="admin@correo.com"
+                  value={forceCloseCredentials.email}
+                  onChange={(e) => setForceCloseCredentials((prev) => ({ ...prev, email: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Contraseña</label>
+                <Input
+                  type="password"
+                  placeholder="••••••••"
+                  value={forceCloseCredentials.password}
+                  onChange={(e) => setForceCloseCredentials((prev) => ({ ...prev, password: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setShowForceCloseCredentialsModal(false)}
+                disabled={isForceClosingSession}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => void handleForceCloseOpenSession()}
+                disabled={
+                  isForceClosingSession ||
+                  !forceCloseCredentials.email.trim() ||
+                  !forceCloseCredentials.password.trim()
+                }
+              >
+                {isForceClosingSession ? 'Cerrando...' : 'Confirmar cierre forzado'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       <Dialog
         open={showPrintHistoricalDialog}
