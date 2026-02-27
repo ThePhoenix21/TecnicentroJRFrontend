@@ -142,6 +142,7 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
 
     if (hasFeature('DASHBOARD')) {
       allowed.add('VIEW_DASHBOARD');
+      allowed.add('VIEW_ANALYTICS');
     }
 
     if (hasFeature('INVENTORY')) {
@@ -188,6 +189,7 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
       allowed.add('VIEW_SERVICES');
       allowed.add('VIEW_ALL_SERVICES');
       allowed.add('MANAGE_SERVICES');
+      allowed.add('DETAIL_SERVICES');
     }
 
     if (hasFeature('SALES')) {
@@ -211,12 +213,14 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
       allowed.add('VIEW_ALL_CASH_HISTORY');
       allowed.add('VIEW_OWN_CASH_HISTORY');
       allowed.add('PRINT_CASH_CLOSURE');
+      allowed.add('VIEW_ALL_CASH_OPEN');
     }
 
     if (hasFeature('EMPLOYEES')) {
       allowed.add('VIEW_EMPLOYEES');
       allowed.add('MANAGE_EMPLOYEES');
       allowed.add('CONVERT_EMPLOYEE_TO_USER');
+      allowed.add('RECREATE_EMPLOYEE');
     }
 
     if (hasFeature('WAREHOUSES')) {

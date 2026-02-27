@@ -2245,10 +2245,6 @@ export default function CajaPage() {
                             <p className="text-xs text-muted-foreground">Monto inicial</p>
                             <p className="text-sm font-medium">{formatCurrency(Number(session.openingAmount || 0))}</p>
                           </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground">ID de sesión</p>
-                            <p className="text-xs font-mono break-all">{session.id}</p>
-                          </div>
                         </div>
                       </CardContent>
                     </Card>
