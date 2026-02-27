@@ -41,16 +41,7 @@ export interface CreateAdminResponse {
 class AdminRegisterService {
   async createAdmin(adminData: CreateAdminData): Promise<CreateAdminResponse> {
     try {
-      console.log('🔐 Creando administrador:', { email: adminData.email, name: adminData.name });
-      
       const response = await api.post<CreateAdminResponse>('/auth/register', adminData);
-      
-      console.log('✅ Administrador creado exitosamente:', {
-        id: response.data.id,
-        email: response.data.email,
-        name: response.data.name,
-        storesCount: response.data.stores.length
-      });
       
       return response.data;
     } catch (error) {

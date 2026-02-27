@@ -34,7 +34,6 @@ interface RefreshTokenResponse {
 // Exportar el servicio de autenticación como predeterminado
 export const authService = {
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
-    console.log('Iniciando login con credenciales:', { email: credentials.email });
     
     // Limpiar headers de autenticación existentes
     delete api.defaults.headers.common['Authorization'];
@@ -47,7 +46,6 @@ export const authService = {
     });
     
     const data = response.data;
-    console.log('Respuesta completa del servidor:', JSON.stringify(data, null, 2));
     
     if (!data.access_token) {
       console.error('No se recibió token de acceso en la respuesta de login');
@@ -64,7 +62,6 @@ export const authService = {
       console.warn('No se recibió rol en los datos del usuario, usando USER por defecto');
       data.user.role = 'USER';
     } else {
-      console.log('Role recibido del servidor:', data.user.role);
     }
     
     // Almacenar tokens y datos del usuario
@@ -98,10 +95,6 @@ export const authService = {
     // Establecer el tiempo en que expirará el token de acceso (con buffer de 5 minutos)
     const expiresAt = Date.now() + ((authResult.expires_in - 300) * 1000); // 5 minutos antes de la expiración real
     localStorage.setItem('expires_at', expiresAt.toString());
-    
-    // Programar renovación de token
-    
-    console.log('Sesión establecida correctamente');
     
     // Programar la renovación automática del token
     this.scheduleTokenRefresh();
@@ -154,8 +147,6 @@ export const authService = {
     if (window.isRefreshing) {
       delete window.isRefreshing;
     }
-    
-    console.log('Sesión cerrada correctamente');
   },
 
   getToken(): string | null {

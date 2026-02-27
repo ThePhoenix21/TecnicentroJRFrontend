@@ -135,12 +135,10 @@ export const productService = {
       }
 
       // Log de depuración
-      console.log('Datos procesados para enviar:', productToSend);
       
       // Realizar la petición
       const response = await api.post<{ data: Product }>('/products/create', productToSend);
       
-      console.log('Producto creado exitosamente:', response.data);
       return response.data.data;
       
     } catch (error: unknown) {
@@ -237,13 +235,6 @@ export const productService = {
       if (cleanProductData.stock !== undefined) {
         updateData.stock = Math.max(0, parseInt(String(cleanProductData.stock), 10));
       }
-
-      console.log('Actualizando producto con datos:', { 
-        id, 
-        updateData,
-        currentUserId: currentUser.id,
-        userRole: currentUser.role
-      });
       
       // Usar el endpoint exacto según la documentación de Swagger
       const response = await api.patch<Product>(`/products/update/${id}`, updateData, {
@@ -253,7 +244,6 @@ export const productService = {
         }
       });
       
-      console.log('Producto actualizado exitosamente:', response.data);
       return response.data;
       
     } catch (error: unknown) {
@@ -299,7 +289,6 @@ export const productService = {
 
   async deleteProduct(id: string) {
   try {
-    console.log(`[Product Service] Attempting to delete product with ID: ${id}`);
     
     // Get the user's token from localStorage
     const token = localStorage.getItem('auth_token');
@@ -312,12 +301,6 @@ export const productService = {
         'Authorization': `Bearer ${token}`
       },
       validateStatus: (status) => status < 600
-    });
-    
-    console.log('[Product Service] Delete response:', {
-      status: response.status,
-      statusText: response.statusText,
-      data: response.data
     });
     
     if (response.status === 200 || response.status === 204) {

@@ -132,7 +132,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback((redirect: boolean = true) => {
-    console.log('Logging out...');
     // Clear all auth related data
     localStorage.removeItem('auth_token');
     localStorage.removeItem('refresh_token');
@@ -181,15 +180,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Función para cargar tiendas reales desde el backend
   const loadRealStores = useCallback(async (): Promise<Store[]> => {
     try {
-      console.log('🏪 Cargando tiendas reales desde el backend...');
       const stores = await storeService.getAllStores();
-      console.log('✅ Tiendas reales cargadas:', stores);
       
       // Guardar en cache para uso futuro
       localStorage.setItem('stores_cache', JSON.stringify(stores));
       return stores;
     } catch (error) {
-      console.error('❌ Error al cargar tiendas reales:', error);
       return [];
     }
   }, []);
@@ -213,7 +209,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (realStores.length > 0) {
         // Filtrar tiendas que pertenecen al usuario
         const userRealStores = realStores.filter(store => userStores.includes(store.id));
-        console.log('🏪 Tiendas reales del usuario:', userRealStores);
         
         return userRealStores.map(store => ({
           id: store.id,
@@ -225,7 +220,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     
     // Fallback: usar nombres temporales del JWT
-    console.log('🔄 Usando fallback de tiendas del JWT');
     return userStores.map((storeId: string) => ({
       id: storeId,
       name: `Tienda ${storeId.slice(-8)}`
@@ -234,10 +228,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Función para seleccionar tienda
   const selectStore = useCallback((store: AuthStore) => {
-    console.log('🏪 Seleccionando tienda:', store);
     setCurrentStore(store);
     localStorage.setItem('current_store', JSON.stringify(store));
-    console.log('✅ Tienda guardada en localStorage y estado actualizado');
   }, []);
 
   const refreshStores = useCallback(async () => {
@@ -307,9 +299,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       let jwtStores: AuthStore[] = [];
 
       try {
-        console.log('JWT Token:', jwtToken);
         const decoded = jwtDecode(jwtToken) as any;
-        console.log('JWT Decoded:', decoded);
 
         const effectiveCurrency = decoded.tenantCurrency ?? decoded.currency;
         if (effectiveCurrency === 'PEN' || effectiveCurrency === 'USD' || effectiveCurrency === 'EUR') {
@@ -321,12 +311,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (responseStores.length > 0) {
           jwtStores = responseStores.map((s: any) => ({ id: s.id, name: s.name }));
         } else if (decoded.stores && Array.isArray(decoded.stores)) {
-          // 2) Fallback: tiendas en JWT (solo IDs)
-          console.log('Tiendas en JWT:', decoded.stores);
           // Solo consultar endpoint de stores si hay múltiples tiendas
           jwtStores = await getUserStores(decoded.stores);
-        } else {
-          console.log('No hay tiendas en el response.user.stores ni en el JWT');
         }
       } catch (error) {
         console.error('Error al extraer tiendas del JWT:', error);
@@ -341,9 +327,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         verified: response.user.verified || false,
         stores: jwtStores, // Usar tiendas con nombres reales
       };
-      
-      console.log('UserData creado con tiendas reales:', userData);
-      
       setUser(userData);
       localStorage.setItem('user', JSON.stringify(userData));
 
@@ -359,7 +342,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       // Si hay exactamente una tienda permitida, seleccionarla automáticamente (sin depender del rol)
       if (jwtStores.length === 1) {
-        console.log('🏪 Usuario con una sola tienda, seleccionando automáticamente');
         setCurrentStore(jwtStores[0]);
         localStorage.setItem('current_store', JSON.stringify(jwtStores[0]));
       }
@@ -367,8 +349,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return userData;
       
     } catch (err: unknown) {
-      console.error('Login error:', err);
-      
       // Clear any partial authentication state
       localStorage.removeItem('auth_token');
       localStorage.removeItem('refresh_token');
@@ -420,10 +400,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const token = localStorage.getItem('auth_token');
-    console.log('Checking auth with token:', token);
     
     if (!token) {
-      console.log('No token found, user is not authenticated');
       setUser(null);
       setTenantFeatures([]);
       setTenantFeaturesLoaded(false);
@@ -434,9 +412,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      console.log('Decoding token...');
       const decoded = jwtDecode<JwtPayload>(token as string);
-      console.log('Decoded token:', decoded);
 
       const effectiveCurrency = decoded.tenantCurrency ?? decoded.currency;
       if (effectiveCurrency === 'PEN' || effectiveCurrency === 'USD' || effectiveCurrency === 'EUR') {
@@ -446,12 +422,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const currentTime = Date.now() / 1000;
       const tokenExpiration = decoded.exp || 0;
 
-      console.log('Current time:', new Date(currentTime * 1000));
-      console.log('Token expires at:', new Date(tokenExpiration * 1000));
-
       // Check if token is expired or about to expire (within 5 seconds)
       if (tokenExpiration < currentTime - 5) {
-        console.log('Token expired, attempting to refresh...');
         // Try to refresh the token
         try {
           const refreshed = await authService.refreshToken();
@@ -502,11 +474,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             
             // Si no hay tiendas en localStorage pero sí en JWT, actualizar
             if ((!userData.stores || userData.stores.length === 0) && decoded.stores) {
-              console.log('Actualizando tiendas desde JWT en checkAuth...');
               const userRealStores = await getUserStores(decoded.stores);
               userData.stores = userRealStores;
               localStorage.setItem('user', JSON.stringify(userData));
-              console.log('Usuario actualizado con tiendas reales:', userData);
             }
           } catch (e) {
             console.error('Error parsing stored user data:', e);
@@ -543,10 +513,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Save user data for future use
           localStorage.setItem('user', JSON.stringify(userData));
         }
-        
-        console.log('User authenticated:', userData);
-        console.log('📊 UserData stores:', userData.stores);
-        console.log('📊 UserData role:', userData.role);
         setUser(userData);
 
         // Cargar features del tenant al restaurar sesión
@@ -560,7 +526,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (savedStore) {
           try {
             const storeData = JSON.parse(savedStore);
-            console.log('Tienda recuperada:', storeData);
             setCurrentStore(storeData);
           } catch (error) {
             console.error('Error al recuperar tienda seleccionada:', error);
@@ -568,25 +533,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         } else if (userData.stores && userData.stores.length === 1) {
           // Si solo hay 1 tienda y aún no hay current_store guardada, seleccionarla automáticamente
-          console.log('🏪 Usuario sin tienda seleccionada (1 tienda disponible)');
-          console.log('✅ Usando la única tienda:', userData.stores[0]);
           setCurrentStore(userData.stores[0]);
           localStorage.setItem('current_store', JSON.stringify(userData.stores[0]));
-        } else {
-          console.log('❌ No se pudo seleccionar tienda automáticamente:', {
-            role: userData.role,
-            hasStores: !!userData.stores,
-            storesLength: userData.stores?.length || 0
-          });
         }
 
         // Schedule token refresh 1 minute before expiration
         const timeUntilExpire = (tokenExpiration - currentTime - 60) * 1000; // 1 minute before
-        console.log(`Token will expire in ${Math.floor(timeUntilExpire / 1000)} seconds`);
 
         if (timeUntilExpire > 0) {
           setTimeout(() => {
-            console.log('Refreshing token before expiration...');
             authService.refreshToken().catch((err: unknown) => {
               console.error('Failed to refresh token:', err);
               logout(false);

@@ -444,7 +444,6 @@ export function SaleForm({
 
   // Reset completo del estado de la venta
   const resetSaleState = useCallback(() => {
-    console.log(" Iniciando reset del estado de venta");
 
     setSelectedItems([]); // Limpiar el carrito
     setCustomerData({
@@ -491,8 +490,6 @@ export function SaleForm({
         amount: 0
       }]
     });
-
-    console.log("✅ Estado de venta reseteado completamente");
   }, []);
 
   // Efecto para cargar la sesión de caja activa cuando se abre el formulario o cambia la tienda
@@ -508,15 +505,12 @@ export function SaleForm({
     
     setIsLoadingCashSession(true);
     try {
-      console.log('🔍 Buscando sesión de caja abierta para la tienda:', currentStore.id);
       const openSession = await cashSessionService.getOpenCashSession(currentStore.id);
       
       if (openSession) {
         setCurrentCashSession(openSession.id);
-        console.log('✅ Sesión de caja abierta encontrada:', openSession.id);
       } else {
         setCurrentCashSession(null);
-        console.log('⚠️ No hay sesión de caja abierta para esta tienda');
         toast.warning('No hay una sesión de caja abierta. Debe abrir una sesión de caja antes de crear ventas.');
       }
     } catch (error) {
@@ -531,7 +525,6 @@ export function SaleForm({
   // Limpiar estado cuando se abre una nueva venta
   useEffect(() => {
     if (isOpen) {
-      console.log(" Nueva venta abierta - limpiando estado anterior");
       resetSaleState();
       setShowUploadError(false);
     }
@@ -1055,7 +1048,6 @@ export function SaleForm({
 
   // Manejar envío del formulario
   const handleSubmit = async (paymentMethodsOverride?: PaymentMethod[], printWindow?: Window | null) => {
-    console.log('[SaleForm][debug] handleSubmit invoked - hasOverride:', !!paymentMethodsOverride, 'isOrderPaymentsModalOpen:', isOrderPaymentsModalOpen);
     console.trace('[SaleForm][debug] handleSubmit call stack');
 
     if (!paymentMethodsOverride) {
@@ -1120,8 +1112,6 @@ export function SaleForm({
           };
         });
 
-      console.log("Productos procesados:", productsData);
-
       // Procesar servicios
       const servicesData = await Promise.all(
         selectedItems
@@ -1184,8 +1174,6 @@ export function SaleForm({
           }
           : defaultClientInfo;
 
-      console.log("existe productsData:", productsData);
-
       const orderPaymentMethodsToUse = (paymentMethodsOverride ?? orderPaymentMethods)
         .filter((pm) => Number.isFinite(pm.amount) && pm.amount >= 0)
         .filter((pm) => (isServiceOnlySale ? true : pm.amount > 0))
@@ -1224,19 +1212,10 @@ export function SaleForm({
 
       const result = await onSubmit(saleData);
 
-      console.log('[SaleForm][debug] onSubmit result:', result);
-
       const isSuccess = Boolean((result as any)?.success);
       const resolvedOrderData = (result as any)?.orderData ?? (result as any)?.data ?? result;
       const resolvedOrderId = (result as any)?.orderId ?? (resolvedOrderData as any)?.id ?? (resolvedOrderData as any)?.orderId;
       const resolvedOrderNumber = (result as any)?.orderNumber ?? (resolvedOrderData as any)?.orderNumber;
-
-      console.log('[SaleForm][debug] resolved submit payload:', {
-        isSuccess,
-        resolvedOrderId,
-        resolvedOrderNumber,
-        hasResolvedOrderData: !!resolvedOrderData,
-      });
 
       if (isSuccess) {
         setOrderId(resolvedOrderId ?? null);
@@ -1252,7 +1231,6 @@ export function SaleForm({
           const details = idToFetch ? await orderService.getOrderDetails(idToFetch) : resolvedOrderData;
 
           setOrderResponse(details);
-          console.log('[SaleForm][debug] opening ServiceSheet PDF modal');
           setShowServiceSheet(true);
 
           // Cerrar modal de nueva venta (dejando el comprobante abierto)
@@ -1314,26 +1292,14 @@ export function SaleForm({
   // Buscar cliente por DNI con useCallback para evitar recreaciones innecesarias
   const searchClientByDni = useCallback(async (dni: string) => {
     if (!dni || dni.length !== 8) {
-      console.log('DNI inválido o incompleto');
       return;
     }
-    
-    console.log('Buscando cliente con DNI:', dni);
     setIsSearchingClient(true);
     
     try {
       const client = await clientService.getClientByDni(dni);
-      console.log('Respuesta de getClientByDni:', client);
       
       if (client) {
-        console.log('Cliente encontrado, actualizando campos con:', {
-          name: client.name,
-          email: client.email,
-          phone: client.phone,
-          address: client.address,
-          ruc: client.ruc,
-          dni: client.dni
-        });
         
         // Si encontramos el cliente, actualizamos los campos
         setCustomerData(prev => {
@@ -1348,14 +1314,11 @@ export function SaleForm({
             // Mantenemos las notas existentes
             notes: prev.notes
           };
-          console.log('Nuevos datos del cliente:', newData);
           return newData;
         });
         
-        console.log('Cliente encontrado y cargado:', client);
         toast.success('Cliente encontrado y cargado correctamente');
       } else {
-        console.log('Cliente no encontrado, limpiando campos excepto DNI');
         
         // Si no encontramos el cliente, limpiamos todos los campos excepto el DNI
         setCustomerData(prev => {
@@ -1370,11 +1333,9 @@ export function SaleForm({
             // Mantenemos las notas existentes
             notes: prev.notes
           };
-          console.log('Datos limpiados (cliente no encontrado):', newData);
           return newData;
         });
         
-        console.log('Cliente no encontrado');
         toast.info('Cliente no encontrado. Complete los datos manualmente');
       }
     } catch (error) {
@@ -1398,7 +1359,6 @@ export function SaleForm({
       
       // Solo buscar si el DNI es válido y no estamos ya buscando
       if (currentDni.length === 8 && !isSearchingClient && documentNumberChangedManually) {
-        console.log('Iniciando búsqueda automática de cliente con DNI:', currentDni);
         
         try {
           await searchClientByDni(currentDni);
@@ -2620,7 +2580,6 @@ export function SaleForm({
                                       className="w-full text-destructive border-destructive/50 hover:bg-destructive/5 hover:text-destructive"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        console.log("🚫 Cancelando subida de imágenes - limpiando componente");
                                         setShowUploadError(false);
                                         setUploadStatus(prev => ({
                                           ...prev,
@@ -2725,7 +2684,6 @@ export function SaleForm({
                         variant="destructive"
                         className="w-full"
                         onClick={() => {
-                          console.log("🚫 Cancelando venta - limpiando componente");
                           resetSaleState();
                           onClose();
                         }}

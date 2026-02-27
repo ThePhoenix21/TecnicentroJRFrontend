@@ -31,7 +31,6 @@ class StoreProductService {
       if (options.pageSize) params.set('pageSize', options.pageSize.toString());
       if (options.search) params.set('search', options.search);
       
-      console.log('🔍 Intentando endpoint simple:', `/store/products/store/${storeId}/simple?${params}`);
       const response = await api.get(`/store/products/store/${storeId}/simple?${params}`);
       return response.data; // El backend devuelve {data: Array, total}
     } catch (error) {
@@ -132,9 +131,7 @@ class StoreProductService {
         limit: limit.toString(),
       });
       if (search) params.append('search', search);
-      
-      // Endpoint correcto: GET /store/products/store/:storeId
-      console.log('🔍 Intentando endpoint:', `/store/products/store/${storeId}?${params}`);
+
       const response = await api.get(`/store/products/store/${storeId}?${params}`);
       return response.data; // El backend devuelve {data: Array, total, page, limit, totalPages}
     } catch (error) {
@@ -206,42 +203,11 @@ class StoreProductService {
       // Endpoint correcto: PATCH /store/products/update/:id
       const url = `/store/products/update/${id}`;
 
-      // Obtener token para debug
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-
-      console.log('[StoreProductService.updateStoreProduct] Preparando petición PATCH', {
-        url,
-        id,
-        data,
-        token,
-      });
-
       const response = await api.patch(url, data);
-
-      console.log('[StoreProductService.updateStoreProduct] Respuesta exitosa', {
-        status: response.status,
-        data: response.data,
-      });
 
       return response.data;
     } catch (error) {
-      console.error('[StoreProductService.updateStoreProduct] Error al actualizar producto de tienda:', error);
-
-      // Log extendido del error para depuración (Axios)
-      const anyError = error as any;
-      console.error('[StoreProductService.updateStoreProduct] Detalles del error:', {
-        message: anyError?.message,
-        code: anyError?.code,
-        responseStatus: anyError?.response?.status,
-        responseData: anyError?.response?.data,
-        config: {
-          url: anyError?.config?.url,
-          method: anyError?.config?.method,
-          data: anyError?.config?.data,
-          headers: anyError?.config?.headers,
-        },
-      });
-
+      console.error('Error al actualizar producto de tienda:', error);
       throw error;
     }
   }

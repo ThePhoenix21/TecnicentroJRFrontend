@@ -63,12 +63,9 @@ const isAuthError = (error: unknown) => {
 export const clientService = {
   async getClients(page: number = 1, pageSize: number = 12, filters: ClientFilters = {}): Promise<ClientsListResponse> {
     try {
-      console.log('Obteniendo clientes...', { page, pageSize, filters });
       const response = await api.get<ClientsListResponse>('/clientes', {
         params: { page, pageSize, ...filters }
       });
-
-      console.log('Respuesta del backend (getClients):', response.data);
       return response.data;
     } catch (error) {
       const axiosError = error as AxiosError<{ message?: string }>;
@@ -129,11 +126,9 @@ export const clientService = {
   },
 
   async getClientByDni(dni: string): Promise<Client | null> {
-    console.log('Buscando cliente con DNI:', dni);
     try {
       // ✅ USAR NUEVO ENDPOINT DIRECTO (no requiere permisos de ADMIN)
       const response = await api.get<Client>(`/clientes/dni/${dni}`);
-      console.log('Respuesta de getClientByDni directo:', response.data);
       return response.data;
       
     } catch (error) {
@@ -146,7 +141,6 @@ export const clientService = {
       
       // Si es 404, el cliente no existe (no es error, es resultado esperado)
       if (axiosError.response?.status === 404) {
-        console.log('Cliente no encontrado con DNI:', dni);
         return null;
       }
       
@@ -167,10 +161,8 @@ export const clientService = {
   },
 
   async getClientById(id: string): Promise<Client> {
-    console.log('Obteniendo cliente con ID:', id);
     try {
       const response = await api.get<Client>(`/clientes/${id}`);
-      console.log('Respuesta de getClientById:', response.data);
       return response.data;
     } catch (error) {
       const axiosError = error as AxiosError<{ message?: string }>;
@@ -201,7 +193,6 @@ export const clientService = {
   },
 
   async createClient(clientData: CreateClientDto): Promise<Client> {
-    console.log('Creando nuevo cliente con datos:', clientData);
     try {
       // Validaciones obligatorias según el backend
       if (!clientData.dni) {
@@ -212,7 +203,6 @@ export const clientService = {
       }
       
       const response = await api.post<Client>('/clientes', clientData);
-      console.log('Cliente creado exitosamente:', response.data);
       return response.data;
     } catch (error) {
       const axiosError = error as AxiosError<{ message?: string }>;
@@ -233,11 +223,9 @@ export const clientService = {
   },
 
   async updateClient(id: string, clientData: UpdateClientDto): Promise<Client> {
-    console.log(`Actualizando cliente ID ${id} con datos:`, clientData);
     try {
       const { dni, ...payload } = clientData;
       const response = await api.patch<Client>(`/clientes/${id}`, payload);
-      console.log('Cliente actualizado exitosamente:', response.data);
       return response.data;
     } catch (error) {
       const axiosError = error as AxiosError<{ message?: string }>;
@@ -264,10 +252,8 @@ export const clientService = {
   },
 
   async deleteClient(id: string): Promise<void> {
-    console.log('Eliminando cliente con ID:', id);
     try {
       const response = await api.delete(`/clientes/${id}`);
-      console.log('Cliente eliminado exitosamente');
       return;
     } catch (error) {
       const axiosError = error as AxiosError<{ message?: string }>;

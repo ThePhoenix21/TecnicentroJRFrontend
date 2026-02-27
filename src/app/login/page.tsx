@@ -34,20 +34,12 @@ export default function LoginPage() {
     setIsLoading(true);
     
     try {
-      console.log('Iniciando proceso de login...');
-      console.log('Email:', email);
-      console.log('Password:', password ? '***' : '(vacío)');
       
       const success = await login(email, password);
-      console.log('Login result:', success);
       
       if (success) {
-        console.log('Login exitoso, determinando redirección...');
         
         const userStores = success.stores || [];
-        
-        console.log('Rol del usuario:', success.role);
-        console.log('Tiendas del usuario:', userStores);
 
         // Si no hay tiendas, negar acceso aunque el login sea válido
         if (userStores.length === 0) {
@@ -58,7 +50,6 @@ export default function LoginPage() {
 
         // Si hay múltiples tiendas, ir a selección
         if (userStores.length > 1) {
-          console.log('Usuario con múltiples tiendas, redirigiendo a selección');
           window.location.href = '/store-selection';
           return;
         }
@@ -67,7 +58,6 @@ export default function LoginPage() {
         const targetFromPermissions = getFirstAccessibleRouteFromPermissions(success.permissions);
         const target = targetFromPermissions || '/dashboard';
 
-        console.log('Usuario con una sola tienda, redirigiendo a:', target);
         window.location.href = target;
       }
     } catch (error) {

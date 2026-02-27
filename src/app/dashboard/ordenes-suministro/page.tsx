@@ -806,18 +806,14 @@ export default function OrdenesSuministroPage() {
       setDetailSubmitting(true);
       
       // Generate PDF
-      console.log("Generando PDF...");
       const pdfBlob = await pdf(<SupplyOrderPDF order={detail} />).toBlob();
-      console.log("PDF generado, tamaño:", pdfBlob.size, "bytes");
       
       // Optional: Open PDF in new tab for preview
       const pdfUrl = URL.createObjectURL(pdfBlob);
       window.open(pdfUrl, '_blank');
       
       // Send email with PDF
-      console.log("Enviando al backend...");
       const response = await supplyOrderService.approveSupplyOrderWithEmail(detail.id, pdfBlob);
-      console.log("Respuesta del backend:", response);
       
       // Show detailed success message
       if (response.emailSent) {

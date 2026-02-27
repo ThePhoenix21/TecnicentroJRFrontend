@@ -95,8 +95,6 @@ export const authService = {
   // Iniciar sesión con email y contraseña
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
-      console.log('=== Iniciando proceso de login ===');
-      console.log('Credenciales:', { email: credentials.email, password: '***' });
 
       // Limpiar headers de autenticación existentes para asegurar un estado limpio
       delete api.defaults.headers.common['Authorization'];
@@ -108,10 +106,6 @@ export const authService = {
         },
         withCredentials: true
       });
-
-      console.log('=== Respuesta del servidor ===');
-      console.log('Status:', response.status);
-      console.log('Datos de respuesta:', response.data);
 
       const { access_token, refresh_token, user } = response.data;
 
