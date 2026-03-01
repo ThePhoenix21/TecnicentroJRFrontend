@@ -17,7 +17,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   const [authChecked, setAuthChecked] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, loading, user, currentStore, hasStoreSelected, hasPermission, tenantFeatures, tenantFeaturesLoaded } = useAuth();
+  const { isAuthenticated, loading, user, activeLoginMode, hasStoreSelected, hasWarehouseSelected, hasPermission, tenantFeatures, tenantFeaturesLoaded } = useAuth();
 
   const publicRoutes = ["/login", "/register", "/forgot-password"];
   
@@ -54,11 +54,28 @@ export function MainLayout({ children }: MainLayoutProps) {
           return;
         }
 
-        // Verificar si hay tienda seleccionada (excepto para store-selection y rutas USER)
-        if (!hasStoreSelected && pathname !== '/store-selection' && user.role?.toUpperCase() !== 'USER') {
-          router.push("/store-selection");
+        if (!activeLoginMode && pathname !== '/select-initial-context') {
+          router.push('/select-initial-context');
           return;
-        } else if (hasStoreSelected || user.role?.toUpperCase() === 'USER') {
+        }
+
+        if (activeLoginMode === 'STORE' && !hasStoreSelected && pathname !== '/store-selection') {
+          router.push('/store-selection');
+          return;
+        }
+
+        if (activeLoginMode === 'WAREHOUSE' && !hasWarehouseSelected && pathname !== '/select-initial-context') {
+          router.push('/select-initial-context');
+          return;
+        }
+
+        const isContextSetupRoute =
+          pathname === '/select-initial-context' ||
+          pathname.startsWith('/select-initial-context/');
+
+        if (isContextSetupRoute) {
+          setAuthChecked(true);
+          return;
         }
 
         const userRole = user.role?.toUpperCase() || 'USER';
@@ -90,10 +107,32 @@ export function MainLayout({ children }: MainLayoutProps) {
 
         const isRouteAllowedByTenant = (path: string) => {
           // store-selection / login etc no dependen de features
-          if (path === '/store-selection' || path.startsWith('/store-selection/')) return true;
+          if (
+            path === '/store-selection' ||
+            path.startsWith('/store-selection/') ||
+            path === '/select-initial-context' ||
+            path.startsWith('/select-initial-context/')
+          ) return true;
           const rule = routeFeatureRequirements.find((r) => path === r.prefix || path.startsWith(`${r.prefix}/`));
           if (!rule) return true;
           return hasTenantFeature(rule.requiredTenantFeatures);
+        };
+
+        const warehouseModeAllowedPrefixes = [
+          '/dashboard/productos',
+          '/dashboard/inventario',
+          '/dashboard/support',
+          '/dashboard/warehouses',
+          '/dashboard/empleados',
+          '/dashboard/proveedores',
+          '/dashboard/ordenes-suministro',
+          '/dashboard/configuracion/usuarios',
+        ];
+
+        const isRouteAllowedByLoginMode = (path: string) => {
+          if (!activeLoginMode) return path === '/select-initial-context';
+          if (activeLoginMode === 'STORE') return true;
+          return warehouseModeAllowedPrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
         };
 
         // Helper: ruta por defecto según permisos (solo para USER)
@@ -139,7 +178,12 @@ export function MainLayout({ children }: MainLayoutProps) {
           "/dashboard/productos",
           "/dashboard/clientes",
           "/dashboard/inventario",
-          "/dashboard/support"
+          "/dashboard/support",
+          "/dashboard/warehouses",
+          "/dashboard/empleados",
+          "/dashboard/proveedores",
+          "/dashboard/ordenes-suministro",
+          "/dashboard/configuracion/usuarios"
         ];
         
         // Verificar si la ruta actual está permitida para el rol USER
@@ -160,6 +204,12 @@ export function MainLayout({ children }: MainLayoutProps) {
           router.push(target);
           return;
         }
+
+        if (!isPublicRoute && !isRouteAllowedByLoginMode(pathname)) {
+          const target = userRole === 'ADMIN' ? '/dashboard/warehouses' : getDefaultUserRoute();
+          router.push(target);
+          return;
+        }
       }
       
       // Si llegamos aquí, la verificación de autenticación está completa
@@ -167,7 +217,7 @@ export function MainLayout({ children }: MainLayoutProps) {
     };
 
     checkAuth();
-  }, [pathname, isAuthenticated, isPublicRoute, loading, router, user, hasStoreSelected, tenantFeaturesLoaded, tenantFeatures, hasPermission]);
+  }, [pathname, isAuthenticated, isPublicRoute, loading, router, user, activeLoginMode, hasStoreSelected, hasWarehouseSelected, tenantFeaturesLoaded, tenantFeatures, hasPermission]);
 
   // Mostrar spinner de carga mientras se verifica la autenticación
   if (!isClient || loading || !authChecked) {
@@ -183,13 +233,17 @@ export function MainLayout({ children }: MainLayoutProps) {
     return <div className="min-h-screen bg-background">{children}</div>;
   }
 
+  if (pathname === '/select-initial-context' || pathname.startsWith('/select-initial-context/')) {
+    return <div className="min-h-screen bg-background">{children}</div>;
+  }
+
   // Layout principal autenticado
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <AppHeader />
       <div className="flex flex-1">
         <AppSidebar />
-        <main key={currentStore?.id || 'no-store'} className="flex-1 p-4 md:p-6 md:ml-64 pt-20 md:pt-6">
+        <main className="flex-1 p-4 md:p-6 md:ml-64 pt-20 md:pt-6">
           {children}
         </main>
       </div>

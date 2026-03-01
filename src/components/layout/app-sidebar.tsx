@@ -1,14 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   Package,
   Users,
   FileText,
-  Settings,
   LogOut,
   Sun,
   ShoppingCart,
@@ -25,6 +24,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from '@/contexts/auth-context';
 import { usePermissions } from '@/hooks/usePermissions';
 import { AuthStore } from '@/contexts/auth-context';
+import type { LoginMode } from '@/services/auth';
 import {
   Select,
   SelectContent,
@@ -51,7 +51,8 @@ type SidebarItem = {
 const getSidebarItems = (
   hasPermission: (permission: string) => boolean,
   tenantFeatures?: string[],
-  tenantFeaturesLoaded?: boolean
+  tenantFeaturesLoaded?: boolean,
+  activeLoginMode?: LoginMode | null
 ) => {
   const baseItems: SidebarItem[] = [
     {
@@ -155,6 +156,16 @@ const getSidebarItems = (
   ];
 
   const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
+  const warehouseAllowedRoutes = new Set([
+    '/dashboard/productos',
+    '/dashboard/inventario',
+    '/dashboard/support',
+    '/dashboard/warehouses',
+    '/dashboard/empleados',
+    '/dashboard/proveedores',
+    '/dashboard/ordenes-suministro',
+    '/dashboard/configuracion/usuarios',
+  ]);
   const hasTenantFeature = (required?: string[]) => {
     if (!tenantFeaturesLoaded) return true;
     if (!required || required.length === 0) return true;
@@ -164,6 +175,10 @@ const getSidebarItems = (
 
   // Filtrado solo por permisos y tenant features
   return baseItems.filter((item) => {
+    if (activeLoginMode === 'WAREHOUSE' && !warehouseAllowedRoutes.has(item.href)) {
+      return false;
+    }
+
     // 1) Tenant features
     if (!hasTenantFeature(item.requiredTenantFeatures)) return false;
 
@@ -179,12 +194,14 @@ const getSidebarItems = (
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const { user, logout, currentStore, hasPermission, selectStore, tenantFeatures, tenantFeaturesLoaded } = useAuth();
-  const { hasPermission: hasPermissionHook, canManageUsers } = usePermissions();
-  const sidebarItems = getSidebarItems(hasPermissionHook, tenantFeatures, tenantFeaturesLoaded);
+  const { user, logout, currentStore, currentWarehouse, activeLoginMode, selectStore, selectWarehouse, tenantFeatures, tenantFeaturesLoaded } = useAuth();
+  const { hasPermission: hasPermissionHook } = usePermissions();
+  const sidebarItems = getSidebarItems(hasPermissionHook, tenantFeatures, tenantFeaturesLoaded, activeLoginMode);
 
-  const canSelectStore = (user?.stores?.length || 0) > 1;
+  const canSelectStore = activeLoginMode === 'STORE' && (user?.stores?.length || 0) > 1;
+  const canSelectWarehouse = activeLoginMode === 'WAREHOUSE' && (user?.warehouses?.length || 0) > 1;
+  const showStoreSelector = activeLoginMode === 'STORE' && !!currentStore;
+  const showWarehouseSelector = activeLoginMode === 'WAREHOUSE' && !!currentWarehouse;
   
   return (
     <>
@@ -192,8 +209,8 @@ export function AppSidebar() {
       <aside className="hidden md:block fixed left-0 top-0 h-screen w-64 bg-card/95 backdrop-blur-sm border-r border-border/50 shadow-sm z-40">
         <div className="flex h-full flex-col pt-16">
         
-        {/* Información de la tienda actual */}
-        {currentStore && (
+        {/* Información del contexto actual */}
+        {showStoreSelector && currentStore && (
           <div className="px-4 py-3 border-b bg-gradient-to-r from-primary/5 to-primary/10">
             <div className="flex items-center gap-3">
               <Building className="h-5 w-5 text-primary" />
@@ -205,8 +222,7 @@ export function AppSidebar() {
                     onValueChange={(storeId) => {
                       const nextStore = user?.stores?.find((s) => s.id === storeId);
                       if (nextStore) {
-                        selectStore(nextStore as AuthStore);
-                        router.refresh();
+                        void selectStore(nextStore as AuthStore);
                       }
                     }}
                   >
@@ -223,6 +239,41 @@ export function AppSidebar() {
                   </Select>
                 ) : (
                   <p className="text-sm font-semibold text-foreground truncate">{currentStore.name}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showWarehouseSelector && currentWarehouse && (
+          <div className="px-4 py-3 border-b bg-gradient-to-r from-primary/5 to-primary/10">
+            <div className="flex items-center gap-3">
+              <Warehouse className="h-5 w-5 text-primary" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Almacén</p>
+                {canSelectWarehouse ? (
+                  <Select
+                    value={currentWarehouse.id}
+                    onValueChange={(warehouseId) => {
+                      const nextWarehouse = user?.warehouses?.find((w) => w.id === warehouseId);
+                      if (nextWarehouse) {
+                        void selectWarehouse(nextWarehouse as AuthStore);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-8 px-2 text-sm font-semibold">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(user?.warehouses || []).map((warehouse) => (
+                        <SelectItem key={warehouse.id} value={warehouse.id}>
+                          {warehouse.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm font-semibold text-foreground truncate">{currentWarehouse.name}</p>
                 )}
               </div>
             </div>
@@ -274,7 +325,7 @@ export function AppSidebar() {
 
           {/* Botón de cerrar sesión */}
           <button
-            onClick={logout}
+            onClick={() => logout()}
             type="button"
             className="group flex w-full items-center rounded-md px-3 py-2 text-sm font-medium text-foreground/80 hover:bg-accent/50 hover:text-foreground"
           >
@@ -289,7 +340,7 @@ export function AppSidebar() {
       <nav className="md:hidden fixed top-0 left-0 right-0 z-40 bg-card/95 border-b border-border/60 backdrop-blur-sm">
         <div className="flex items-center h-14">
           {/* Primera mitad: Selector de tienda */}
-          {currentStore && (
+          {showStoreSelector && currentStore && (
             <div className="flex-1 px-3 py-2 border-r border-border/40">
               <div className="flex items-center gap-2 w-full">
                 <Building className="h-4 w-4 text-primary flex-shrink-0" />
@@ -300,8 +351,7 @@ export function AppSidebar() {
                       onValueChange={(storeId) => {
                         const nextStore = user?.stores?.find((s) => s.id === storeId);
                         if (nextStore) {
-                          selectStore(nextStore as AuthStore);
-                          router.refresh();
+                          void selectStore(nextStore as AuthStore);
                         }
                       }}
                     >
@@ -324,8 +374,42 @@ export function AppSidebar() {
             </div>
           )}
 
+          {showWarehouseSelector && currentWarehouse && (
+            <div className="flex-1 px-3 py-2 border-r border-border/40">
+              <div className="flex items-center gap-2 w-full">
+                <Warehouse className="h-4 w-4 text-primary flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  {canSelectWarehouse ? (
+                    <Select
+                      value={currentWarehouse.id}
+                      onValueChange={(warehouseId) => {
+                        const nextWarehouse = user?.warehouses?.find((w) => w.id === warehouseId);
+                        if (nextWarehouse) {
+                          void selectWarehouse(nextWarehouse as AuthStore);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-7 px-2 text-xs font-semibold w-full border-0 bg-transparent hover:bg-accent/50 focus:ring-0">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(user?.warehouses || []).map((warehouse) => (
+                          <SelectItem key={warehouse.id} value={warehouse.id}>
+                            {warehouse.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-xs font-semibold text-foreground truncate">{currentWarehouse.name}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Segunda mitad: Lista desplegable de secciones */}
-          <div className="flex-1 px-3 py-2 border-l border-border/40 border-r border-border/40">
+          <div className="flex-1 px-3 py-2 border-l border-r border-border/40">
             <div className="flex items-center gap-2">
               <Menu className="h-4 w-4 text-primary flex-shrink-0" />
               <DropdownMenu>

@@ -28,7 +28,6 @@ import {
 import { toast } from 'sonner';
 import { cashSessionService } from '@/services/cash-session.service';
 import { cashService } from '@/services/cash.service';
-import { api } from '@/services/api';
 import { clientService } from '@/services/client.service';
 import { CashSession, CashBalance, CashMovement, CashMovementListItem, CashMovementLookupItem } from '@/types/cash.types';
 import { useAuth } from '@/contexts/auth-context';
@@ -287,8 +286,7 @@ export default function CajaPage() {
 
     setOpenSessionsLoading(true);
     try {
-      const response = await api.get(`/cash-session/store/${currentStore.id}/open/all`);
-      const sessions = Array.isArray(response.data) ? response.data : [];
+      const sessions = await cashSessionService.getOpenCashSessionsByStore(currentStore.id);
       const normalized: CashSession[] = sessions.map((session: any) => ({
         ...session,
         openingAmount: Number(session?.openingAmount || 0),

@@ -28,14 +28,33 @@ export interface LoginCredentials {
   password: string;
 }
 
+export type LoginMode = 'STORE' | 'WAREHOUSE';
+
+export interface LoginContextPayload {
+  loginMode?: LoginMode;
+  storeId?: string;
+  warehouseId?: string;
+}
+
 export interface PermissionsResponse {
   permissions: string[];
 }
 
 export interface AuthResponse {
   access_token: string;
-  refresh_token: string;
+  refresh_token?: string;
   expires_in: number;
+  stores?: {
+    id: string;
+    name: string;
+  }[];
+  warehouses?: {
+    id: string;
+    name: string;
+  }[];
+  activeLoginMode?: LoginMode | null;
+  activeStoreId?: string | null;
+  activeWarehouseId?: string | null;
   user: {
     id: string;
     email: string;
@@ -47,18 +66,34 @@ export interface AuthResponse {
       id: string;
       name: string;
     }[];
+    warehouses?: {
+      id: string;
+      name: string;
+    }[];
+    activeLoginMode?: LoginMode | null;
+    activeStoreId?: string | null;
+    activeWarehouseId?: string | null;
   };
 }
 
 export interface RefreshTokenResponse {
   access_token: string;
-  refresh_token: string;
+  refresh_token?: string;
   expires_in: number;
+}
+
+export interface ChangeContextRequest {
+  storeId?: string;
+  warehouseId?: string;
+}
+
+export interface ChangeContextResponse {
+  access_token: string;
+  user: AuthResponse['user'];
 }
 
 // Función auxiliar para obtener token del localStorage
 export const TOKEN_KEY = 'auth_token';
-const REFRESH_TOKEN_KEY = 'refresh_token';
 const USER_KEY = 'user';
 
 // Función auxiliar para obtener token del localStorage
@@ -67,18 +102,12 @@ export const getToken = (): string | null => {
   return localStorage.getItem(TOKEN_KEY);
 };
 
-// Función auxiliar para obtener refresh token del localStorage
-const getRefreshToken = (): string | null => {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem(REFRESH_TOKEN_KEY);
-};
-
 // Verificar si el token ha expirado
 export const isTokenExpired = (token?: string): boolean => {
   if (typeof window === 'undefined') return true;
   const tokenToCheck = token || getToken();
   if (!tokenToCheck) return true;
-  
+
   try {
     const decoded = jwtDecode<JwtPayload>(tokenToCheck);
     const currentTime = Date.now() / 1000;
@@ -89,25 +118,30 @@ export const isTokenExpired = (token?: string): boolean => {
   }
 };
 
-
 // Objeto principal del servicio de autenticación con todos los métodos de autenticación
 export const authService = {
   // Iniciar sesión con email y contraseña
-  async login(credentials: LoginCredentials): Promise<AuthResponse> {
+  async login(credentials: LoginCredentials, context?: LoginContextPayload): Promise<AuthResponse> {
     try {
-
       // Limpiar headers de autenticación existentes para asegurar un estado limpio
       delete api.defaults.headers.common['Authorization'];
 
       // Hacer la solicitud de login sin headers de autenticación
-      const response = await api.post<AuthResponse>('/auth/login', credentials, {
+      const payload = {
+        ...credentials,
+        ...(context?.loginMode ? { loginMode: context.loginMode } : {}),
+        ...(context?.storeId ? { storeId: context.storeId } : {}),
+        ...(context?.warehouseId ? { warehouseId: context.warehouseId } : {}),
+      };
+
+      const response = await api.post<AuthResponse>('/auth/login', payload, {
         headers: {
           'Content-Type': 'application/json',
         },
         withCredentials: true
       });
 
-      const { access_token, refresh_token, user } = response.data;
+      const { access_token, user } = response.data;
 
       if (!access_token || !user) {
         throw new Error('Respuesta de autenticación inválida');
@@ -115,9 +149,6 @@ export const authService = {
 
       // Almacenar tokens y datos del usuario
       localStorage.setItem(TOKEN_KEY, access_token);
-      if (refresh_token) {
-        localStorage.setItem(REFRESH_TOKEN_KEY, refresh_token);
-      }
 
       // Normalize role format (handle both 'ADMIN'/'USER' and 'Admin'/'User')
       const normalizeRole = (role: string): string => {
@@ -143,12 +174,31 @@ export const authService = {
       this.scheduleTokenRefresh();
 
       return response.data;
-
     } catch (error) {
       console.error('Error en authService.login:', error);
       this.logout();
       throw error;
     }
+  },
+
+  async changeContext(body: ChangeContextRequest): Promise<AuthResponse['user']> {
+    const response = await api.post<ChangeContextResponse>('/auth/context', body, {
+      withCredentials: true,
+    });
+
+    const { access_token, user } = response.data;
+
+    if (!access_token || !user) {
+      throw new Error('Respuesta inválida al cambiar contexto');
+    }
+
+    localStorage.setItem(TOKEN_KEY, access_token);
+
+    if (api?.defaults?.headers?.common) {
+      api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+    }
+
+    return user;
   },
 
   // Obtener usuario actual del localStorage o token
@@ -197,7 +247,7 @@ export const authService = {
             if (token) {
               resolve({
                 access_token: token,
-                refresh_token: getRefreshToken() || '',
+                refresh_token: '',
                 expires_in: 3600
               });
             } else {
@@ -216,19 +266,15 @@ export const authService = {
         withCredentials: true
       });
 
-      const { access_token, refresh_token } = response.data;
+      const { access_token } = response.data;
 
       // Actualizar tokens
       localStorage.setItem('auth_token', access_token);
-      if (refresh_token) {
-        localStorage.setItem('refresh_token', refresh_token);
-      }
 
       // Actualizar header de autenticación
       api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
 
       return response.data;
-
     } catch (error) {
       console.error('Error refreshing token:', error);
       this.logout();

@@ -38,19 +38,8 @@ export default function LoginPage() {
       const success = await login(email, password);
       
       if (success) {
-        
-        const userStores = success.stores || [];
-
-        // Si no hay tiendas, negar acceso aunque el login sea válido
-        if (userStores.length === 0) {
-          console.error('El usuario no tiene tiendas asignadas');
-          setError('No tienes tiendas asignadas. Contacta al administrador.');
-          return;
-        }
-
-        // Si hay múltiples tiendas, ir a selección
-        if (userStores.length > 1) {
-          window.location.href = '/store-selection';
+        if (!success.activeLoginMode) {
+          window.location.href = '/select-initial-context';
           return;
         }
 

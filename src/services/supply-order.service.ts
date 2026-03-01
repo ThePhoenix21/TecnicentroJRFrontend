@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { domainApi } from "./domainApi";
 import type {
   CreateSupplyOrderDto,
   ReceiveSupplyOrderDto,
@@ -12,6 +12,13 @@ import type {
 class SupplyOrderService {
   private baseUrl = "/supply-orders";
 
+  private getDomainPath(path: string): { store: string; warehouse: string } {
+    return {
+      store: `${this.baseUrl}${path}`,
+      warehouse: `/warehouse/receptions${path}`,
+    };
+  }
+
   async getSupplyOrders(filters: SupplyOrderFilters = {}): Promise<SupplyOrderListResponse> {
     const params = new URLSearchParams();
 
@@ -24,44 +31,46 @@ class SupplyOrderService {
     if (filters.code) params.set("code", filters.code);
 
     const query = params.toString();
-    const url = query ? `${this.baseUrl}?${query}` : this.baseUrl;
-    const response = await api.get<SupplyOrderListResponse>(url);
+    const response = await domainApi.get<SupplyOrderListResponse>({
+      store: query ? `${this.baseUrl}?${query}` : this.baseUrl,
+      warehouse: query ? `/warehouse/receptions?${query}` : '/warehouse/receptions',
+    });
     return response.data;
   }
 
   async getSupplyOrderById(orderId: string): Promise<SupplyOrderDetail> {
-    const response = await api.get<SupplyOrderDetail>(`${this.baseUrl}/${orderId}`);
+    const response = await domainApi.get<SupplyOrderDetail>(this.getDomainPath(`/${orderId}`));
     return response.data;
   }
 
   async annullSupplyOrder(orderId: string): Promise<void> {
-    await api.post(`${this.baseUrl}/${orderId}/annull`);
+    await domainApi.post(this.getDomainPath(`/${orderId}/annull`));
   }
 
   async approveSupplyOrder(orderId: string): Promise<void> {
-    await api.post(`${this.baseUrl}/${orderId}/approve`);
+    await domainApi.post(this.getDomainPath(`/${orderId}/approve`));
   }
 
   async receiveSupplyOrder(orderId: string, payload: ReceiveSupplyOrderDto): Promise<void> {
-    await api.post(`${this.baseUrl}/${orderId}/receive`, payload);
+    await domainApi.post(this.getDomainPath(`/${orderId}/receive`), payload);
   }
 
   async closePartialSupplyOrder(orderId: string): Promise<ClosePartialSupplyOrderResponse> {
-    const response = await api.post<ClosePartialSupplyOrderResponse>(`${this.baseUrl}/${orderId}/close-partial`);
+    const response = await domainApi.post<ClosePartialSupplyOrderResponse>(this.getDomainPath(`/${orderId}/close-partial`));
     return response.data;
   }
 
   async createSupplyOrder(payload: CreateSupplyOrderDto): Promise<string> {
-    const response = await api.post<string>(this.baseUrl, payload);
+    const response = await domainApi.post<string>(this.getDomainPath(''), payload);
     return response.data;
   }
 
   async updateSupplyOrder(orderId: string, payload: { description: string; storeId: string; products: any[] }): Promise<void> {
-    await api.put(`${this.baseUrl}/${orderId}`, payload);
+    await domainApi.put(this.getDomainPath(`/${orderId}`), payload);
   }
 
   async getSupplyOrdersLookup(): Promise<SupplyOrderLookupItem[]> {
-    const response = await api.get<SupplyOrderLookupItem[]>(`${this.baseUrl}/lookup`);
+    const response = await domainApi.get<SupplyOrderLookupItem[]>(this.getDomainPath('/lookup'));
     return response.data;
   }
 
@@ -69,14 +78,14 @@ class SupplyOrderService {
     if (pdfBlob) {
       const formData = new FormData();
       formData.append('pdf', pdfBlob, `orden-${orderId}.pdf`);
-      const response = await api.post(`${this.baseUrl}/${orderId}/approve-with-email`, formData, {
+      const response = await domainApi.post(this.getDomainPath(`/${orderId}/approve-with-email`), formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
       return response.data;
     } else {
-      const response = await api.post(`${this.baseUrl}/${orderId}/approve-with-email`);
+      const response = await domainApi.post(this.getDomainPath(`/${orderId}/approve-with-email`));
       return response.data;
     }
   }

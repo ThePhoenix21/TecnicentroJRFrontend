@@ -1,4 +1,5 @@
 import { api } from './api';
+import { ensureStoreMode } from './domainApi';
 import { CashSession, CashClosingPrintResponse } from '@/types/cash.types';
 
 export interface CreateCashSessionRequest {
@@ -32,6 +33,7 @@ export interface GetClosedCashSessionsResponse {
 export class CashSessionService {
   // ✅ Obtener todas las sesiones de caja (solo ADMIN)
   async getCashSessions(): Promise<CashSession[]> {
+    ensureStoreMode();
     try {
       const token = localStorage.getItem("auth_token");
       const response = await api.get('/cash-session', {
@@ -49,6 +51,7 @@ export class CashSessionService {
 
   // ✅ Obtener sesiones de caja cerradas por tienda (con filtros y paginación)
   async getClosedCashSessionsByStore(payload: GetClosedCashSessionsRequest): Promise<GetClosedCashSessionsResponse> {
+    ensureStoreMode();
     try {
       const token = localStorage.getItem("auth_token");
       
@@ -74,8 +77,26 @@ export class CashSessionService {
     }
   }
 
+  async getOpenCashSessionsByStore(storeId: string): Promise<CashSession[]> {
+    ensureStoreMode();
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await api.get(`/cash-session/store/${storeId}/open/all`, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error('Error al obtener sesiones de caja abiertas:', error);
+      throw error;
+    }
+  }
+
   // ✅ Obtener sesiones de caja por tienda (con paginación)
   async getCashSessionsByStore(storeId: string, page: number = 1, limit: number = 20): Promise<any> {
+    ensureStoreMode();
     try {
       const token = localStorage.getItem("auth_token");
       const response = await api.get(`/cash-session/store/${storeId}?page=${page}&limit=${limit}`, {
@@ -93,6 +114,7 @@ export class CashSessionService {
 
   // ✅ Obtener sesión de caja abierta para una tienda
   async getOpenCashSession(storeId: string): Promise<CashSession | null> {
+    ensureStoreMode();
     try {
       const token = localStorage.getItem("auth_token");
       const response = await api.get(`/cash-session/store/${storeId}/open`, {
@@ -114,6 +136,7 @@ export class CashSessionService {
 
   // ✅ Crear nueva sesión de caja
   async createCashSession(data: CreateCashSessionRequest): Promise<any> {
+    ensureStoreMode();
     try {
       const token = localStorage.getItem("auth_token");
       const response = await api.post('/cash-session', data, {
@@ -135,6 +158,7 @@ export class CashSessionService {
 
   // ✅ Cerrar sesión de caja (actualizado: POST y requiere email/password)
   async closeCashSession(sessionId: string, data: CloseCashSessionRequest): Promise<any> {
+    ensureStoreMode();
     try {
       const token = localStorage.getItem("auth_token");
       const response = await api.post(`/cash-session/${sessionId}/close`, data, {
@@ -152,6 +176,7 @@ export class CashSessionService {
 
   // ✅ Obtener sesión de caja por ID
   async getCashSessionById(sessionId: string): Promise<CashSession> {
+    ensureStoreMode();
     try {
       const token = localStorage.getItem("auth_token");
       const response = await api.get(`/cash-session/${sessionId}`, {
@@ -169,6 +194,7 @@ export class CashSessionService {
 
   // ✅ Obtener sesión actual de una tienda
   async getCurrentSessionByStore(storeId: string): Promise<CashSession | null> {
+    ensureStoreMode();
     try {
       const token = localStorage.getItem("auth_token");
       const response = await api.get(`/cash-session/current/${storeId}`, {
@@ -190,6 +216,7 @@ export class CashSessionService {
 
   // ✅ Obtener datos listos para impresión del cierre de caja
   async getCashClosingPrint(sessionId: string): Promise<CashClosingPrintResponse> {
+    ensureStoreMode();
     try {
       const token = localStorage.getItem("auth_token");
       const response = await api.get(`/cash-session/${sessionId}/closing-print`, {

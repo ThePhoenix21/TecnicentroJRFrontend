@@ -1,4 +1,5 @@
 import { api } from './api';
+import { ensureStoreMode } from './domainApi';
 import {
   CashSession,
   CashBalance,
@@ -18,6 +19,7 @@ const isAuthError = (error: unknown) => {
 class CashService {
   // Abrir caja
   async openCashSession(data: OpenCashSessionRequest): Promise<{ message: string; cashSession: CashSession }> {
+    ensureStoreMode();
     try {
       const response = await api.post('/cash-session', data);
       return response.data;
@@ -29,6 +31,7 @@ class CashService {
 
   // Cerrar caja
   async closeCashSession(sessionId: string): Promise<CloseCashSessionResponse> {
+    ensureStoreMode();
     try {
       const response = await api.post(`/cash-session/${sessionId}/close`);
       return response.data;
@@ -40,6 +43,7 @@ class CashService {
 
   // Obtener sesión de caja actual
   async getCurrentCashSession(storeId: string): Promise<CashSession | null> {
+    ensureStoreMode();
     try {
       const response = await api.get(`/cash-session/current/${storeId}`);
       return response.data;
@@ -51,6 +55,7 @@ class CashService {
 
   // Obtener cuadre de caja
   async getCashBalance(sessionId: string): Promise<CashBalance> {
+    ensureStoreMode();
     try {
       const response = await api.get(`/cash-movement/balance/${sessionId}`);
       return response.data;
@@ -62,6 +67,7 @@ class CashService {
 
   // Agregar movimiento manual
   async addManualMovement(data: ManualMovementRequest): Promise<CashMovement> {
+    ensureStoreMode();
     try {
       const response = await api.post('/cash-movement/manual', data);
       return response.data;
@@ -73,6 +79,7 @@ class CashService {
 
   // Obtener historial de sesiones de caja
   async getCashSessions(storeId: string, page = 1, limit = 20): Promise<{ data: CashSession[]; total: number }> {
+    ensureStoreMode();
     try {
       const response = await api.get(`/cash-session/store/${storeId}?page=${page}&limit=${limit}`);
       return response.data;
@@ -84,6 +91,7 @@ class CashService {
 
   // Obtener movimientos de una sesión
   async getCashMovements(sessionId: string, page = 1, limit = 50): Promise<{ data: CashMovement[]; total: number }> {
+    ensureStoreMode();
     try {
       const response = await api.get(`/cash-movement/session/${sessionId}?page=${page}&limit=${limit}`);
       return response.data;
@@ -102,6 +110,7 @@ class CashService {
     operation?: string;
     clientName?: string;
   }): Promise<CashMovementListResponse> {
+    ensureStoreMode();
     try {
       const searchParams = new URLSearchParams();
       searchParams.set('page', String(params.page ?? 1));
@@ -121,6 +130,7 @@ class CashService {
   }
 
   async getCashMovementsLookupPayment(): Promise<CashMovementLookupItem[]> {
+    ensureStoreMode();
     try {
       const response = await api.get<CashMovementLookupItem[]>('/cash-movement/lookup-payment');
       return Array.isArray(response.data) ? response.data : [];
@@ -133,6 +143,7 @@ class CashService {
   }
 
   async getCashMovementsLookupOperation(): Promise<CashMovementLookupItem[]> {
+    ensureStoreMode();
     try {
       const response = await api.get<CashMovementLookupItem[]>('/cash-movement/lookup-operation');
       return Array.isArray(response.data) ? response.data : [];

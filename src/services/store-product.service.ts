@@ -1,4 +1,4 @@
-import { api } from './api';
+import { domainApi } from './domainApi';
 import {
   StoreProduct,
   Product,
@@ -31,7 +31,10 @@ class StoreProductService {
       if (options.pageSize) params.set('pageSize', options.pageSize.toString());
       if (options.search) params.set('search', options.search);
       
-      const response = await api.get(`/store/products/store/${storeId}/simple?${params}`);
+      const response = await domainApi.get<{ data: StoreProduct[]; total: number }>({
+        store: `/store/products/store/${storeId}/simple?${params.toString()}`,
+        warehouse: `/warehouse/products/simple?${params.toString()}`,
+      });
       return response.data; // El backend devuelve {data: Array, total}
     } catch (error) {
       const anyError = error as any;
@@ -48,7 +51,10 @@ class StoreProductService {
       if (params?.search) searchParams.set('search', params.search);
       const qs = searchParams.toString();
       const url = qs ? `/store/products/lookup?${qs}` : '/store/products/lookup';
-      const response = await api.get(url);
+      const response = await domainApi.get({
+        store: url,
+        warehouse: qs ? `/warehouse/products/lookup?${qs}` : '/warehouse/products/lookup',
+      });
       return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
       console.error('[StoreProductService.getStoreProductsLookup] Error:', error);
@@ -59,7 +65,10 @@ class StoreProductService {
   async getStoreProductsStock(storeId: string): Promise<StoreProductStockItem[]> {
     try {
       const params = new URLSearchParams({ storeId });
-      const response = await api.get(`/catalog/products/store-stock?${params.toString()}`);
+      const response = await domainApi.get({
+        store: `/catalog/products/store-stock?${params.toString()}`,
+        warehouse: `/warehouse/products/store-stock?${params.toString()}`,
+      });
       return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
       console.error('[StoreProductService.getStoreProductsStock] Error:', error);
@@ -82,7 +91,10 @@ class StoreProductService {
       if (params.name) searchParams.set('name', params.name);
       if (typeof params.inStock === 'boolean') searchParams.set('inStock', String(params.inStock));
 
-      const response = await api.get<StoreProductsListResponse>(`/store/products/list?${searchParams.toString()}`);
+      const response = await domainApi.get<StoreProductsListResponse>({
+        store: `/store/products/list?${searchParams.toString()}`,
+        warehouse: `/warehouse/products/list?${searchParams.toString()}`,
+      });
       return response.data;
     } catch (error) {
       console.error('[StoreProductService.getStoreProductsList] Error:', error);
@@ -96,7 +108,10 @@ class StoreProductService {
       if (search) params.set('search', search);
       const qs = params.toString();
       const url = qs ? `/catalog/products/lookup?${qs}` : '/catalog/products/lookup';
-      const response = await api.get<CatalogProductLookupItem[]>(url);
+      const response = await domainApi.get<CatalogProductLookupItem[]>({
+        store: url,
+        warehouse: qs ? `/warehouse/products/lookup?${qs}` : '/warehouse/products/lookup',
+      });
       return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
       console.error('[StoreProductService.getCatalogProductsLookup] Error:', error);
@@ -106,7 +121,10 @@ class StoreProductService {
 
   async getStoreProductDetail(id: string): Promise<StoreProductDetail> {
     try {
-      const response = await api.get<StoreProductDetail>(`/store/products/findOne/${id}`);
+      const response = await domainApi.get<StoreProductDetail>({
+        store: `/store/products/findOne/${id}`,
+        warehouse: `/warehouse/products/${id}`,
+      });
       return response.data;
     } catch (error) {
       console.error('[StoreProductService.getStoreProductDetail] Error:', error);
@@ -116,7 +134,10 @@ class StoreProductService {
 
   async deleteCatalogProduct(productId: string, payload: CatalogProductDeletePayload): Promise<void> {
     try {
-      await api.delete(`/catalog/products/remove/${productId}`, { data: payload });
+      await domainApi.delete({
+        store: `/catalog/products/remove/${productId}`,
+        warehouse: `/warehouse/products/${productId}`,
+      }, { data: payload });
     } catch (error) {
       console.error('[StoreProductService.deleteCatalogProduct] Error:', error);
       throw error;
@@ -132,7 +153,10 @@ class StoreProductService {
       });
       if (search) params.append('search', search);
 
-      const response = await api.get(`/store/products/store/${storeId}?${params}`);
+      const response = await domainApi.get<{data: StoreProduct[], total: number, page: number, limit: number, totalPages: number}>({
+        store: `/store/products/store/${storeId}?${params.toString()}`,
+        warehouse: `/warehouse/products?${params.toString()}`,
+      });
       return response.data; // El backend devuelve {data: Array, total, page, limit, totalPages}
     } catch (error) {
       if (isAuthOrForbiddenError(error)) {
@@ -178,7 +202,10 @@ class StoreProductService {
       if (search) params.append('search', search);
       
       // Endpoint correcto: GET /catalog/products/all
-      const response = await api.get(`/catalog/products/all?${params}`);
+      const response = await domainApi.get<ProductsResponse>({
+        store: `/catalog/products/all?${params.toString()}`,
+        warehouse: `/warehouse/products/all?${params.toString()}`,
+      });
       return response.data;
     } catch (error) {
       console.error('Error al obtener productos:', error);
@@ -189,7 +216,10 @@ class StoreProductService {
   // Crear producto de tienda (nuevo o existente)
   async createStoreProduct(data: CreateStoreProductRequest): Promise<StoreProduct> {
     try {
-      const response = await api.post('/store/products/create', data);
+      const response = await domainApi.post<StoreProduct>({
+        store: '/store/products/create',
+        warehouse: '/warehouse/products',
+      }, data);
       return response.data;
     } catch (error) {
       console.error('Error al crear producto de tienda:', error);
@@ -201,9 +231,10 @@ class StoreProductService {
   async updateStoreProduct(id: string, data: any): Promise<StoreProduct> {
     try {
       // Endpoint correcto: PATCH /store/products/update/:id
-      const url = `/store/products/update/${id}`;
-
-      const response = await api.patch(url, data);
+      const response = await domainApi.patch<StoreProduct>({
+        store: `/store/products/update/${id}`,
+        warehouse: `/warehouse/products/${id}`,
+      }, data);
 
       return response.data;
     } catch (error) {
@@ -216,7 +247,10 @@ class StoreProductService {
   async deleteStoreProduct(id: string): Promise<void> {
     try {
       // Endpoint correcto: DELETE /store/products/remove/:id
-      await api.delete(`/store/products/remove/${id}`);
+      await domainApi.delete({
+        store: `/store/products/remove/${id}`,
+        warehouse: `/warehouse/products/${id}`,
+      });
     } catch (error) {
       console.error('Error al eliminar producto de tienda:', error);
       throw error;
@@ -226,7 +260,10 @@ class StoreProductService {
   // Actualizar stock
   async updateStock(id: string, stock: number): Promise<StoreProduct> {
     try {
-      const response = await api.patch(`/store/products/${id}/stock`, { stock });
+      const response = await domainApi.patch<StoreProduct>({
+        store: `/store/products/${id}/stock`,
+        warehouse: `/warehouse/products/${id}/stock`,
+      }, { stock });
       return response.data;
     } catch (error) {
       console.error('Error al actualizar stock:', error);
