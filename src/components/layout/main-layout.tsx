@@ -30,6 +30,14 @@ export function MainLayout({ children }: MainLayoutProps) {
       
       setIsClient(true);
       setAuthChecked(false); // Resetear verificación cuando cambian las dependencias
+
+      // Rutas públicas nunca deben quedar bloqueadas por loading/authChecked.
+      // En particular, si el AuthProvider está cargando, este layout no debe mostrar spinner
+      // encima del login.
+      if (isPublicRoute) {
+        setAuthChecked(true);
+        return;
+      }
       
       // Esperar a que el estado de autenticación se cargue completamente
       if (loading) {
@@ -59,8 +67,8 @@ export function MainLayout({ children }: MainLayoutProps) {
           return;
         }
 
-        if (activeLoginMode === 'STORE' && !hasStoreSelected && pathname !== '/store-selection') {
-          router.push('/store-selection');
+        if (activeLoginMode === 'STORE' && !hasStoreSelected && pathname !== '/select-initial-context') {
+          router.push('/select-initial-context');
           return;
         }
 
@@ -118,16 +126,17 @@ export function MainLayout({ children }: MainLayoutProps) {
           return hasTenantFeature(rule.requiredTenantFeatures);
         };
 
-        const warehouseModeAllowedPrefixes = [
+        const warehousePreferredRoutes = [
           '/dashboard/productos',
           '/dashboard/inventario',
           '/dashboard/support',
-          '/dashboard/warehouses',
           '/dashboard/empleados',
           '/dashboard/proveedores',
           '/dashboard/ordenes-suministro',
           '/dashboard/configuracion/usuarios',
         ];
+
+        const warehouseModeAllowedPrefixes = [...warehousePreferredRoutes];
 
         const isRouteAllowedByLoginMode = (path: string) => {
           if (!activeLoginMode) return path === '/select-initial-context';
@@ -144,6 +153,11 @@ export function MainLayout({ children }: MainLayoutProps) {
             return routeFromPermissions;
           }
 
+          if (activeLoginMode === 'WAREHOUSE') {
+            const allowed = warehousePreferredRoutes.find((route) => isRouteAllowedByTenant(route));
+            return allowed || '/dashboard/productos';
+          }
+
           if ((hasPermission("VIEW_ORDERS") || hasPermission("MANAGE_ORDERS")) && isRouteAllowedByTenant('/dashboard/ventas')) return "/dashboard/ventas";
           if ((hasPermission("VIEW_CASH") || hasPermission("MANAGE_CASH")) && isRouteAllowedByTenant('/dashboard/caja')) return "/dashboard/caja";
           if ((hasPermission("VIEW_INVENTORY") || hasPermission("MANAGE_INVENTORY")) && isRouteAllowedByTenant('/dashboard/inventario')) return "/dashboard/inventario";
@@ -154,37 +168,40 @@ export function MainLayout({ children }: MainLayoutProps) {
         };
 
         const getDefaultAdminRoute = () => {
-          const candidates = [
-            '/dashboard',
-            '/dashboard/ventas',
-            '/dashboard/caja',
-            '/dashboard/servicios',
-            '/dashboard/productos',
-            '/dashboard/inventario',
-            '/dashboard/clientes',
-            '/dashboard/tiendas',
-            '/dashboard/configuracion/usuarios',
-          ];
+          const candidates = activeLoginMode === 'WAREHOUSE'
+            ? warehousePreferredRoutes
+            : [
+                '/dashboard',
+                '/dashboard/ventas',
+                '/dashboard/caja',
+                '/dashboard/servicios',
+                '/dashboard/productos',
+                '/dashboard/inventario',
+                '/dashboard/clientes',
+                '/dashboard/tiendas',
+                '/dashboard/configuracion/usuarios',
+              ];
           const match = candidates.find((r) => isRouteAllowedByTenant(r));
-          return match || '/dashboard';
+          return match || (activeLoginMode === 'WAREHOUSE' ? '/dashboard/productos' : '/dashboard');
         };
 
         // Rutas permitidas para usuarios USER (incluimos /dashboard como válido)
-        const userRoutes = [
-          "/dashboard",
-          "/dashboard/caja",
-          "/dashboard/ventas",
-          "/dashboard/servicios",
-          "/dashboard/productos",
-          "/dashboard/clientes",
-          "/dashboard/inventario",
-          "/dashboard/support",
-          "/dashboard/warehouses",
-          "/dashboard/empleados",
-          "/dashboard/proveedores",
-          "/dashboard/ordenes-suministro",
-          "/dashboard/configuracion/usuarios"
-        ];
+        const userRoutes = activeLoginMode === 'WAREHOUSE'
+          ? warehousePreferredRoutes
+          : [
+              "/dashboard",
+              "/dashboard/caja",
+              "/dashboard/ventas",
+              "/dashboard/servicios",
+              "/dashboard/productos",
+              "/dashboard/clientes",
+              "/dashboard/inventario",
+              "/dashboard/support",
+              "/dashboard/empleados",
+              "/dashboard/proveedores",
+              "/dashboard/ordenes-suministro",
+              "/dashboard/configuracion/usuarios"
+            ];
         
         // Verificar si la ruta actual está permitida para el rol USER
         const isUserRoute = userRoutes.some(route => 
@@ -206,7 +223,9 @@ export function MainLayout({ children }: MainLayoutProps) {
         }
 
         if (!isPublicRoute && !isRouteAllowedByLoginMode(pathname)) {
-          const target = userRole === 'ADMIN' ? '/dashboard/warehouses' : getDefaultUserRoute();
+          const target = activeLoginMode === 'WAREHOUSE'
+            ? getDefaultAdminRoute()
+            : (userRole === 'ADMIN' ? '/dashboard' : getDefaultUserRoute());
           router.push(target);
           return;
         }
@@ -219,6 +238,11 @@ export function MainLayout({ children }: MainLayoutProps) {
     checkAuth();
   }, [pathname, isAuthenticated, isPublicRoute, loading, router, user, activeLoginMode, hasStoreSelected, hasWarehouseSelected, tenantFeaturesLoaded, tenantFeatures, hasPermission]);
 
+  // Manejar rutas públicas (login, etc) sin depender de authChecked/loading.
+  if (isPublicRoute) {
+    return <div className="min-h-screen bg-background">{children}</div>;
+  }
+
   // Mostrar spinner de carga mientras se verifica la autenticación
   if (!isClient || loading || !authChecked) {
     return (
@@ -226,11 +250,6 @@ export function MainLayout({ children }: MainLayoutProps) {
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
       </div>
     );
-  }
-
-  // Manejar rutas públicas
-  if (isPublicRoute) {
-    return <div className="min-h-screen bg-background">{children}</div>;
   }
 
   if (pathname === '/select-initial-context' || pathname.startsWith('/select-initial-context/')) {

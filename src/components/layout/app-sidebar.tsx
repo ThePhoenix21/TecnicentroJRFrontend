@@ -160,7 +160,6 @@ const getSidebarItems = (
     '/dashboard/productos',
     '/dashboard/inventario',
     '/dashboard/support',
-    '/dashboard/warehouses',
     '/dashboard/empleados',
     '/dashboard/proveedores',
     '/dashboard/ordenes-suministro',

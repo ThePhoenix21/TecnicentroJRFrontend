@@ -1,4 +1,5 @@
 import { domainApi } from './domainApi';
+import { api } from './api';
 import {
   StoreProduct,
   Product,
@@ -108,10 +109,7 @@ class StoreProductService {
       if (search) params.set('search', search);
       const qs = params.toString();
       const url = qs ? `/catalog/products/lookup?${qs}` : '/catalog/products/lookup';
-      const response = await domainApi.get<CatalogProductLookupItem[]>({
-        store: url,
-        warehouse: qs ? `/warehouse/products/lookup?${qs}` : '/warehouse/products/lookup',
-      });
+      const response = await api.get<CatalogProductLookupItem[]>(url);
       return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
       console.error('[StoreProductService.getCatalogProductsLookup] Error:', error);

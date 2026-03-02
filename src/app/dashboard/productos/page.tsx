@@ -3,9 +3,18 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { storeProductService } from '@/services/store-product.service';
+import { warehouseProductService } from '@/services/warehouse-product.service';
+import { productService } from '@/services/product.service';
 import { inventoryService } from '@/services/inventory.service';
 import { storeService } from '@/services/store.service';
-import { StoreProduct, CreateStoreProductRequest, StoreProductListItem, StoreProductDetail } from '@/types/store-product.types';
+import {
+  StoreProduct,
+  CreateStoreProductRequest,
+  StoreProductListItem,
+  StoreProductDetail,
+  WarehouseProduct,
+  WarehouseProductsListResponse,
+} from '@/types/store-product.types';
 import { StoreLookupItem } from '@/types/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -87,6 +96,7 @@ export default function ProductsPage() {
   const [isDeletingCatalogProduct, setIsDeletingCatalogProduct] = useState(false);
   const [catalogDeleteCredentials, setCatalogDeleteCredentials] = useState({ email: '', password: '' });
   const [showCatalogDeleteForm, setShowCatalogDeleteForm] = useState(false);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
 
   const [formData, setFormData] = useState<StoreProductFormData>({
     name: '',
@@ -103,7 +113,9 @@ export default function ProductsPage() {
   // Inicializar hooks
   const router = useRouter();
   const { toast } = useToast();
-  const { user, currentStore, isAuthenticated, isAdmin, hasPermission } = useAuth();
+  const { user, currentStore, currentWarehouse, activeLoginMode, isAuthenticated, isAdmin, hasPermission } = useAuth();
+
+  const isWarehouseMode = activeLoginMode === 'WAREHOUSE';
 
   const { can } = usePermissions();
 
@@ -114,9 +126,16 @@ export default function ProductsPage() {
   const canManagePrices = can(PERMISSIONS.MANAGE_PRICES);
   const canDeleteProducts = can(PERMISSIONS.DELETE_PRODUCTS);
 
+  const canManageWarehouseProducts = isAdmin || hasPermission?.('MANAGE_WAREHOUSE_PRODUCTS');
+
+  const canManagePricesEffective = isAdmin || canManagePrices;
+  const canViewProductCostEffective = isAdmin || canViewProductCost;
+
   const canCreateProducts = canViewProducts && canManageProducts;
 
   const canManageInventory = isAdmin || hasPermission?.("MANAGE_INVENTORY") || hasPermission?.("inventory.manage");
+
+  const canCreateWarehouseProducts = isAdmin || canManageProducts || canManageInventory || canManageWarehouseProducts || canViewProducts;
 
   const isForbiddenError = (error: unknown) => {
     const anyError = error as any;
@@ -129,14 +148,16 @@ export default function ProductsPage() {
   };
 
   useEffect(() => {
+    if (isWarehouseMode) return;
     if (currentStore?.id && !selectedStoreId) {
       setSelectedStoreId(currentStore.id);
       setStoreQuery(currentStore.name);
     }
-  }, [currentStore?.id, currentStore?.name, selectedStoreId]);
+  }, [currentStore?.id, currentStore?.name, selectedStoreId, isWarehouseMode]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
+    if (isWarehouseMode) return;
 
     const loadStores = async () => {
       try {
@@ -149,10 +170,67 @@ export default function ProductsPage() {
     };
 
     loadStores();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isWarehouseMode]);
 
   const fetchStoreProducts = useCallback(async (targetPage = 1) => {
     if (!isAuthenticated) return;
+
+    if (isWarehouseMode) {
+      if (!canViewProducts) {
+        setStoreProducts([]);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const response = await warehouseProductService.list({
+          page: targetPage,
+          pageSize: PAGE_SIZE,
+          name: nameFilter.trim() || undefined,
+          inStock: hideOutOfStock ? true : undefined,
+        });
+
+        const rows = Array.isArray((response as WarehouseProductsListResponse).data)
+          ? (response as WarehouseProductsListResponse).data
+          : [];
+
+        setStoreProducts(
+          rows.map((wp: WarehouseProduct) => ({
+            id: wp.id,
+            name: wp.product?.name ?? '',
+            price: 0,
+            stock: wp.stock ?? 0,
+            buyCost: wp.product?.buyCost,
+            basePrice: wp.product?.basePrice,
+          }))
+        );
+        setTotal((response as WarehouseProductsListResponse).total || 0);
+        setTotalPages((response as WarehouseProductsListResponse).totalPages || 1);
+        setPage((response as WarehouseProductsListResponse).page || targetPage);
+      } catch (error) {
+        console.error('❌ Error fetching warehouse products:', error);
+        setStoreProducts([]);
+        setTotal(0);
+        setTotalPages(1);
+        if (isUnauthorizedError(error)) return;
+        if (isForbiddenError(error)) {
+          toast({
+            title: 'Sin permisos',
+            description: 'No tienes permisos para ver productos.',
+          });
+        } else {
+          toast({
+            title: 'Error',
+            description: 'No se pudieron cargar los productos',
+            variant: 'destructive',
+          });
+        }
+      } finally {
+        setLoading(false);
+      }
+
+      return;
+    }
 
     const storeId = selectedStoreId || currentStore?.id;
     if (!storeId) {
@@ -199,7 +277,7 @@ export default function ProductsPage() {
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated, selectedStoreId, currentStore?.id, nameFilter, hideOutOfStock, toast, canViewProducts]);
+  }, [isAuthenticated, isWarehouseMode, selectedStoreId, currentStore?.id, nameFilter, hideOutOfStock, toast, canViewProducts]);
 
   const fetchStoreProductsRef = useRef(fetchStoreProducts);
 
@@ -238,7 +316,19 @@ export default function ProductsPage() {
   const lastStoreIdRef = useRef<string>('');
 
   useEffect(() => {
-    if (!isAuthenticated || !activeStoreId) {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    if (isWarehouseMode) {
+      if (hasFetchedInitialRef.current) return;
+      hasFetchedInitialRef.current = true;
+      filtersInitializedRef.current = true;
+      fetchStoreProductsRef.current?.(1);
+      return;
+    }
+
+    if (!activeStoreId) {
       return;
     }
 
@@ -250,7 +340,7 @@ export default function ProductsPage() {
     hasFetchedInitialRef.current = true;
     filtersInitializedRef.current = true;
     fetchStoreProductsRef.current?.(1);
-  }, [isAuthenticated, activeStoreId]);
+  }, [isAuthenticated, activeStoreId, isWarehouseMode]);
 
   const loadProductLookup = useCallback(async () => {
     if (!isAuthenticated) {
@@ -313,16 +403,28 @@ export default function ProductsPage() {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'buyCost' || name === 'basePrice' || name === 'price' || name === 'stock' || name === 'stockThreshold' ? Number(value) : value,
+      [name]: name === 'buyCost' || name === 'basePrice' || name === 'price' || name === 'stock' || name === 'stockThreshold'
+        ? Number(value)
+        : value,
     }));
   };
 
-  const handleSubmit = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentStore) return;
+  const handleSubmit = useCallback(async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!isWarehouseMode && !currentStore) return;
+
+    if (isSavingProduct) return;
 
     if (!isEditing) {
-      if (!canCreateProducts) {
+      if (isWarehouseMode) {
+        if (!canCreateWarehouseProducts) {
+          toast({
+            title: 'Sin permisos',
+            description: 'No tienes permisos para crear productos en el almacén.',
+          });
+          return;
+        }
+      } else if (!canCreateProducts) {
         toast({
           title: 'Sin permisos',
           description: 'No tienes permisos para crear productos.',
@@ -330,7 +432,15 @@ export default function ProductsPage() {
         return;
       }
     } else {
-      if (!canManageProducts && !canManagePrices) {
+      if (isWarehouseMode) {
+        if (!canManageWarehouseProducts) {
+          toast({
+            title: 'Sin permisos',
+            description: 'No tienes permisos para editar productos del almacén.',
+          });
+          return;
+        }
+      } else if (!canManageProducts && !canManagePrices) {
         toast({
           title: 'Sin permisos',
           description: 'No tienes permisos para editar productos.',
@@ -339,28 +449,70 @@ export default function ProductsPage() {
       }
     }
 
-    // Validar que no se reduzca el stock en edición
     if (isEditing && originalStock !== null && formData.stock < originalStock) {
       toast({
-        title: "Error",
-        description: "No se puede reducir el stock desde aquí. Use la sección de Inventario.",
-        variant: "destructive"
+        title: 'Error',
+        description: 'No se puede reducir el stock desde aquí. Use la sección de Inventario.',
+        variant: 'destructive',
       });
       return;
     }
 
     try {
+      setIsSavingProduct(true);
+      if (isWarehouseMode) {
+        if (isEditing && currentStoreProduct) {
+          const updateDto: any = {
+            stock: formData.stock,
+            stockThreshold: formData.stockThreshold,
+          };
+
+          if (canManageProducts) {
+            updateDto.name = formData.name;
+            updateDto.description = formData.description;
+          }
+
+          if (canManagePricesEffective) {
+            updateDto.basePrice = formData.basePrice;
+            if (canViewProductCostEffective) {
+              updateDto.buyCost = formData.buyCost;
+            }
+          }
+
+          await warehouseProductService.update(currentStoreProduct.id, updateDto);
+
+          toast({
+            title: 'Producto actualizado',
+            description: 'El producto se ha actualizado correctamente',
+          });
+        } else {
+          await warehouseProductService.create({
+            createNewProduct: true,
+            name: formData.name,
+            description: formData.description,
+            basePrice: formData.basePrice,
+            buyCost: formData.buyCost,
+            stock: formData.stock,
+            stockThreshold: formData.stockThreshold,
+          });
+
+          toast({
+            title: 'Producto creado',
+            description: 'El producto se ha creado correctamente',
+          });
+          await loadProductLookup();
+        }
+
+        await fetchStoreProducts();
+        resetForm();
+        setIsModalOpen(false);
+        return;
+      }
+
       let productData: CreateStoreProductRequest;
 
       if (isEditing && currentStoreProduct) {
-        // Edición: enviar solo los campos que se van a actualizar
         let updateData: any;
-
-        // Reglas actuales:
-        // - description nunca se envía
-        // - MANAGE_PRODUCTS: solo permite editar name
-        // - MANAGE_PRICES: permite editar price
-        // - buyCost/basePrice requieren MANAGE_PRICES + VIEW_PRODUCT_COST
         updateData = {};
 
         if (canManageProducts) {
@@ -369,17 +521,14 @@ export default function ProductsPage() {
           updateData.stockThreshold = formData.stockThreshold;
         }
 
-        if (canManagePrices) {
+        if (canManagePricesEffective) {
           updateData.price = formData.price;
-
           updateData.basePrice = formData.basePrice;
-
-          if (canViewProductCost) {
+          if (canViewProductCostEffective) {
             updateData.buyCost = formData.buyCost;
           }
         }
 
-        // Stock/threshold se mantienen bajo permisos de inventario (si aplica)
         if (canManageInventory) {
           updateData.stock = formData.stock;
         }
@@ -390,11 +539,6 @@ export default function ProductsPage() {
           description: 'El producto se ha actualizado correctamente',
         });
       } else {
-        // Creación: siempre crear producto nuevo
-        // Reglas actuales:
-        // - VIEW_PRODUCTS + MANAGE_PRODUCTS para crear y setear datos básicos
-        // - MANAGE_PRICES para setear price/basePrice
-        // - MANAGE_PRICES + VIEW_PRODUCT_COST para setear buyCost
         if (!canCreateProducts) {
           toast({
             title: 'Sin permisos',
@@ -402,6 +546,8 @@ export default function ProductsPage() {
           });
           return;
         }
+
+        if (!currentStore) return;
         productData = {
           createNewProduct: true,
           name: formData.name,
@@ -409,22 +555,18 @@ export default function ProductsPage() {
           storeId: currentStore.id,
           stockThreshold: formData.stockThreshold,
           stock: formData.stock,
-          ...(canManagePrices ? { price: formData.price } : {}),
-          ...(canManagePrices ? { basePrice: formData.basePrice } : {}),
-          ...(canManagePrices && canViewProductCost ? { buyCost: formData.buyCost } : {}),
+          price: formData.price,
+          ...(canManagePricesEffective ? { basePrice: formData.basePrice } : {}),
+          ...(canManagePricesEffective && canViewProductCostEffective ? { buyCost: formData.buyCost } : {}),
         } as CreateStoreProductRequest;
 
-        const response = await storeProductService.createStoreProduct(productData);
-
-        // Manejar si el backend devuelve un array o un objeto
-        const createdProduct = Array.isArray(response) ? response[0] : response;
+        await storeProductService.createStoreProduct(productData);
 
         toast({
           title: 'Producto creado',
           description: 'El producto se ha creado correctamente',
         });
 
-        // Refrescar el lookup para que el nuevo producto aparezca en las sugerencias
         await loadProductLookup();
       }
 
@@ -445,8 +587,32 @@ export default function ProductsPage() {
           variant: 'destructive',
         });
       }
+    } finally {
+      setIsSavingProduct(false);
     }
-  }, [currentStore, isEditing, currentStoreProduct, formData, fetchStoreProducts, toast, loadProductLookup, canCreateProducts, canManageProducts, canManagePrices, canViewProductCost, canManageInventory]);
+  }, [
+    isWarehouseMode,
+    currentStore,
+    isEditing,
+    currentStoreProduct,
+    formData,
+    fetchStoreProducts,
+    toast,
+    loadProductLookup,
+    canCreateProducts,
+    canManageProducts,
+    canManagePrices,
+    canViewProductCost,
+    canManageInventory,
+    canManageWarehouseProducts,
+    nameSuggestions,
+    canCreateWarehouseProducts,
+    isSavingProduct,
+    isAdmin,
+    originalStock,
+    canManagePricesEffective,
+    canViewProductCostEffective,
+  ]);
 
   const loadProductDetail = useCallback(async (productId: string) => {
     setDetailLoading(true);
@@ -457,33 +623,65 @@ export default function ProductsPage() {
         const numeric = Number(value);
         return Number.isFinite(numeric) ? numeric.toString() : String(value);
       };
-      const detail = await storeProductService.getStoreProductDetail(productId);
-      const resolvedStockThreshold = typeof detail.stockThreshold === 'number'
-        ? detail.stockThreshold
-        : undefined;
-      const normalizedDetail: StoreProductDetail = {
-        ...detail,
-        stockThreshold: resolvedStockThreshold,
-        productId: detail.productId ?? detail.product?.id,
-      };
-      setProductDetail(normalizedDetail);
-      setDetailForm({
-        name: detail.product?.name || '',
-        description: detail.product?.description || '',
-        price: formatValue(detail.price),
-        buyCost: formatValue(detail.product?.buyCost),
-        basePrice: formatValue(detail.product?.basePrice),
-        stockThreshold: formatValue(resolvedStockThreshold),
-      });
+      if (isWarehouseMode) {
+        const detail = await warehouseProductService.getById(productId);
+        const resolvedStockThreshold = typeof detail.stockThreshold === 'number'
+          ? detail.stockThreshold
+          : undefined;
+
+        setProductDetail(detail as any);
+        setDetailForm({
+          name: detail.product?.name || '',
+          description: detail.product?.description || '',
+          price: '',
+          buyCost: formatValue(detail.product?.buyCost),
+          basePrice: formatValue(detail.product?.basePrice),
+          stockThreshold: formatValue(resolvedStockThreshold),
+        });
+      } else {
+        const detail = await storeProductService.getStoreProductDetail(productId);
+        const resolvedStockThreshold = typeof detail.stockThreshold === 'number'
+          ? detail.stockThreshold
+          : undefined;
+        const normalizedDetail: StoreProductDetail = {
+          ...detail,
+          stockThreshold: resolvedStockThreshold,
+          productId: detail.productId ?? detail.product?.id,
+        };
+        setProductDetail(normalizedDetail);
+        setDetailForm({
+          name: detail.product?.name || '',
+          description: detail.product?.description || '',
+          price: formatValue(detail.price),
+          buyCost: formatValue(detail.product?.buyCost),
+          basePrice: formatValue(detail.product?.basePrice),
+          stockThreshold: formatValue(resolvedStockThreshold),
+        });
+      }
     } catch (error) {
       console.error('Error loading product detail:', error);
       setDetailError('No se pudo cargar el detalle del producto.');
     } finally {
       setDetailLoading(false);
     }
-  }, []);
+  }, [isWarehouseMode]);
 
   const openProductDetail = (productId: string) => {
+    if (isWarehouseMode) {
+      if (!canManageWarehouseProducts) {
+        toast({
+          title: 'Permiso requerido',
+          description: 'No tienes permisos para ver el detalle del producto del almacén.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      setSelectedProductId(productId);
+      setDetailModalOpen(true);
+      loadProductDetail(productId);
+      return;
+    }
+
     if (!canManageProducts) {
       toast({
         title: 'Permiso requerido',
@@ -520,6 +718,48 @@ export default function ProductsPage() {
     if (!selectedProductId) return;
     setIsUpdatingDetail(true);
     try {
+      if (isWarehouseMode) {
+        if (!canManageWarehouseProducts) {
+          toast({
+            title: 'Sin permisos',
+            description: 'No tienes permisos para editar este producto del almacén.',
+          });
+          return;
+        }
+
+        const warehousePayload: any = {};
+        if (detailForm.stockThreshold !== '') {
+          warehousePayload.stockThreshold = Number(detailForm.stockThreshold);
+        }
+
+        if (canManageProducts) {
+          warehousePayload.name = detailForm.name;
+          warehousePayload.description = detailForm.description;
+        }
+
+        if (canManagePricesEffective) {
+          if (detailForm.basePrice !== '') {
+            warehousePayload.basePrice = Number(detailForm.basePrice);
+          }
+          if (canViewProductCostEffective) {
+            if (detailForm.buyCost !== '') {
+              warehousePayload.buyCost = Number(detailForm.buyCost);
+            }
+          }
+        }
+
+        await warehouseProductService.update(selectedProductId, warehousePayload);
+
+        toast({
+          title: 'Producto actualizado',
+          description: 'Los cambios se guardaron correctamente.',
+        });
+
+        fetchStoreProducts(page);
+        closeProductDetail();
+        return;
+      }
+
       if (!canManageProducts && !canManagePrices) {
         toast({
           title: 'Sin permisos',
@@ -573,6 +813,39 @@ export default function ProductsPage() {
 
   const handleDeleteStoreProductDetail = async () => {
     if (!selectedProductId) return;
+    if (isWarehouseMode) {
+      if (!isAdmin) {
+        toast({
+          title: 'Sin permisos',
+          description: 'Solo ADMIN puede eliminar productos del almacén.',
+        });
+        return;
+      }
+      const shouldDelete = window.confirm('¿Deseas eliminar este producto del almacén?');
+      if (!shouldDelete) return;
+
+      setIsDeletingStoreProduct(true);
+      try {
+        await warehouseProductService.delete(selectedProductId);
+        toast({
+          title: 'Producto eliminado',
+          description: 'Se eliminó el producto del almacén.',
+        });
+        closeProductDetail();
+        fetchStoreProducts(page);
+      } catch (error) {
+        console.error('Error deleting warehouse product:', error);
+        toast({
+          title: 'Error',
+          description: 'No se pudo eliminar el producto del almacén.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsDeletingStoreProduct(false);
+      }
+      return;
+    }
+
     if (!canDeleteProducts) {
       toast({
         title: 'Sin permisos',
@@ -614,6 +887,13 @@ export default function ProductsPage() {
   };
 
   const handleDeleteCatalogProductDetail = async () => {
+    if (isWarehouseMode) {
+      toast({
+        title: 'Acción no disponible',
+        description: 'En modo almacén no se permite eliminar productos del catálogo global desde esta pantalla.',
+      });
+      return;
+    }
     if (!canDeleteProducts) {
       toast({
         title: 'Sin permisos',
@@ -689,6 +969,7 @@ export default function ProductsPage() {
   }, []);
 
   const openNewProductModal = () => {
+    setShowNameSuggestions(false);
     setCurrentStoreProduct(null);
     setOriginalStock(null);
     setFormData({
@@ -719,7 +1000,7 @@ export default function ProductsPage() {
     setIsEditing(false);
   };
 
-  if (!isAuthenticated || !currentStore) {
+  if (!isAuthenticated || (!currentStore && !currentWarehouse)) {
     return null;
   }
 
@@ -739,9 +1020,9 @@ export default function ProductsPage() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Productos</h1>
-          <p className="text-sm text-muted-foreground">{currentStore.name}</p>
+          <p className="text-sm text-muted-foreground">{isWarehouseMode ? (currentWarehouse?.name ?? '') : (currentStore?.name ?? '')}</p>
         </div>
-        {canCreateProducts && (
+        {(isWarehouseMode ? canCreateWarehouseProducts : canCreateProducts) && (
           <Button onClick={openNewProductModal} className="w-full sm:w-auto">
             <Plus className="mr-2 h-4 w-4" />
             Nuevo Producto
@@ -835,12 +1116,6 @@ export default function ProductsPage() {
           onClearFilters={clearFilters}
         />
 
-        {/* Add click outside handler */}
-        <div 
-          className="fixed inset-0 z-10" 
-          style={{ display: showNameSuggestions ? 'block' : 'none' }}
-          onClick={() => setShowNameSuggestions(false)}
-        />
       </div>
 
       <div className="flex items-center justify-between">
@@ -878,8 +1153,8 @@ export default function ProductsPage() {
             {nameFilter.trim()
               ? `No se encontraron productos que coincidan con "${nameFilter}"`
               : hideOutOfStock
-                ? "No hay productos con stock en esta tienda"
-                : "No hay productos en esta tienda"
+                ? (isWarehouseMode ? "No hay productos con stock en este almacén" : "No hay productos con stock en esta tienda")
+                : (isWarehouseMode ? "No hay productos en este almacén" : "No hay productos en esta tienda")
             }
           </p>
         </div>
@@ -889,7 +1164,7 @@ export default function ProductsPage() {
             {visibleProducts.map((storeProduct) => (
               <Card
                 key={storeProduct.id}
-                className={`h-full flex flex-col transition hover:border-primary ${canManageProducts ? 'cursor-pointer' : 'cursor-not-allowed opacity-80'}`}
+                className={`h-full flex flex-col transition hover:border-primary ${(isWarehouseMode ? canManageWarehouseProducts : canManageProducts) ? 'cursor-pointer' : 'cursor-not-allowed opacity-80'}`}
                 onClick={() => openProductDetail(storeProduct.id)}
               >
               <CardHeader className="pb-3">
@@ -897,7 +1172,7 @@ export default function ProductsPage() {
                   <CardTitle className="text-sm sm:text-base leading-tight">{storeProduct.name}</CardTitle>
                 </div>
                 <div className="space-y-2">
-                  {(canViewProductPrices || canManagePrices) && typeof storeProduct.price === 'number' && (
+                  {!isWarehouseMode && (canViewProductPrices || canManagePrices) && typeof storeProduct.price === 'number' && (
                     <p className="text-lg sm:text-xl font-bold text-primary">
                       S/ {storeProduct.price.toFixed(2)}
                     </p>
@@ -919,7 +1194,7 @@ export default function ProductsPage() {
                 </div>
               </CardHeader>
               <CardContent className="flex-grow pt-0">                
-                {canViewProductCost && (storeProduct.buyCost !== undefined) && (storeProduct.price !== undefined) && (
+                {!isWarehouseMode && canViewProductCost && (storeProduct.buyCost !== undefined) && (storeProduct.price !== undefined) && (
                   <div className="text-xs text-muted-foreground space-y-1">
                     <p>Costo: S/ {(storeProduct.buyCost || 0).toFixed(2)}</p>
                     <p>Ganancia: S/ {((storeProduct.price || 0) - (storeProduct.buyCost || 0)).toFixed(2)}</p>
@@ -995,7 +1270,7 @@ export default function ProductsPage() {
                       value={formData.name}
                       onChange={handleInputChange}
                       required
-                      disabled={!canCreateProducts}
+                      disabled={isWarehouseMode ? (isEditing ? !isAdmin : false) : !canCreateProducts}
                       className="h-10"
                     />
                   </div>
@@ -1010,34 +1285,36 @@ export default function ProductsPage() {
                       onChange={handleInputChange}
                       className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                       rows={3}
-                      disabled={!canCreateProducts}
+                      disabled={isWarehouseMode ? !isAdmin : !canCreateProducts}
                     />
                   </div>
 
                   {/* Campos de precios: solo editables con MANAGE_PRICES */}
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Precio de venta <span className="text-destructive">*</span>
-                    </label>
-                    <>
-                      <Input
-                        type="number"
-                        name="price"
-                        value={formData.price}
-                        onChange={handleInputChange}
-                        min="0"
-                        step="0.01"
-                        required={canManagePrices}
-                        disabled={!canManagePrices}
-                        className="h-10"
-                      />
-                      {!canManagePrices && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          No tienes permisos para establecer precios.
-                        </p>
-                      )}
-                    </>
-                  </div>
+                  {!isWarehouseMode && (
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Precio de venta <span className="text-destructive">*</span>
+                      </label>
+                      <>
+                        <Input
+                          type="number"
+                          name="price"
+                          value={formData.price}
+                          onChange={handleInputChange}
+                          min="0"
+                          step="0.01"
+                          required={canManagePricesEffective}
+                          disabled={!canManagePricesEffective}
+                          className="h-10"
+                        />
+                        {!canManagePricesEffective && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            No tienes permisos para establecer precios.
+                          </p>
+                        )}
+                      </>
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-sm font-medium mb-2">
@@ -1050,13 +1327,13 @@ export default function ProductsPage() {
                       onChange={handleInputChange}
                       min="0"
                       step="0.01"
-                      disabled={!canManagePrices}
+                      disabled={isWarehouseMode ? !isAdmin : !canManagePricesEffective}
                       className="h-10"
                     />
                   </div>
 
                   {/* Costo: solo si puede verlo y además tiene MANAGE_PRICES */}
-                  {canViewProductCost && (
+                  {canViewProductCostEffective && (
                     <div>
                       <label className="block text-sm font-medium mb-2">
                         Costo de compra
@@ -1068,7 +1345,7 @@ export default function ProductsPage() {
                         onChange={handleInputChange}
                         min="0"
                         step="0.01"
-                        disabled={!canManagePrices}
+                        disabled={isWarehouseMode ? !isAdmin : !canManagePricesEffective}
                         className="h-10"
                       />
                     </div>
@@ -1086,7 +1363,7 @@ export default function ProductsPage() {
                       min={isEditing && originalStock !== null ? originalStock : 0}
                       placeholder="0"
                       required
-                      disabled={isEditing ? !canManageInventory : !canCreateProducts}
+                      disabled={isWarehouseMode ? isEditing : (isEditing ? !canManageInventory : !canCreateProducts)}
                       className="h-10"
                     />
                     {isEditing && originalStock !== null && (
@@ -1108,7 +1385,7 @@ export default function ProductsPage() {
                       min="1"
                       placeholder="1"
                       required
-                      disabled={!canCreateProducts}
+                      disabled={isWarehouseMode ? (!canManageWarehouseProducts && isEditing) : !canCreateProducts}
                       className="h-10"
                     />
                   </div>
@@ -1123,8 +1400,14 @@ export default function ProductsPage() {
                   >
                     Cancelar
                   </Button>
-                  <Button type="submit" className="w-full sm:w-auto h-10">
-                    {isEditing ? 'Guardar Cambios' : 'Crear Producto'}
+                  <Button
+                    type="submit"
+                    disabled={isSavingProduct}
+                    className="w-full sm:w-auto h-10"
+                  >
+                    {isSavingProduct
+                      ? (isEditing ? 'Guardando...' : 'Creando...')
+                      : (isEditing ? 'Guardar Cambios' : 'Crear Producto')}
                   </Button>
                 </div>
               </form>
@@ -1141,7 +1424,9 @@ export default function ProductsPage() {
             <DialogHeader className="p-4 sm:p-6 pb-2 sm:pb-2 flex-shrink-0">
               <DialogTitle className="text-lg sm:text-xl">Detalle del producto</DialogTitle>
               <DialogDescription className="text-sm">
-                Revisa la información del producto en la tienda y realiza ajustes si es necesario.
+                {isWarehouseMode
+                  ? 'Revisa la información del producto en el almacén y realiza ajustes si es necesario.'
+                  : 'Revisa la información del producto en la tienda y realiza ajustes si es necesario.'}
               </DialogDescription>
             </DialogHeader>
 
@@ -1160,67 +1445,74 @@ export default function ProductsPage() {
                       <Input
                         value={detailForm.name}
                         onChange={(e) => handleDetailFormChange('name', e.target.value)}
-                        disabled={isUpdatingDetail || !canManageProducts}
+                        disabled={isWarehouseMode ? (!isAdmin || isUpdatingDetail) : (isUpdatingDetail || !canManageProducts)}
                         className="h-10 mt-1"
                       />
                     </div>
-                    <div>
-                      <Label className="text-sm font-medium">Precio (venta)</Label>
-                      {canViewProductPrices ? (
-                        <Input
-                          type="number"
-                          value={detailForm.price}
-                          onChange={(e) => {
-                            const next = e.target.value;
-                            if (!isValidNumberInputValue(next)) return;
-                            handleDetailFormChange('price', next);
-                          }}
-                          disabled={isUpdatingDetail || !canManagePrices}
-                          className="h-10 mt-1"
-                        />
-                      ) : (
-                        <p className="text-sm text-muted-foreground mt-1">-</p>
-                      )}
-                    </div>
-                    <div>
-                      <Label className="text-sm font-medium">Costo</Label>
-                      {canViewProductCost ? (
-                        <Input
-                          type="number"
-                          value={detailForm.buyCost}
-                          onChange={(e) => handleDetailFormChange('buyCost', e.target.value)}
-                          disabled={isUpdatingDetail || !canManagePrices}
-                          className="h-10 mt-1"
-                        />
-                      ) : (
-                        <p className="text-sm text-muted-foreground mt-1">-</p>
-                      )}
-                    </div>
-                    <div>
-                      <Label className="text-sm font-medium">Precio base</Label>
-                      {canViewProductPrices ? (
-                        <Input
-                          type="number"
-                          value={detailForm.basePrice}
-                          onChange={(e) => {
-                            const next = e.target.value;
-                            if (!isValidNumberInputValue(next)) return;
-                            handleDetailFormChange('basePrice', next);
-                          }}
-                          disabled={isUpdatingDetail || !canManagePrices}
-                          className="h-10 mt-1"
-                        />
-                      ) : (
-                        <p className="text-sm text-muted-foreground mt-1">-</p>
-                      )}
-                    </div>
+                    {!isWarehouseMode && (
+                      <div>
+                        <Label className="text-sm font-medium">Precio (venta)</Label>
+                        {canViewProductPrices ? (
+                          <Input
+                            type="number"
+                            value={detailForm.price}
+                            onChange={(e) => {
+                              const next = e.target.value;
+                              if (!isValidNumberInputValue(next)) return;
+                              handleDetailFormChange('price', next);
+                            }}
+                            disabled={isUpdatingDetail || !canManagePrices}
+                            className="h-10 mt-1"
+                          />
+                        ) : (
+                          <p className="text-sm text-muted-foreground mt-1">-</p>
+                        )}
+                      </div>
+                    )}
+
+                    {(!isWarehouseMode || isAdmin) && (
+                      <>
+                        <div>
+                          <Label className="text-sm font-medium">Costo</Label>
+                          {(isWarehouseMode ? true : canViewProductCost) ? (
+                            <Input
+                              type="number"
+                              value={detailForm.buyCost}
+                              onChange={(e) => handleDetailFormChange('buyCost', e.target.value)}
+                              disabled={isWarehouseMode ? (!isAdmin || isUpdatingDetail) : (isUpdatingDetail || !canManagePrices)}
+                              className="h-10 mt-1"
+                            />
+                          ) : (
+                            <p className="text-sm text-muted-foreground mt-1">-</p>
+                          )}
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium">Precio base</Label>
+                          {(isWarehouseMode ? true : canViewProductPrices) ? (
+                            <Input
+                              type="number"
+                              value={detailForm.basePrice}
+                              onChange={(e) => {
+                                const next = e.target.value;
+                                if (!isValidNumberInputValue(next)) return;
+                                handleDetailFormChange('basePrice', next);
+                              }}
+                              disabled={isWarehouseMode ? (!isAdmin || isUpdatingDetail) : (isUpdatingDetail || !canManagePrices)}
+                              className="h-10 mt-1"
+                            />
+                          ) : (
+                            <p className="text-sm text-muted-foreground mt-1">-</p>
+                          )}
+                        </div>
+                      </>
+                    )}
                     <div className="sm:col-span-2">
                       <Label className="text-sm font-medium">Descripción</Label>
                       <textarea
                         value={detailForm.description}
                         onChange={(e) => handleDetailFormChange('description', e.target.value)}
                         className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
-                        disabled={isUpdatingDetail || !canManageProducts}
+                        disabled={isWarehouseMode ? (!isAdmin || isUpdatingDetail) : (isUpdatingDetail || !canManageProducts)}
                       />
                     </div>
                     <div>
@@ -1229,7 +1521,7 @@ export default function ProductsPage() {
                         type="number"
                         value={detailForm.stockThreshold}
                         onChange={(e) => handleDetailFormChange('stockThreshold', e.target.value)}
-                        disabled={isUpdatingDetail || !canManageProducts}
+                        disabled={isWarehouseMode ? (isUpdatingDetail || !canManageWarehouseProducts) : (isUpdatingDetail || !canManageProducts)}
                         min="1"
                         className="h-10 mt-1"
                       />
@@ -1238,13 +1530,17 @@ export default function ProductsPage() {
 
                   <div className="grid gap-4 sm:grid-cols-3">
                     <div className="rounded-md border p-4 text-sm sm:col-span-2">
-                      <p className="font-semibold mb-2">Información en tienda</p>
+                      <p className="font-semibold mb-2">{isWarehouseMode ? 'Información en almacén' : 'Información en tienda'}</p>
                       <div className="space-y-1">
-                        <p>Tienda: {productDetail.store?.name ?? '—'}</p>
-                        <p>Dirección: {productDetail.store?.address ?? '—'}</p>
-                        <p>Teléfono: {productDetail.store?.phone ?? '—'}</p>
+                        {!isWarehouseMode && (
+                          <>
+                            <p>Tienda: {productDetail.store?.name ?? '—'}</p>
+                            <p>Dirección: {productDetail.store?.address ?? '—'}</p>
+                            <p>Teléfono: {productDetail.store?.phone ?? '—'}</p>
+                          </>
+                        )}
                         <p>Stock actual: {productDetail.stock}</p>
-                        <p>Responsable: {productDetail.user?.name ?? '—'}</p>
+                        {!isWarehouseMode && <p>Responsable: {productDetail.user?.name ?? '—'}</p>}
                       </div>
                     </div>
                     <div className="rounded-md border p-4 text-sm space-y-3 flex flex-col h-full">
@@ -1253,11 +1549,11 @@ export default function ProductsPage() {
                         variant="outline"
                         className="w-full h-9"
                         onClick={handleUpdateDetail}
-                        disabled={isUpdatingDetail || (!canManageProducts && !canManagePrices)}
+                        disabled={isUpdatingDetail || (isWarehouseMode ? !canManageWarehouseProducts : (!canManageProducts && !canManagePrices))}
                       >
                         {isUpdatingDetail ? 'Guardando...' : 'Guardar cambios'}
                       </Button>
-                      {canDeleteProducts && (
+                      {(isWarehouseMode ? isAdmin : canDeleteProducts) && (
                         <Button
                           variant="destructive"
                           className="w-full h-9"
@@ -1267,90 +1563,92 @@ export default function ProductsPage() {
                           }}
                           disabled={isDeletingStoreProduct}
                         >
-                          {isDeletingStoreProduct ? 'Eliminando...' : 'Eliminar de esta tienda'}
+                          {isDeletingStoreProduct ? 'Eliminando...' : (isWarehouseMode ? 'Eliminar de este almacén' : 'Eliminar de esta tienda')}
                         </Button>
                       )}
                     </div>
                   </div>
 
-                  <div className="rounded-md border p-4 space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                      <div>
-                        <p className="font-semibold">Eliminar del catálogo</p>
-                        <p className="text-xs text-muted-foreground">
-                          Esta acción eliminará el producto de todas las tiendas. Se recomienda dejar el stock en 0 antes de continuar.
-                        </p>
-                      </div>
-                      {!showCatalogDeleteForm && canDeleteProducts && (
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setCatalogDeleteCredentials({ email: '', password: '' });
-                            setShowCatalogDeleteForm(true);
-                          }}
-                          disabled={isDeletingCatalogProduct}
-                          className="w-full sm:w-auto"
-                        >
-                          Eliminar del catálogo
-                        </Button>
-                      )}
-                    </div>
-
-                    {showCatalogDeleteForm && (
-                      <div className="space-y-3">
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div>
-                            <Label className="text-sm">Correo de confirmación</Label>
-                            <Input
-                              type="email"
-                              value={catalogDeleteCredentials.email}
-                              onChange={(e) => setCatalogDeleteCredentials((prev) => ({ ...prev, email: e.target.value }))}
-                              disabled={isDeletingCatalogProduct}
-                              className="h-9 mt-1"
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-sm">Contraseña</Label>
-                            <Input
-                              type="password"
-                              value={catalogDeleteCredentials.password}
-                              onChange={(e) => setCatalogDeleteCredentials((prev) => ({ ...prev, password: e.target.value }))}
-                              disabled={isDeletingCatalogProduct}
-                              className="h-9 mt-1"
-                            />
-                          </div>
+                  {!isWarehouseMode && (
+                    <div className="rounded-md border p-4 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                        <div>
+                          <p className="font-semibold">Eliminar del catálogo</p>
+                          <p className="text-xs text-muted-foreground">
+                            Esta acción eliminará el producto de todas las tiendas. Se recomienda dejar el stock en 0 antes de continuar.
+                          </p>
                         </div>
-
-                        <div className="flex flex-col sm:flex-row justify-end gap-3">
-                          <Button
-                            variant="outline"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setShowCatalogDeleteForm(false);
-                              setCatalogDeleteCredentials({ email: '', password: '' });
-                            }}
-                            disabled={isDeletingCatalogProduct}
-                            className="w-full sm:w-auto h-9"
-                          >
-                            Cancelar
-                          </Button>
+                        {!showCatalogDeleteForm && canDeleteProducts && (
                           <Button
                             variant="destructive"
+                            size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDeleteCatalogProductDetail();
+                              setCatalogDeleteCredentials({ email: '', password: '' });
+                              setShowCatalogDeleteForm(true);
                             }}
                             disabled={isDeletingCatalogProduct}
-                            className="w-full sm:w-auto h-9"
+                            className="w-full sm:w-auto"
                           >
-                            {isDeletingCatalogProduct ? 'Eliminando del catálogo...' : 'Confirmar eliminación'}
+                            Eliminar del catálogo
                           </Button>
-                        </div>
+                        )}
                       </div>
-                    )}
-                  </div>
+
+                      {showCatalogDeleteForm && (
+                        <div className="space-y-3">
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div>
+                              <Label className="text-sm">Correo de confirmación</Label>
+                              <Input
+                                type="email"
+                                value={catalogDeleteCredentials.email}
+                                onChange={(e) => setCatalogDeleteCredentials((prev) => ({ ...prev, email: e.target.value }))}
+                                disabled={isDeletingCatalogProduct}
+                                className="h-9 mt-1"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-sm">Contraseña</Label>
+                              <Input
+                                type="password"
+                                value={catalogDeleteCredentials.password}
+                                onChange={(e) => setCatalogDeleteCredentials((prev) => ({ ...prev, password: e.target.value }))}
+                                disabled={isDeletingCatalogProduct}
+                                className="h-9 mt-1"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col sm:flex-row justify-end gap-3">
+                            <Button
+                              variant="outline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowCatalogDeleteForm(false);
+                                setCatalogDeleteCredentials({ email: '', password: '' });
+                              }}
+                              disabled={isDeletingCatalogProduct}
+                              className="w-full sm:w-auto h-9"
+                            >
+                              Cancelar
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteCatalogProductDetail();
+                              }}
+                              disabled={isDeletingCatalogProduct}
+                              className="w-full sm:w-auto h-9"
+                            >
+                              {isDeletingCatalogProduct ? 'Eliminando del catálogo...' : 'Confirmar eliminación'}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : null}
             </div>

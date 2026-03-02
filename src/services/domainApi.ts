@@ -69,9 +69,15 @@ const validateDomainPath = (mode: ActiveLoginMode, path: string) => {
   }
 
   if (mode === 'WAREHOUSE') {
-    if (!path.startsWith('/warehouse/')) {
-      throw new Error('En modo WAREHOUSE solo se permiten endpoints con prefijo /warehouse.');
+    const isWarehouseScope = path.startsWith('/warehouse/');
+    const isWarehousesTenantScope = path.startsWith('/warehouses/');
+
+    if (!isWarehouseScope && !isWarehousesTenantScope) {
+      throw new Error('Endpoint no permitido en modo WAREHOUSE.');
     }
+
+    // Solo aplicar reglas de "forbidden" a endpoints dentro del scope /warehouse/* (contexto activo)
+    if (!isWarehouseScope) return;
 
     const unprefixed = path.replace(/^\/warehouse/, '') || '/';
     const forbidden = FORBIDDEN_IN_WAREHOUSE_PATTERNS.some((pattern) => pattern.test(unprefixed));

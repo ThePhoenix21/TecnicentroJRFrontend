@@ -223,13 +223,22 @@ export const productService = {
         }
         updateData.price = parsedPrice;
       }
-      
-      if (cleanProductData.buycost !== undefined) {
-        const parsedBuycost = parseFloat(String(cleanProductData.buycost).replace(',', '.'));
-        if (isNaN(parsedBuycost) || parsedBuycost <= 0) {
-          throw new Error('El costo de compra debe ser un número mayor a cero');
+
+      const rawBuyCost = (cleanProductData as any).buyCost ?? (cleanProductData as any).buycost;
+      if (rawBuyCost !== undefined) {
+        const parsedBuyCost = parseFloat(String(rawBuyCost).replace(',', '.'));
+        if (isNaN(parsedBuyCost) || parsedBuyCost < 0) {
+          throw new Error('El costo de compra debe ser un número mayor o igual a cero');
         }
-        updateData.buycost = parsedBuycost;
+        updateData.buyCost = parsedBuyCost;
+      }
+
+      if ((cleanProductData as any).basePrice !== undefined) {
+        const parsedBasePrice = parseFloat(String((cleanProductData as any).basePrice).replace(',', '.'));
+        if (isNaN(parsedBasePrice) || parsedBasePrice < 0) {
+          throw new Error('El precio base debe ser un número mayor o igual a cero');
+        }
+        updateData.basePrice = parsedBasePrice;
       }
       
       if (cleanProductData.stock !== undefined) {

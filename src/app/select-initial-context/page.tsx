@@ -11,7 +11,7 @@ type InitialContextMode = 'STORE' | 'WAREHOUSE';
 
 export default function SelectInitialContextPage() {
   const router = useRouter();
-  const { user, isAuthenticated, loading, selectStore, selectWarehouse } = useAuth();
+  const { user, isAuthenticated, loading, activeLoginMode, hasStoreSelected, hasWarehouseSelected, selectStore, selectWarehouse, logout } = useAuth();
   const [mode, setMode] = useState<InitialContextMode | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,22 +31,29 @@ export default function SelectInitialContextPage() {
       return;
     }
 
-    if (user?.activeLoginMode) {
+    // Solo redirigir si ya existe un contexto realmente seleccionado.
+    if (activeLoginMode === 'STORE' && hasStoreSelected) {
       router.replace('/dashboard');
+      return;
     }
-  }, [loading, isAuthenticated, user?.activeLoginMode, router]);
+
+    if (activeLoginMode === 'WAREHOUSE' && hasWarehouseSelected) {
+      router.replace('/dashboard');
+      return;
+    }
+  }, [loading, isAuthenticated, activeLoginMode, hasStoreSelected, hasWarehouseSelected, router]);
 
   useEffect(() => {
     if (loading) return;
     if (!isAuthenticated) return;
-    if (user?.activeLoginMode) return;
+    if (activeLoginMode) return;
 
     if (!hasBoth) {
       if (hasStores) setMode('STORE');
       else if (hasWarehouses) setMode('WAREHOUSE');
       else setMode(null);
     }
-  }, [loading, isAuthenticated, user?.activeLoginMode, hasBoth, hasStores, hasWarehouses]);
+  }, [loading, isAuthenticated, activeLoginMode, hasBoth, hasStores, hasWarehouses]);
 
   if (loading) {
     return (
@@ -126,10 +133,20 @@ export default function SelectInitialContextPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-3xl">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-amber-600" />
-            Selecciona tu contexto inicial
-          </CardTitle>
+          <div className="flex items-start justify-between gap-4">
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-600" />
+              Selecciona tu contexto inicial
+            </CardTitle>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSubmitting}
+              onClick={() => logout()}
+            >
+              Cerrar sesión
+            </Button>
+          </div>
           <CardDescription>Tu sesión no tiene un modo activo. Elige cómo quieres ingresar.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

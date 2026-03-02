@@ -121,3 +121,46 @@ export interface StoreProductStockItem {
   name: string;
   stock: number;
 }
+
+export interface WarehouseProduct {
+  id: string;
+  stock: number;
+  stockThreshold: number;
+  createdAt?: string;
+  updatedAt?: string;
+  product: {
+    id: string;
+    name: string;
+    description: string;
+    buyCost: number;
+    basePrice: number;
+  };
+}
+
+export interface WarehouseProductsListResponse {
+  data: WarehouseProduct[];
+  total: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface WarehouseProductCreateDto {
+  productId?: string;
+  createNewProduct?: boolean;
+  name?: string;
+  description?: string;
+  buyCost?: number;
+  basePrice?: number;
+  stock?: number;
+  stockThreshold?: number;
+}
+
+export interface WarehouseProductUpdateDto {
+  stock?: number;
+  stockThreshold?: number;
+  name?: string;
+  description?: string;
+  buyCost?: number;
+  basePrice?: number;
+}

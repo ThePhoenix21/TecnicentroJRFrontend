@@ -3,7 +3,7 @@
 import { createContext, useContext, ReactNode, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { jwtDecode } from 'jwt-decode';
-import { authService, api, type AuthResponse, type LoginContextPayload, type LoginMode } from '@/services/auth';
+import { authService, api, type LoginContextPayload, type LoginMode } from '@/services/auth';
 import { storeService } from '@/services/store.service';
 import { Store } from '@/types/store';
 import { CURRENCY_STORAGE_KEY, type SupportedCurrency } from '@/lib/utils';
@@ -14,6 +14,9 @@ import {
   type TenantDefaultService,
   type TenantFeature,
 } from '@/services/tenant.service';
+
+const CURRENT_STORE_STORAGE_KEY = 'current_store';
+const CURRENT_WAREHOUSE_STORAGE_KEY = 'current_warehouse';
 
 // Interfaz simplificada para el contexto de autenticación
 export interface AuthStore {
@@ -28,13 +31,14 @@ interface JwtPayload {
   email: string;
   name?: string;
   role?: string;
+  tenantId?: string;
+  tenantName?: string;
+  tenantFeatures?: TenantFeature[];
+  tenantLogoUrl?: string;
   verified?: boolean;
   stores?: string[]; // 🆕 IDs de tiendas en el JWT
   warehouses?: string[];
   permissions?: string[]; // 🆕 Permisos del usuario
-  activeLoginMode?: LoginMode | null;
-  activeStoreId?: string | null;
-  activeWarehouseId?: string | null;
   currency?: SupportedCurrency;
   tenantCurrency?: SupportedCurrency;
   iat?: number;
@@ -51,8 +55,6 @@ export interface User {
   stores?: AuthStore[];  // Tiendas asociadas al usuario (formato simplificado)
   warehouses?: AuthStore[];  // Almacenes asociados al usuario
   activeLoginMode?: LoginMode | null;
-  activeStoreId?: string | null;
-  activeWarehouseId?: string | null;
   iat?: number;
   exp?: number;
 }
@@ -149,6 +151,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user');
     localStorage.removeItem('stores_cache'); // Limpiar cache de tiendas
+    localStorage.removeItem(CURRENT_STORE_STORAGE_KEY);
+    localStorage.removeItem(CURRENT_WAREHOUSE_STORAGE_KEY);
     localStorage.removeItem(TENANT_FEATURES_STORAGE_KEY);
     localStorage.removeItem(TENANT_DEFAULT_SERVICE_STORAGE_KEY);
     localStorage.removeItem(CURRENCY_STORAGE_KEY);
@@ -239,32 +243,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }));
   }, [loadRealStores]);
 
-  // Función para seleccionar tienda (nuevo flujo con /auth/context)
+  // Función para seleccionar tienda (selección local; no cambia JWT)
   const selectStore = useCallback(async (store: AuthStore) => {
-    let updatedUser: AuthResponse['user'];
-    try {
-      updatedUser = await authService.changeContext({ storeId: store.id });
-    } catch (err: unknown) {
-      const status = (err as any)?.response?.status;
-      if (status === 403) {
-        logout(false);
-      }
-      throw err;
-    }
-
     setUser((prev) => {
       if (!prev) return prev;
       const merged = {
         ...prev,
-        ...updatedUser,
-        activeLoginMode: updatedUser.activeLoginMode ?? 'STORE',
-        activeStoreId: updatedUser.activeStoreId ?? store.id,
+        activeLoginMode: 'STORE',
       } as User;
       localStorage.setItem('user', JSON.stringify(merged));
       return merged;
     });
 
-    setActiveLoginMode(updatedUser.activeLoginMode ?? 'STORE');
+    try {
+      localStorage.setItem(CURRENT_STORE_STORAGE_KEY, JSON.stringify(store));
+      localStorage.removeItem(CURRENT_WAREHOUSE_STORAGE_KEY);
+    } catch {
+      // ignorar
+    }
+
+    setActiveLoginMode('STORE');
     setCurrentStore(store);
     setCurrentWarehouse(null);
 
@@ -273,32 +271,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [logout]);
 
-  // Función para seleccionar almacén (nuevo flujo con /auth/context)
+  // Función para seleccionar almacén (selección local; no cambia JWT)
   const selectWarehouse = useCallback(async (warehouse: AuthStore) => {
-    let updatedUser: AuthResponse['user'];
-    try {
-      updatedUser = await authService.changeContext({ warehouseId: warehouse.id });
-    } catch (err: unknown) {
-      const status = (err as any)?.response?.status;
-      if (status === 403) {
-        logout(false);
-      }
-      throw err;
-    }
-
     setUser((prev) => {
       if (!prev) return prev;
       const merged = {
         ...prev,
-        ...updatedUser,
-        activeLoginMode: updatedUser.activeLoginMode ?? 'WAREHOUSE',
-        activeWarehouseId: updatedUser.activeWarehouseId ?? warehouse.id,
+        activeLoginMode: 'WAREHOUSE',
       } as User;
       localStorage.setItem('user', JSON.stringify(merged));
       return merged;
     });
 
-    setActiveLoginMode(updatedUser.activeLoginMode ?? 'WAREHOUSE');
+    try {
+      localStorage.setItem(CURRENT_WAREHOUSE_STORAGE_KEY, JSON.stringify(warehouse));
+      localStorage.removeItem(CURRENT_STORE_STORAGE_KEY);
+    } catch {
+      // ignorar
+    }
+
+    setActiveLoginMode('WAREHOUSE');
     setCurrentWarehouse(warehouse);
     setCurrentStore(null);
 
@@ -371,7 +363,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       let jwtWarehouses: AuthStore[] = [];
 
       try {
-        const decoded = jwtDecode(jwtToken) as any;
+        const decoded = jwtDecode<JwtPayload>(jwtToken);
+
+        const tokenTenantFeatures = Array.isArray(decoded.tenantFeatures) ? decoded.tenantFeatures : [];
+        setTenantFeatures(tokenTenantFeatures);
+        setTenantFeaturesLoaded(true);
+
+        // Mantener compatibilidad con defaultService cacheado, pero no bloquear el login.
+        try {
+          const cached = localStorage.getItem(TENANT_DEFAULT_SERVICE_STORAGE_KEY);
+          if (cached === 'REPAIR' || cached === 'WARRANTY' || cached === 'MISELANEOUS') {
+            setTenantDefaultService(cached);
+          }
+        } catch {
+          // ignorar
+        } finally {
+          setTenantDefaultServiceLoaded(true);
+        }
 
         const effectiveCurrency = decoded.tenantCurrency ?? decoded.currency;
         if (effectiveCurrency === 'PEN' || effectiveCurrency === 'USD' || effectiveCurrency === 'EUR') {
@@ -419,12 +427,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(userData);
       localStorage.setItem('user', JSON.stringify(userData));
       setActiveLoginMode(userData.activeLoginMode ?? null);
-
-      // Cargar features del tenant después de login
-      await loadTenantFeatures();
-
-      // Cargar defaultService del tenant después de login
-      await loadTenantDefaultService();
       
       // Resolver contexto activo según modo devuelto por backend
       if (userData.activeLoginMode === 'STORE' && userData.activeStoreId) {
@@ -499,6 +501,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setTenantFeaturesLoaded(false);
       setTenantDefaultService('REPAIR');
       setTenantDefaultServiceLoaded(false);
+      setCurrentStore(null);
+      setCurrentWarehouse(null);
+      try {
+        localStorage.removeItem(CURRENT_STORE_STORAGE_KEY);
+        localStorage.removeItem(CURRENT_WAREHOUSE_STORAGE_KEY);
+      } catch {
+        // ignorar
+      }
       setLoading(false);
       return false;
     }
@@ -537,6 +547,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.error('Token structure error:', decoded);
           throw new Error('Token inválido: estructura incorrecta');
         }
+
+        const tokenTenantFeatures = Array.isArray(decoded.tenantFeatures) ? decoded.tenantFeatures : [];
+        setTenantFeatures(tokenTenantFeatures);
+        setTenantFeaturesLoaded(true);
+
+        // Mantener compatibilidad con defaultService cacheado, pero no bloquear la UI.
+        try {
+          const cached = localStorage.getItem(TENANT_DEFAULT_SERVICE_STORAGE_KEY);
+          if (cached === 'REPAIR' || cached === 'WARRANTY' || cached === 'MISELANEOUS') {
+            setTenantDefaultService(cached);
+          }
+        } catch {
+          // ignorar
+        } finally {
+          setTenantDefaultServiceLoaded(true);
+        }
         
         // Get user data from localStorage or use token data
         const storedUser = localStorage.getItem('user');
@@ -561,9 +587,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               verified: decoded.verified || parsedUser.verified || false,
               stores: parsedUser.stores || [], // Tiendas del localStorage
               warehouses: parsedUser.warehouses || [], // Almacenes del localStorage
-              activeLoginMode: decoded.activeLoginMode ?? parsedUser.activeLoginMode ?? null,
-              activeStoreId: decoded.activeStoreId ?? parsedUser.activeStoreId ?? null,
-              activeWarehouseId: decoded.activeWarehouseId ?? parsedUser.activeWarehouseId ?? null,
+              activeLoginMode: parsedUser.activeLoginMode ?? null,
               iat: decoded.iat,
               exp: decoded.exp
             };
@@ -579,9 +603,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               verified: decoded.verified || false,
               stores: [], // Tiendas vacías por defecto
               warehouses: [], // Almacenes vacíos por defecto
-              activeLoginMode: decoded.activeLoginMode ?? null,
-              activeStoreId: decoded.activeStoreId ?? null,
-              activeWarehouseId: decoded.activeWarehouseId ?? null,
+              activeLoginMode: null,
               iat: decoded.iat,
               exp: decoded.exp
             };
@@ -590,7 +612,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // No hay usuario en localStorage, crear desde JWT con tiendas reales
           let userStores: AuthStore[] = [];
           if (decoded.stores && Array.isArray(decoded.stores)) {
-            userStores = await getUserStores(decoded.stores);
+            // No bloquear el render inicial: usar fallback y resolver nombres reales en background.
+            userStores = decoded.stores.map((storeId: string) => ({
+              id: storeId,
+              name: `Tienda ${storeId.slice(-8)}`,
+            }));
+
+            void (async () => {
+              const resolved = await getUserStores(decoded.stores as string[]);
+              setUser((prev) => {
+                if (!prev) return prev;
+                if (!Array.isArray(resolved) || resolved.length === 0) return prev;
+                const nextUser = { ...prev, stores: resolved };
+                try {
+                  localStorage.setItem('user', JSON.stringify(nextUser));
+                } catch {
+                  // ignorar
+                }
+                return nextUser;
+              });
+            })();
           }
           
           userData = {
@@ -602,9 +643,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             verified: decoded.verified || false,
             stores: userStores,
             warehouses: [],
-            activeLoginMode: decoded.activeLoginMode ?? null,
-            activeStoreId: decoded.activeStoreId ?? null,
-            activeWarehouseId: decoded.activeWarehouseId ?? null,
+            activeLoginMode: null,
             iat: decoded.iat,
             exp: decoded.exp
           };
@@ -614,21 +653,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(userData);
         setActiveLoginMode(userData.activeLoginMode ?? null);
 
-        // Cargar features del tenant al restaurar sesión
-        await loadTenantFeatures();
-
-        // Cargar defaultService del tenant al restaurar sesión
-        await loadTenantDefaultService();
-
-        if (userData.activeLoginMode === 'STORE' && userData.activeStoreId) {
-          const activeStore = (userData.stores || []).find((s) => s.id === userData.activeStoreId) || null;
-          setCurrentStore(activeStore);
-          setCurrentWarehouse(null);
-        } else if (userData.activeLoginMode === 'WAREHOUSE' && userData.activeWarehouseId) {
-          const activeWarehouse = (userData.warehouses || []).find((w) => w.id === userData.activeWarehouseId) || null;
-          setCurrentWarehouse(activeWarehouse);
-          setCurrentStore(null);
-        } else {
+        // Restaurar selección local de tienda/almacén tras hard reload.
+        try {
+          if (userData.activeLoginMode === 'STORE') {
+            const rawStore = localStorage.getItem(CURRENT_STORE_STORAGE_KEY);
+            if (rawStore) {
+              const parsed = JSON.parse(rawStore) as AuthStore;
+              if (parsed?.id) {
+                setCurrentStore(parsed);
+                setCurrentWarehouse(null);
+              }
+            }
+          } else if (userData.activeLoginMode === 'WAREHOUSE') {
+            const rawWarehouse = localStorage.getItem(CURRENT_WAREHOUSE_STORAGE_KEY);
+            if (rawWarehouse) {
+              const parsed = JSON.parse(rawWarehouse) as AuthStore;
+              if (parsed?.id) {
+                setCurrentWarehouse(parsed);
+                setCurrentStore(null);
+              }
+            }
+          } else {
+            setCurrentStore(null);
+            setCurrentWarehouse(null);
+          }
+        } catch {
           setCurrentStore(null);
           setCurrentWarehouse(null);
         }

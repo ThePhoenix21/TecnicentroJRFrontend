@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Plus, Search, X, Warehouse as WarehouseIcon, Pencil, Save, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { useAuth } from '@/contexts/auth-context';
 import { warehouseService } from '@/services/warehouse.service';
 import type {
   CreateWarehouseDto,
@@ -25,6 +26,13 @@ const normalize = (v: unknown) => String(v ?? '').trim().toLowerCase();
 
 export default function WarehousesPage() {
   const router = useRouter();
+  const { activeLoginMode } = useAuth();
+
+  useEffect(() => {
+    if (activeLoginMode === 'WAREHOUSE') {
+      router.replace('/dashboard');
+    }
+  }, [activeLoginMode, router]);
 
   const [loading, setLoading] = useState(true);
   const [warehouses, setWarehouses] = useState<WarehouseListItem[]>([]);
