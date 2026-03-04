@@ -1,4 +1,5 @@
 import { domainApi } from "./domainApi";
+import { api } from "./api";
 import type {
   CreateProviderDto,
   CreateProviderResponse,
@@ -82,10 +83,7 @@ class ProviderService {
   }
 
   async getProvidersLookup(): Promise<ProviderLookupItem[]> {
-    const response = await domainApi.get<ProviderLookupItem[]>({
-      store: '/providers/lookup',
-      warehouse: '/warehouse/suppliers/lookup',
-    });
+    const response = await api.get<ProviderLookupItem[]>('/providers/lookup');
     return response.data;
   }
 

@@ -1,4 +1,5 @@
 import { domainApi } from "./domainApi";
+import { api } from "./api";
 import type {
   CreateSupplyOrderDto,
   ReceiveSupplyOrderDto,
@@ -70,7 +71,36 @@ class SupplyOrderService {
   }
 
   async getSupplyOrdersLookup(): Promise<SupplyOrderLookupItem[]> {
-    const response = await domainApi.get<SupplyOrderLookupItem[]>(this.getDomainPath('/lookup'));
+    const params = new URLSearchParams();
+
+    if (typeof window !== 'undefined') {
+      try {
+        const userRaw = localStorage.getItem('user');
+        const activeLoginMode = userRaw
+          ? (JSON.parse(userRaw) as { activeLoginMode?: string }).activeLoginMode
+          : null;
+
+        if (activeLoginMode === 'STORE') {
+          const storeRaw = localStorage.getItem('current_store');
+          if (storeRaw) {
+            const store = JSON.parse(storeRaw) as { id?: string };
+            if (store?.id) params.set('storeId', store.id);
+          }
+        } else if (activeLoginMode === 'WAREHOUSE') {
+          const warehouseRaw = localStorage.getItem('current_warehouse');
+          if (warehouseRaw) {
+            const warehouse = JSON.parse(warehouseRaw) as { id?: string };
+            if (warehouse?.id) params.set('warehouseId', warehouse.id);
+          }
+        }
+      } catch {
+        // ignore localStorage parse errors
+      }
+    }
+
+    const qs = params.toString();
+    const url = qs ? `/supply-orders/lookup?${qs}` : '/supply-orders/lookup';
+    const response = await api.get<SupplyOrderLookupItem[]>(url);
     return response.data;
   }
 

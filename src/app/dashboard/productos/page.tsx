@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { storeProductService } from '@/services/store-product.service';
-import { warehouseProductService } from '@/services/warehouse-product.service';
+import { domainApi } from '@/services/domainApi';
 import { productService } from '@/services/product.service';
 import { inventoryService } from '@/services/inventory.service';
 import { storeService } from '@/services/store.service';
@@ -183,15 +183,17 @@ export default function ProductsPage() {
 
       try {
         setLoading(true);
-        const response = await warehouseProductService.list({
-          page: targetPage,
-          pageSize: PAGE_SIZE,
-          name: nameFilter.trim() || undefined,
-          inStock: hideOutOfStock ? true : undefined,
+        const response = await domainApi.get<WarehouseProductsListResponse>('/warehouse/products', {
+          params: {
+            page: targetPage,
+            pageSize: PAGE_SIZE,
+            name: nameFilter.trim() || undefined,
+            inStock: hideOutOfStock ? true : undefined,
+          },
         });
 
-        const rows = Array.isArray((response as WarehouseProductsListResponse).data)
-          ? (response as WarehouseProductsListResponse).data
+        const rows = Array.isArray(response.data.data)
+          ? response.data.data
           : [];
 
         setStoreProducts(
@@ -204,9 +206,9 @@ export default function ProductsPage() {
             basePrice: wp.product?.basePrice,
           }))
         );
-        setTotal((response as WarehouseProductsListResponse).total || 0);
-        setTotalPages((response as WarehouseProductsListResponse).totalPages || 1);
-        setPage((response as WarehouseProductsListResponse).page || targetPage);
+        setTotal(response.data.total || 0);
+        setTotalPages(response.data.totalPages || 1);
+        setPage(response.data.page || targetPage);
       } catch (error) {
         console.error('❌ Error fetching warehouse products:', error);
         setStoreProducts([]);
@@ -479,14 +481,14 @@ export default function ProductsPage() {
             }
           }
 
-          await warehouseProductService.update(currentStoreProduct.id, updateDto);
+          await domainApi.patch(`/warehouse/products/${currentStoreProduct.id}`, updateDto);
 
           toast({
             title: 'Producto actualizado',
             description: 'El producto se ha actualizado correctamente',
           });
         } else {
-          await warehouseProductService.create({
+          await domainApi.post('/warehouse/products', {
             createNewProduct: true,
             name: formData.name,
             description: formData.description,
@@ -624,7 +626,8 @@ export default function ProductsPage() {
         return Number.isFinite(numeric) ? numeric.toString() : String(value);
       };
       if (isWarehouseMode) {
-        const detail = await warehouseProductService.getById(productId);
+        const detailResponse = await domainApi.get<WarehouseProduct>(`/warehouse/products/${productId}`);
+        const detail = detailResponse.data;
         const resolvedStockThreshold = typeof detail.stockThreshold === 'number'
           ? detail.stockThreshold
           : undefined;
@@ -748,7 +751,7 @@ export default function ProductsPage() {
           }
         }
 
-        await warehouseProductService.update(selectedProductId, warehousePayload);
+        await domainApi.patch(`/warehouse/products/${selectedProductId}`, warehousePayload);
 
         toast({
           title: 'Producto actualizado',
@@ -826,7 +829,7 @@ export default function ProductsPage() {
 
       setIsDeletingStoreProduct(true);
       try {
-        await warehouseProductService.delete(selectedProductId);
+        await domainApi.delete(`/warehouse/products/${selectedProductId}`);
         toast({
           title: 'Producto eliminado',
           description: 'Se eliminó el producto del almacén.',

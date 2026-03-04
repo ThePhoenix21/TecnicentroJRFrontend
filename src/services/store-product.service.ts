@@ -47,6 +47,29 @@ class StoreProductService {
 
   async getStoreProductsLookup(params?: { storeId?: string; search?: string }): Promise<Array<{ id: string; name: string }>> {
     try {
+      const activeLoginMode = (() => {
+        if (typeof window === 'undefined') return null;
+        try {
+          const raw = localStorage.getItem('user');
+          if (!raw) return null;
+          const parsed = JSON.parse(raw) as { activeLoginMode?: string | null };
+          return parsed.activeLoginMode ?? null;
+        } catch {
+          return null;
+        }
+      })();
+
+      // En modo WAREHOUSE el lookup proviene del catálogo global del tenant.
+      // No depende de storeId/warehouseId.
+      if (activeLoginMode === 'WAREHOUSE') {
+        const searchParams = new URLSearchParams();
+        if (params?.search) searchParams.set('search', params.search);
+        const qs = searchParams.toString();
+        const url = qs ? `/catalog/products/lookup?${qs}` : '/catalog/products/lookup';
+        const response = await api.get(url);
+        return Array.isArray(response.data) ? response.data : [];
+      }
+
       const searchParams = new URLSearchParams();
       if (params?.storeId) searchParams.set('storeId', params.storeId);
       if (params?.search) searchParams.set('search', params.search);
@@ -54,7 +77,7 @@ class StoreProductService {
       const url = qs ? `/store/products/lookup?${qs}` : '/store/products/lookup';
       const response = await domainApi.get({
         store: url,
-        warehouse: qs ? `/warehouse/products/lookup?${qs}` : '/warehouse/products/lookup',
+        warehouse: url,
       });
       return Array.isArray(response.data) ? response.data : [];
     } catch (error) {

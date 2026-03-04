@@ -23,7 +23,7 @@ type StoreProductLookupItem = {
 };
 
 export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps) {
-  const { currentStore, user } = useAuth();
+  const { currentStore, user, activeLoginMode } = useAuth();
   const { toast } = useToast();
   
   const [products, setProducts] = useState<StoreProductLookupItem[]>([]);
@@ -40,10 +40,32 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
   const productInputRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    if (activeLoginMode === 'WAREHOUSE') {
+      loadCatalogProducts();
+      return;
+    }
+
     if (currentStore?.id) {
       loadProducts(currentStore.id);
     }
-  }, [currentStore?.id]);
+  }, [activeLoginMode, currentStore?.id]);
+
+  const loadCatalogProducts = async () => {
+    setIsLoadingProducts(true);
+    try {
+      const response = await storeProductService.getStoreProductsLookup();
+      setProducts(response);
+    } catch (error) {
+      console.error('Error loading products:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudieron cargar los productos del catálogo.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingProducts(false);
+    }
+  };
 
   const loadProducts = async (storeId: string) => {
     setIsLoadingProducts(true);
