@@ -41,7 +41,7 @@ interface InventoryMovementHistoryProps {
 export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHistoryProps) {
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const { currentStore } = useAuth();
+  const { currentStore, activeLoginMode } = useAuth();
 
   const [page, setPage] = useState(1);
   const [pageSize] = useState(12);
@@ -165,7 +165,7 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
       setIsLoading(true);
       try {
         const storeId = storeIdRef.current;
-        if (!storeId) {
+        if (activeLoginMode !== 'WAREHOUSE' && !storeId) {
           setMovements([]);
           setTotal(0);
           setTotalPages(1);
@@ -179,7 +179,7 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
         const range = from && to ? toUtcRange(from, to) : null;
 
         const response = await inventoryService.getInventoryMovements({
-          storeId,
+          ...(activeLoginMode !== 'WAREHOUSE' && storeId ? { storeId } : {}),
           page: pageToLoad,
           pageSize: pageSizeRef.current,
           name: productNameFilterRef.current.trim() || undefined,
@@ -201,7 +201,7 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
         setIsLoading(false);
       }
     };
-  }, [page, currentStore?.id]);
+  }, [page, currentStore?.id, activeLoginMode]);
 
   useEffect(() => {
     const loadUsers = async () => {
@@ -279,7 +279,7 @@ export function InventoryMovementHistory({ refreshTrigger }: InventoryMovementHi
     }
   };
 
-  if (!currentStore?.id) {
+  if (activeLoginMode !== 'WAREHOUSE' && !currentStore?.id) {
     return (
       <Card>
         <CardHeader>

@@ -1,5 +1,5 @@
 import { api } from './api';
-import { domainApi } from './domainApi';
+import { domainApi, getActiveLoginMode } from './domainApi';
 import { AxiosError } from 'axios';
 import { 
   InventoryMovement, 
@@ -66,14 +66,17 @@ export const inventoryService = {
 
   async getInventoryMovements(query: InventoryMovementsQuery = {}): Promise<InventoryMovementsListResponse> {
     try {
-      if (!query.storeId) {
+      const mode = getActiveLoginMode();
+      if (mode !== 'WAREHOUSE' && !query.storeId) {
         throw new Error('storeId es requerido para obtener los movimientos de inventario.');
       }
 
       const { storeId, ...rest } = query;
       const params = new URLSearchParams();
 
-      params.set('storeId', storeId);
+      if (mode !== 'WAREHOUSE' && storeId) {
+        params.set('storeId', storeId);
+      }
       if (rest.page) params.set('page', String(rest.page));
       if (rest.pageSize) params.set('pageSize', String(rest.pageSize));
       if (rest.name) params.set('name', rest.name);
@@ -129,10 +132,23 @@ export const inventoryService = {
 
   async createMovimiento(data: CreateInventoryMovementDTO): Promise<InventoryMovement> {
     try {
+      const mode = getActiveLoginMode();
+      const payload = (() => {
+        if (mode !== 'WAREHOUSE') return data;
+
+        const warehouseProductId = (data as CreateInventoryMovementDTO & { warehouseProductId?: string }).warehouseProductId || data.storeProductId;
+        return {
+          type: data.type,
+          quantity: data.quantity,
+          description: data.description,
+          warehouseProductId,
+        };
+      })();
+
       const response = await domainApi.post<InventoryMovement>({
         store: '/inventory-movements',
         warehouse: '/warehouse/movements',
-      }, data);
+      }, payload);
       return response.data;
     } catch (error) {
       const axiosError = error as AxiosError<{ message?: string }>;

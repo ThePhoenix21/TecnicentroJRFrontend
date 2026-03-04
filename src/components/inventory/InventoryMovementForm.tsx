@@ -53,7 +53,7 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
   const loadCatalogProducts = async () => {
     setIsLoadingProducts(true);
     try {
-      const response = await storeProductService.getStoreProductsLookup();
+      const response = await inventoryService.getProductsLookup('');
       setProducts(response);
     } catch (error) {
       console.error('Error loading products:', error);
