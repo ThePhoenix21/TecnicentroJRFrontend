@@ -112,6 +112,7 @@ export interface InventorySummaryTotals {
   incoming: number;
   outgoing: number;
   sales: number;
+  returns: number;
   adjustmentsNet: number;
 }
 
