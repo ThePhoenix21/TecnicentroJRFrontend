@@ -1108,11 +1108,6 @@ export default function VentasPage() {
                                   <span className="text-sm font-medium truncate max-w-[140px] sm:max-w-[200px]">
                                     {displayName}
                                   </span>
-                                  {!hasNamedServices && (
-                                    <span className="text-xs text-muted-foreground truncate max-w-[140px] sm:max-w-[200px]">
-                                      {clientName}
-                                    </span>
-                                  )}
                                 </div>
                               </TableCell>
 
