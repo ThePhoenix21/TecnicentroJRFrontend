@@ -166,6 +166,7 @@ export default function OrdenesSuministroPage() {
   const [editForm, setEditForm] = useState({
     description: '',
     storeId: '',
+    warehouseId: '',
     products: [] as any[]
   });
   const [editSubmitting, setEditSubmitting] = useState(false);
@@ -546,7 +547,8 @@ export default function OrdenesSuministroPage() {
     setIsEditing(true);
     setEditForm({
       description: detail.description || '',
-      storeId: detail.store?.id || '',
+      storeId: currentMode === 'STORE' ? (detail.store?.id || '') : '',
+      warehouseId: currentMode === 'WAREHOUSE' ? (detail.warehouse?.id || '') : '',
       products: detail.products.map(p => ({
         productId: p.productId,
         quantity: p.quantity,
@@ -560,6 +562,7 @@ export default function OrdenesSuministroPage() {
     setEditForm({
       description: '',
       storeId: '',
+      warehouseId: '',
       products: []
     });
   };
@@ -572,8 +575,10 @@ export default function OrdenesSuministroPage() {
     if (!detail) return;
     
     // Validaciones básicas
-    if (!editForm.storeId) {
-      toast.error("Seleccione una tienda");
+    const locationField = currentMode === 'STORE' ? editForm.storeId : editForm.warehouseId;
+    const locationLabel = currentMode === 'STORE' ? 'tienda' : 'almacén';
+    if (!locationField) {
+      toast.error(`Seleccione una ${locationLabel}`);
       return;
     }
     
@@ -587,7 +592,8 @@ export default function OrdenesSuministroPage() {
       
       const updateData = {
         description: editForm.description,
-        storeId: editForm.storeId,
+        storeId: currentMode === 'STORE' ? editForm.storeId : undefined,
+        warehouseId: currentMode === 'WAREHOUSE' ? editForm.warehouseId : undefined,
         products: editForm.products
       };
 
@@ -1345,13 +1351,13 @@ export default function OrdenesSuministroPage() {
                         {detail.createdBy?.username && <div className="text-muted-foreground">@{detail.createdBy.username}</div>}
                       </div>
                     </div>
-                    {detail.store && (
+                    {currentMode === 'STORE' && detail.store && (
                       <div className="space-y-2 rounded-lg border bg-background p-4">
                         <h3 className="text-sm font-semibold">Tienda</h3>
                         {isEditing ? (
                           <Select
                             value={editForm.storeId}
-                            onValueChange={(value) => setEditForm(prev => ({ ...prev, storeId: value }))}
+                            onValueChange={(value) => setEditForm(prev => ({ ...prev, storeId: value, warehouseId: '' }))}
                           >
                             <SelectTrigger>
                               <SelectValue placeholder="Seleccionar tienda" />
@@ -1373,14 +1379,32 @@ export default function OrdenesSuministroPage() {
                         )}
                       </div>
                     )}
-                    {detail.warehouse && (
+                    {currentMode === 'WAREHOUSE' && detail.warehouse && (
                       <div className="space-y-2 rounded-lg border bg-background p-4">
                         <h3 className="text-sm font-semibold">Almacén</h3>
-                        <div className="text-sm space-y-1">
-                          <div>{detail.warehouse.name}</div>
-                          {detail.warehouse.address && <div className="text-muted-foreground">{detail.warehouse.address}</div>}
-                          {detail.warehouse.phone && <div className="text-muted-foreground">Tel: {detail.warehouse.phone}</div>}
-                        </div>
+                        {isEditing ? (
+                          <Select
+                            value={editForm.warehouseId}
+                            onValueChange={(value) => setEditForm(prev => ({ ...prev, warehouseId: value, storeId: '' }))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Seleccionar almacén" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {warehousesLookup.map((warehouse) => (
+                                <SelectItem key={warehouse.id} value={warehouse.id}>
+                                  {warehouse.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <div className="text-sm space-y-1">
+                            <div>{detail.warehouse.name}</div>
+                            {detail.warehouse.address && <div className="text-muted-foreground">{detail.warehouse.address}</div>}
+                            {detail.warehouse.phone && <div className="text-muted-foreground">Tel: {detail.warehouse.phone}</div>}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

@@ -70,29 +70,29 @@ class SupplyOrderService {
   }
 
   async annullSupplyOrder(orderId: string): Promise<void> {
-    await domainApi.post(this.getDomainPath(`/${orderId}/annull`));
+    await api.post(`${this.baseUrl}/${orderId}/annull`);
   }
 
   async approveSupplyOrder(orderId: string): Promise<void> {
-    await domainApi.post(this.getDomainPath(`/${orderId}/approve`));
+    await api.post(`${this.baseUrl}/${orderId}/approve`);
   }
 
   async receiveSupplyOrder(orderId: string, payload: ReceiveSupplyOrderDto): Promise<void> {
-    await domainApi.post(this.getDomainPath(`/${orderId}/receive`), payload);
+    await api.post(`${this.baseUrl}/${orderId}/receive`, payload);
   }
 
   async closePartialSupplyOrder(orderId: string): Promise<ClosePartialSupplyOrderResponse> {
-    const response = await domainApi.post<ClosePartialSupplyOrderResponse>(this.getDomainPath(`/${orderId}/close-partial`));
+    const response = await api.post<ClosePartialSupplyOrderResponse>(`${this.baseUrl}/${orderId}/close-partial`);
     return response.data;
   }
 
-  async createSupplyOrder(payload: CreateSupplyOrderDto): Promise<string> {
-    const response = await domainApi.post<string>(this.getDomainPath(''), payload);
+  async createSupplyOrder(payload: CreateSupplyOrderDto): Promise<{ success: boolean }> {
+    const response = await api.post<{ success: boolean }>(this.baseUrl, payload);
     return response.data;
   }
 
-  async updateSupplyOrder(orderId: string, payload: { description: string; storeId: string; products: any[] }): Promise<void> {
-    await domainApi.put(this.getDomainPath(`/${orderId}`), payload);
+  async updateSupplyOrder(orderId: string, payload: { description?: string; storeId?: string; warehouseId?: string; products: any[] }): Promise<void> {
+    await api.put(`${this.baseUrl}/${orderId}`, payload);
   }
 
   async getSupplyOrdersLookup(): Promise<SupplyOrderLookupItem[]> {
@@ -133,14 +133,10 @@ class SupplyOrderService {
     if (pdfBlob) {
       const formData = new FormData();
       formData.append('pdf', pdfBlob, `orden-${orderId}.pdf`);
-      const response = await domainApi.post(this.getDomainPath(`/${orderId}/approve-with-email`), formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      const response = await api.post(`${this.baseUrl}/${orderId}/approve-with-email`, formData);
       return response.data;
     } else {
-      const response = await domainApi.post(this.getDomainPath(`/${orderId}/approve-with-email`));
+      const response = await api.post(`${this.baseUrl}/${orderId}/approve-with-email`);
       return response.data;
     }
   }
