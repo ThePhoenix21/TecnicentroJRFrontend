@@ -22,7 +22,8 @@ import {
   ChevronRight,
   Search,
   X,
-  AlertCircle
+  AlertCircle,
+  RotateCcw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -227,7 +228,7 @@ export default function InventoryReportsPage() {
   }
 
   // Totales por defecto si falla la carga
-  const totals = summary?.totals || { incoming: 0, outgoing: 0, sales: 0, adjustmentsNet: 0 };
+  const totals = summary?.totals || { incoming: 0, outgoing: 0, sales: 0, returns: 0, adjustmentsNet: 0 };
 
   return (
     <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
@@ -292,7 +293,7 @@ export default function InventoryReportsPage() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Entradas</CardTitle>
@@ -300,7 +301,7 @@ export default function InventoryReportsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">+{totals.incoming}</div>
-            <p className="text-xs text-muted-foreground">Productos ingresados</p>
+            <p className="text-xs text-muted-foreground">Ingreso de productos</p>
           </CardContent>
         </Card>
 
@@ -322,7 +323,7 @@ export default function InventoryReportsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">-{totals.sales}</div>
-            <p className="text-xs text-muted-foreground">Salidas por venta</p>
+            <p className="text-xs text-muted-foreground">Salidas de producto por ventas</p>
           </CardContent>
         </Card>
 
@@ -334,6 +335,17 @@ export default function InventoryReportsPage() {
           <CardContent>
             <div className="text-2xl font-bold text-yellow-600">{totals.adjustmentsNet > 0 ? '+' : ''}{totals.adjustmentsNet}</div>
             <p className="text-xs text-muted-foreground">Correcciones de inventario</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Devoluciones</CardTitle>
+            <RotateCcw className="h-4 w-4 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600">-{totals.returns}</div>
+            <p className="text-xs text-muted-foreground">Productos devueltos</p>
           </CardContent>
         </Card>
       </div>
