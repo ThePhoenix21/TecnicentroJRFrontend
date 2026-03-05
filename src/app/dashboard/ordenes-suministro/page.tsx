@@ -54,6 +54,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SupplyOrderPDF } from "./SupplyOrderPDF";
 import { useAuth } from "@/contexts/auth-context";
+import { getActiveLoginMode } from "@/services/domainApi";
 
 const PAGE_SIZE = 12;
 
@@ -107,6 +108,8 @@ export default function OrdenesSuministroPage() {
   const canApproveSupplyOrder = isAdmin || hasPermission?.("APPROVE_SUPPLY_ORDER");
   const canCancelSupplyOrder = isAdmin || hasPermission?.("CANCEL_SUPPLY_ORDER");
   const canEditEmittedSupplyOrder = isAdmin || hasPermission?.("EDIT_EMITTED_SUPPLY_ORDER");
+
+  const currentMode = getActiveLoginMode();
 
   const [activeTab, setActiveTab] = useState<"manage" | "receive">("manage");
   const [orders, setOrders] = useState<SupplyOrderItem[]>([]);
@@ -1082,8 +1085,12 @@ export default function OrdenesSuministroPage() {
                         <TableHead className="hidden sm:table-cell min-w-[140px]">Emisión</TableHead>
                         <TableHead className="hidden md:table-cell min-w-[150px]">Proveedor</TableHead>
                         <TableHead className="hidden lg:table-cell min-w-[150px]">Creado por</TableHead>
-                        <TableHead className="hidden xl:table-cell min-w-[120px]">Tienda</TableHead>
-                        <TableHead className="hidden xl:table-cell min-w-[120px]">Almacén</TableHead>
+                        {currentMode === 'STORE' && (
+                          <TableHead className="hidden xl:table-cell min-w-[120px]">Tienda</TableHead>
+                        )}
+                        {currentMode === 'WAREHOUSE' && (
+                          <TableHead className="hidden xl:table-cell min-w-[120px]">Almacén</TableHead>
+                        )}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1109,8 +1116,12 @@ export default function OrdenesSuministroPage() {
                                 <div className="text-xs text-muted-foreground">{order.creatorUserEmail || "-"}</div>
                               </div>
                             </TableCell>
-                            <TableCell className="hidden xl:table-cell text-muted-foreground">{order.storeName || "-"}</TableCell>
-                            <TableCell className="hidden xl:table-cell text-muted-foreground">{order.warehouseName || "-"}</TableCell>
+                            {currentMode === 'STORE' && (
+                              <TableCell className="hidden xl:table-cell text-muted-foreground">{order.storeName || "-"}</TableCell>
+                            )}
+                            {currentMode === 'WAREHOUSE' && (
+                              <TableCell className="hidden xl:table-cell text-muted-foreground">{order.warehouseName || "-"}</TableCell>
+                            )}
                           </TableRow>
                         );
                       })}

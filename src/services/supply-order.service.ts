@@ -31,16 +31,41 @@ class SupplyOrderService {
     if (filters.toDate) params.set("toDate", filters.toDate);
     if (filters.code) params.set("code", filters.code);
 
+    // Add mode and corresponding ID based on current login mode
+    if (typeof window !== 'undefined') {
+      try {
+        const userRaw = localStorage.getItem('user');
+        const activeLoginMode = userRaw
+          ? (JSON.parse(userRaw) as { activeLoginMode?: string }).activeLoginMode
+          : null;
+
+        if (activeLoginMode === 'STORE') {
+          params.set('mode', 'store');
+          const storeRaw = localStorage.getItem('current_store');
+          if (storeRaw) {
+            const store = JSON.parse(storeRaw) as { id?: string };
+            if (store?.id) params.set('storeId', store.id);
+          }
+        } else if (activeLoginMode === 'WAREHOUSE') {
+          params.set('mode', 'warehouse');
+          const warehouseRaw = localStorage.getItem('current_warehouse');
+          if (warehouseRaw) {
+            const warehouse = JSON.parse(warehouseRaw) as { id?: string };
+            if (warehouse?.id) params.set('warehouseId', warehouse.id);
+          }
+        }
+      } catch {
+        // ignore localStorage parse errors
+      }
+    }
+
     const query = params.toString();
-    const response = await domainApi.get<SupplyOrderListResponse>({
-      store: query ? `${this.baseUrl}?${query}` : this.baseUrl,
-      warehouse: query ? `/warehouse/receptions?${query}` : '/warehouse/receptions',
-    });
+    const response = await api.get<SupplyOrderListResponse>(query ? `${this.baseUrl}?${query}` : this.baseUrl);
     return response.data;
   }
 
   async getSupplyOrderById(orderId: string): Promise<SupplyOrderDetail> {
-    const response = await domainApi.get<SupplyOrderDetail>(this.getDomainPath(`/${orderId}`));
+    const response = await api.get<SupplyOrderDetail>(`${this.baseUrl}/${orderId}`);
     return response.data;
   }
 
@@ -61,8 +86,8 @@ class SupplyOrderService {
     return response.data;
   }
 
-  async createSupplyOrder(payload: CreateSupplyOrderDto): Promise<unknown> {
-    const response = await api.post('/supply-orders', payload);
+  async createSupplyOrder(payload: CreateSupplyOrderDto): Promise<string> {
+    const response = await domainApi.post<string>(this.getDomainPath(''), payload);
     return response.data;
   }
 
