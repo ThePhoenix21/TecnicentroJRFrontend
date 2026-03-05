@@ -61,8 +61,8 @@ class SupplyOrderService {
     return response.data;
   }
 
-  async createSupplyOrder(payload: CreateSupplyOrderDto): Promise<string> {
-    const response = await domainApi.post<string>(this.getDomainPath(''), payload);
+  async createSupplyOrder(payload: CreateSupplyOrderDto): Promise<unknown> {
+    const response = await api.post('/supply-orders', payload);
     return response.data;
   }
 

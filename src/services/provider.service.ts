@@ -75,10 +75,7 @@ class ProviderService {
   }
 
   async getProductsLookup(): Promise<ProductLookupItem[]> {
-    const response = await domainApi.get<ProductLookupItem[]>({
-      store: '/catalog/products/lookup',
-      warehouse: '/warehouse/products/lookup',
-    });
+    const response = await api.get<ProductLookupItem[]>('/catalog/products/lookup');
     return response.data;
   }
 

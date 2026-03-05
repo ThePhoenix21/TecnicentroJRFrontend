@@ -417,17 +417,17 @@ export default function OrdenesSuministroPage() {
   };
 
   const ensureLookupsLoaded = async () => {
-    if (lookupLoading || (providersLookup.length && storesLookup.length && warehousesLookup.length && productsLookup.length)) {
-      return;
-    }
+    if (lookupLoading) return;
     try {
       setLookupLoading(true);
-      const [providersResult, storesResult, warehousesResult, productsResult] = await Promise.allSettled([
-        providerService.getProvidersLookup(),
-        storeService.getStoresLookup(),
-        warehouseService.getWarehousesSimple(),
+      const tasks = await Promise.allSettled([
+        providersLookup.length ? Promise.resolve(providersLookup) : providerService.getProvidersLookup(),
+        storesLookup.length ? Promise.resolve(storesLookup) : storeService.getStoresLookup(),
+        warehousesLookup.length ? Promise.resolve(warehousesLookup) : warehouseService.getWarehousesSimple(),
         providerService.getProductsLookup(),
       ]);
+
+      const [providersResult, storesResult, warehousesResult, productsResult] = tasks;
 
       if (providersResult.status === "fulfilled") {
         setProvidersLookup(Array.isArray(providersResult.value) ? providersResult.value : []);
