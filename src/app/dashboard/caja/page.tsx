@@ -1720,11 +1720,11 @@ export default function CajaPage() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Montos</p>
+                      <p className="text-xs text-muted-foreground">Montos:</p>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <p className="text-xs text-muted-foreground">Inicial</p>
-                          <p className="text-sm font-medium">{formatCurrency(selectedClosedSession.openingAmount || 0)}</p>
+                          <p className="text-sm font-medium">{formatCurrency(selectedClosedSession.declaredAmount || 0)}</p>
                         </div>
                         <div>
                           <p className="text-xs text-muted-foreground">Cierre</p>

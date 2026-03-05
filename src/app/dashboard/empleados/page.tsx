@@ -91,11 +91,6 @@ export default function EmpleadosPage() {
   const { canViewEmployees, hasAllPermissions } = usePermissions();
   const canRecreateEmployee = hasAllPermissions(['RECREATE_EMPLOYEE', 'MANAGE_EMPLOYEES']);
   
-  // Verificar permisos de acceso a la vista
-  if (!canViewEmployees()) {
-    return <AccessDeniedView />;
-  }
-  
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<EmployedListItem[]>([]);
 
@@ -924,6 +919,10 @@ export default function EmpleadosPage() {
     return { store: null, warehouse: null };
   };
 
+  if (!canViewEmployees()) {
+    return <AccessDeniedView />;
+  }
+
   return (
     <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
       <Card className="shadow-sm">
@@ -1357,24 +1356,25 @@ export default function EmpleadosPage() {
       </Card>
 
       <Dialog open={isDetailOpen} onOpenChange={(open) => (open ? setIsDetailOpen(true) : closeDetail())}>
-        <DialogContent className="sm:max-w-[720px] max-h-[90vh] p-0 overflow-hidden">
-          <div className="flex flex-col max-h-[90vh]">
-            <div className="p-6 pb-2">
-              <DialogHeader>
-                <DialogTitle>Detalle de empleado</DialogTitle>
-              </DialogHeader>
-            </div>
+        <DialogContent className="sm:max-w-[720px] lg:max-w-[1000px] max-h-[90vh] p-0 overflow-hidden flex flex-col">
+          {/* Header - fixed at top */}
+          <div className="flex-shrink-0 p-6 pb-2">
+            <DialogHeader>
+              <DialogTitle>Detalle de empleado</DialogTitle>
+            </DialogHeader>
+          </div>
 
-            <div className="flex-1 overflow-y-auto px-6 pb-6">
-              {detailLoading ? (
-                <div className="flex justify-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                </div>
-              ) : !detail ? (
-                <div className="text-center py-6 text-muted-foreground">Sin información</div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Scrollable content area */}
+          <div className="flex-1 overflow-y-auto px-6 pb-6">
+            {detailLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+            ) : !detail ? (
+              <div className="text-center py-6 text-muted-foreground">Sin información</div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Nombres</label>
                   <Input
@@ -1395,7 +1395,7 @@ export default function EmpleadosPage() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Documento</label>
-                  <Input value={detail.documentNumber ?? detail.document} disabled />
+                  <Input value={(detail.documentNumber ?? detail.document ?? "")} disabled />
                 </div>
 
                 <div className="space-y-2">
@@ -1504,9 +1504,9 @@ export default function EmpleadosPage() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Usuario que lo creó</label>
-                  <Input 
-                    value={detail.audit?.createdBy ? `${detail.audit.createdBy.name} (${detail.audit.createdBy.email})` : (detail.createdByUser ? `${detail.createdByUser.name} (${detail.createdByUser.email})` : "-")} 
-                    disabled 
+                  <Input
+                    value={detail.audit?.createdBy ? `${detail.audit.createdBy.name} (${detail.audit.createdBy.email})` : (detail.createdByUser ? `${detail.createdByUser.name} (${detail.createdByUser.email})` : "-")}
+                    disabled
                   />
                 </div>
 
@@ -1612,62 +1612,62 @@ export default function EmpleadosPage() {
               )}
             </div>
 
-            <div className="border-t bg-background px-6 py-4">
-              <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+          {/* Footer - always visible at bottom */}
+          <div className="flex-shrink-0 border-t bg-background">
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between px-6 py-4">
+              <ProtectedButton
+                permissions={['RECREATE_EMPLOYEE', 'MANAGE_EMPLOYEES']}
+                requireAll
+                variant="destructive"
+                onClick={openRecreate}
+                disabled={detailLoading || editSubmitting}
+                className="sm:mr-auto"
+              >
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Recrear empleado
+              </ProtectedButton>
+
+              <DialogFooter className="gap-2 sm:gap-2">
                 <ProtectedButton
-                  permissions={['RECREATE_EMPLOYEE', 'MANAGE_EMPLOYEES']}
-                  requireAll
-                  variant="destructive"
-                  onClick={openRecreate}
-                  disabled={detailLoading || editSubmitting}
-                  className="sm:mr-auto"
+                  permissions="MANAGE_EMPLOYEES"
+                  variant="outline"
+                  onClick={openConvert}
+                  disabled={detailLoading || editSubmitting || !!detail?.userId}
                 >
-                  <RotateCcw className="h-4 w-4 mr-2" />
-                  Recrear empleado
+                  {detail?.userId ? "Ya es usuario" : "Convertir a usuario"}
+                </ProtectedButton>
+                <ProtectedButton
+                  permissions="MANAGE_EMPLOYEES"
+                  variant="outline"
+                  onClick={() => {
+                    if (!detail) return;
+                    setIsEditing((v) => !v);
+                    setEditForm({
+                      firstName: detail.firstName ?? "",
+                      lastName: detail.lastName ?? "",
+                      phone: detail.phone ?? "",
+                      email: detail.email ?? "",
+                      position: detail.position ?? "",
+                      status: detail.status ?? "",
+                    });
+                  }}
+                  disabled={detailLoading || editSubmitting}
+                >
+                  <Edit2 className="h-4 w-4 mr-2" />
+                  {isEditing ? "Cancelar edición" : "Editar"}
                 </ProtectedButton>
 
-                <DialogFooter className="gap-2 sm:gap-2">
+                {isEditing && (
                   <ProtectedButton
                     permissions="MANAGE_EMPLOYEES"
-                    variant="outline"
-                    onClick={openConvert}
-                    disabled={detailLoading || editSubmitting || !!detail?.userId}
+                    onClick={handleSaveEdit}
+                    disabled={editSubmitting}
                   >
-                    {detail?.userId ? "Ya es usuario" : "Convertir a usuario"}
+                    <Save className="h-4 w-4 mr-2" />
+                    Guardar
                   </ProtectedButton>
-                  <ProtectedButton
-                    permissions="MANAGE_EMPLOYEES"
-                    variant="outline"
-                    onClick={() => {
-                      if (!detail) return;
-                      setIsEditing((v) => !v);
-                      setEditForm({
-                        firstName: detail.firstName ?? "",
-                        lastName: detail.lastName ?? "",
-                        phone: detail.phone ?? "",
-                        email: detail.email ?? "",
-                        position: detail.position ?? "",
-                        status: detail.status ?? "",
-                      });
-                    }}
-                    disabled={detailLoading || editSubmitting}
-                  >
-                    <Edit2 className="h-4 w-4 mr-2" />
-                    {isEditing ? "Cancelar edición" : "Editar"}
-                  </ProtectedButton>
-
-                  {isEditing && (
-                    <ProtectedButton 
-                      permissions="MANAGE_EMPLOYEES"
-                      onClick={handleSaveEdit} 
-                      disabled={editSubmitting}
-                    >
-                      <Save className="h-4 w-4 mr-2" />
-                      Guardar
-                    </ProtectedButton>
-                  )}
-                </DialogFooter>
-              </div>
+                )}
+              </DialogFooter>
             </div>
           </div>
         </DialogContent>

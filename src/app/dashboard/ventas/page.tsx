@@ -60,11 +60,6 @@ export default function VentasPage() {
   const router = useRouter();
   const { canViewOrders, canViewAllOrdersHistory, canViewOwnOrdersHistory, canDetailOrders } = usePermissions();
 
-  // Guard de acceso - Consulta de ventas
-  if (!canViewOrders()) {
-    return <AccessDeniedView />;
-  }
-
   const canViewAllOrdersHistoryPermission = canViewAllOrdersHistory();
   const canViewOwnOrdersHistoryPermission = canViewOwnOrdersHistory();
   const canViewOrdersHistoryPermission =
@@ -685,6 +680,10 @@ export default function VentasPage() {
         </div>
       </div>
     );
+  };
+
+  if (!canViewOrders()) {
+    return <AccessDeniedView />;
   }
 
   return (

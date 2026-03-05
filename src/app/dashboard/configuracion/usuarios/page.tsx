@@ -29,11 +29,6 @@ export default function UsersPage() {
   const [selectedStore, setSelectedStore] = useState<string>('all');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
 
-  // Verificar permisos de acceso
-  if (!canViewUsers()) {
-    return <AccessDeniedView />;
-  }
-
   // Debounce search term
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -85,6 +80,10 @@ export default function UsersPage() {
     setRefreshKey((prev: number) => prev + 1);
   };
 
+  if (!canViewUsers()) {
+    return <AccessDeniedView />;
+  }
+  
   return (
     <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
       <Card className="shadow-sm">

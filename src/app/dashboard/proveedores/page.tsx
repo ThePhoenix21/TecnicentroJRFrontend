@@ -57,11 +57,6 @@ export default function ProveedoresPage() {
   // Permisos - Control exclusivo por permisos, sin roles
   const { canViewSuppliers, canManageSuppliers, canDeleteSuppliers } = usePermissions();
 
-  // Si no tiene permiso para ver proveedores, mostrar acceso denegado
-  if (!canViewSuppliers()) {
-    return <AccessDeniedView />;
-  }
-
   const [loading, setLoading] = useState(true);
   const [providers, setProviders] = useState<ProviderListItem[]>([]);
   const [providerFilter, setProviderFilter] = useState("");
@@ -466,6 +461,10 @@ export default function ProveedoresPage() {
       setProductsSubmitting(false);
     }
   };
+
+  if (!canViewSuppliers()) {
+    return <AccessDeniedView />;
+  }
 
   return (
     <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">

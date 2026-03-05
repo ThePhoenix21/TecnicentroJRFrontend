@@ -88,10 +88,7 @@ class ProviderService {
   }
 
   async getProvidersRucLookup(): Promise<ProviderRucLookupItem[]> {
-    const response = await domainApi.get<ProviderRucLookupItem[]>({
-      store: '/providers/lookup-ruc',
-      warehouse: '/warehouse/suppliers/lookup-ruc',
-    });
+    const response = await api.get<ProviderRucLookupItem[]>('/providers/lookup-ruc');
     return response.data;
   }
 }
