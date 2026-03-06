@@ -118,7 +118,8 @@ export interface InventorySummaryTotals {
 
 export interface InventorySummaryResponse {
   period: InventorySummaryPeriod;
-  storeId: string;
+  storeId?: string;        // Present in store mode
+  warehouseId?: string;    // Present in warehouse mode
   totals: InventorySummaryTotals;
 }
 

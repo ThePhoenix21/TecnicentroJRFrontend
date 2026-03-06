@@ -165,8 +165,21 @@ class StoreProductService {
     }
   }
 
+  // Get current warehouse ID from localStorage
+  private getCurrentWarehouseId(): string | null {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = localStorage.getItem('current_warehouse');
+      if (!raw) return null;
+      const warehouse = JSON.parse(raw) as { id?: string };
+      return warehouse?.id || null;
+    } catch {
+      return null;
+    }
+  }
+
   // Obtener productos de la tienda actual
-  async getStoreProducts(storeId: string, page = 1, limit = 20, search = ''): Promise<{data: StoreProduct[], total: number, page: number, limit: number, totalPages: number}> {
+  async getStoreProducts(storeId: string | undefined, page = 1, limit = 20, search = ''): Promise<{data: StoreProduct[], total: number, page: number, limit: number, totalPages: number}> {
     try {
       const params = new URLSearchParams({
         page: page.toString(),
@@ -175,8 +188,8 @@ class StoreProductService {
       if (search) params.append('search', search);
 
       const response = await domainApi.get<{data: StoreProduct[], total: number, page: number, limit: number, totalPages: number}>({
-        store: `/store/products/store/${storeId}?${params.toString()}`,
-        warehouse: `/warehouse/products?${params.toString()}`,
+        store: `/store/products/store/${storeId!}?${params.toString()}`,
+        warehouse: `/warehouse/products/warehouse/${this.getCurrentWarehouseId()}?${params.toString()}`,
       });
       return response.data; // El backend devuelve {data: Array, total, page, limit, totalPages}
     } catch (error) {

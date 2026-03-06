@@ -28,7 +28,7 @@ import {
 import { Button } from "@/components/ui/button";
 
 export default function InventoryReportsPage() {
-  const { currentStore, hasPermission } = useAuth();
+  const { currentStore, hasPermission, activeLoginMode } = useAuth();
   const canViewInventory = hasPermission("VIEW_INVENTORY") || hasPermission("inventory.read");
   const [summary, setSummary] = useState<InventorySummaryResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -61,10 +61,12 @@ export default function InventoryReportsPage() {
   const [searchInput, setSearchInput] = useState("");
 
   const loadStoreProducts = async (page = 1) => {
-    if (!currentStore?.id) return;
+    const mode = activeLoginMode;
+    if (mode === 'STORE' && !currentStore?.id) return;
     setIsLoadingProducts(true);
     try {
-      const response = await storeProductService.getStoreProducts(currentStore.id, page, pageSize * 10); // Load more for filtering
+      const storeId = mode === 'STORE' ? currentStore?.id : undefined;
+      const response = await storeProductService.getStoreProducts(storeId, page, pageSize * 10); // Load more for filtering
       const products = response.data || [];
       setAllStoreProducts(products);
       setStoreProducts(products);
@@ -79,13 +81,15 @@ export default function InventoryReportsPage() {
   };
 
   const loadSummary = async () => {
-    if (!currentStore?.id) return;
+    const mode = activeLoginMode;
+    if (mode === 'STORE' && !currentStore?.id) return;
     setIsLoading(true);
     setSummaryError(null);
     try {
       const dateRange = toUtcRange(formatDateForInput(fromDate), formatDateForInput(toDate));
+      const storeId = mode === 'STORE' ? currentStore?.id : undefined;
       const data = await inventoryService.getMovementsSummary({
-        storeId: currentStore.id,
+        storeId,
         fromDate: dateRange.fromDate,
         toDate: dateRange.toDate,
       });
@@ -104,13 +108,13 @@ export default function InventoryReportsPage() {
     if (canViewInventory) {
       loadSummary();
     }
-  }, [currentStore?.id, canViewInventory, fromDate, toDate]);
+  }, [currentStore?.id, canViewInventory, fromDate, toDate, activeLoginMode]);
 
   useEffect(() => {
     if (canViewInventory) {
       loadStoreProducts();
     }
-  }, [currentStore?.id, canViewInventory]);
+  }, [currentStore?.id, canViewInventory, activeLoginMode]);
 
   const formatDateForInput = (isoString: string) => {
     if (!isoString) return "";
@@ -293,7 +297,7 @@ export default function InventoryReportsPage() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
+      <div className={`grid gap-4 md:grid-cols-3 ${activeLoginMode === 'WAREHOUSE' ? 'lg:grid-cols-3' : 'lg:grid-cols-5'}`}>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Entradas</CardTitle>
@@ -316,16 +320,18 @@ export default function InventoryReportsPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ventas</CardTitle>
-            <ShoppingCart className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">-{totals.sales}</div>
-            <p className="text-xs text-muted-foreground">Salidas de producto por ventas</p>
-          </CardContent>
-        </Card>
+        {activeLoginMode !== 'WAREHOUSE' && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Ventas</CardTitle>
+              <ShoppingCart className="h-4 w-4 text-blue-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-600">-{totals.sales}</div>
+              <p className="text-xs text-muted-foreground">Salidas de producto por ventas</p>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -338,16 +344,18 @@ export default function InventoryReportsPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Devoluciones</CardTitle>
-            <RotateCcw className="h-4 w-4 text-orange-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">-{totals.returns}</div>
-            <p className="text-xs text-muted-foreground">Productos devueltos</p>
-          </CardContent>
-        </Card>
+        {activeLoginMode !== 'WAREHOUSE' && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Devoluciones</CardTitle>
+              <RotateCcw className="h-4 w-4 text-orange-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-orange-600">-{totals.returns}</div>
+              <p className="text-xs text-muted-foreground">Productos devueltos</p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Listado de Productos */}
@@ -358,7 +366,10 @@ export default function InventoryReportsPage() {
             <CardTitle className="text-lg sm:text-xl">Listado de Productos</CardTitle>
           </div>
           <CardDescription className="text-xs sm:text-sm">
-            Todos los productos de la tienda con su stock actual.
+            {activeLoginMode === 'WAREHOUSE' 
+              ? 'Todos los productos del almacén con su stock actual.'
+              : 'Todos los productos de la tienda con su stock actual.'
+            }
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -435,7 +446,12 @@ export default function InventoryReportsPage() {
           ) : storeProducts.length === 0 ? (
             <div className="text-center py-6 sm:py-8 text-muted-foreground flex flex-col items-center">
               <Package className="h-8 w-8 sm:h-10 sm:w-10 mb-2 opacity-20" />
-              <p className="text-sm sm:text-base">No hay productos en la tienda.</p>
+              <p className="text-sm sm:text-base">
+                {activeLoginMode === 'WAREHOUSE' 
+                  ? 'No hay productos en el almacén.'
+                  : 'No hay productos en la tienda.'
+                }
+              </p>
             </div>
           ) : (
             <>

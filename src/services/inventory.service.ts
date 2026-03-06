@@ -39,22 +39,30 @@ export const inventoryService = {
     }
   },
 
-  async getMovementsSummary(params: { storeId: string; fromDate?: string; toDate?: string }): Promise<InventorySummaryResponse> {
+  async getMovementsSummary(params: { storeId?: string; fromDate?: string; toDate?: string }): Promise<InventorySummaryResponse> {
     const { storeId, fromDate, toDate } = params;
-    if (!storeId) {
+    const mode = getActiveLoginMode();
+
+    if (mode !== 'WAREHOUSE' && !storeId) {
       throw new Error('storeId es requerido para obtener el resumen de inventario.');
     }
 
     try {
+      const requestParams: any = {
+        fromDate,
+        toDate,
+      };
+
+      // Only pass storeId for store mode, warehouse mode uses active warehouse context
+      if (mode !== 'WAREHOUSE') {
+        requestParams.storeId = storeId;
+      }
+
       const response = await domainApi.get<InventorySummaryResponse>({
         store: '/inventory-movements/summary',
         warehouse: '/warehouse/movements/summary',
       }, {
-        params: {
-          storeId,
-          fromDate,
-          toDate,
-        },
+        params: requestParams,
       });
       return response.data;
     } catch (error) {
