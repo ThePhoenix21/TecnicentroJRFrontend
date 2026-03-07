@@ -120,11 +120,15 @@ export interface NetProfitResponse {
     date: string;
     type: MovementType;
     concept: string;
-    amount: number;
+    amount: number | string;
     source: "PAYMENT_METHOD" | "CASH_MOVEMENT";
     sourceId: string;
     paymentMethod?: PaymentType;
   }>;
+  total: number;
+  totalPages: number;
+  page: number;
+  pageSize: number;
   comparison?: {
     current: { totalIncome: number; totalExpenses: number; netProfit: number };
     previous: { totalIncome: number; totalExpenses: number; netProfit: number };
@@ -195,6 +199,8 @@ export interface AnalyticsQueryParams {
   storeId?: string;
   compareFrom?: string;
   compareTo?: string;
+  page?: number;
+  pageSize?: number;
 }
 
 export interface UserRankingsResponse {

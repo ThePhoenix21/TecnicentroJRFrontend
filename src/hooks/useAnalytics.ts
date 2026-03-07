@@ -225,11 +225,14 @@ export function useAnalytics() {
   }, [logout]);
 
   const fetchAnalytics = useCallback(
-    async (params: AnalyticsQueryParams) => {
+    async (params: AnalyticsQueryParams, options?: { includeNetProfit?: boolean }) => {
+      const includeNetProfit = options?.includeNetProfit ?? true;
       setOverviewLoading(true);
       setIncomeTimeseriesLoading(true);
       setIncomeLoading(true);
-      setNetProfitLoading(true);
+      if (includeNetProfit) {
+        setNetProfitLoading(true);
+      }
       setExpensesLoading(true);
       setPaymentMethodsLoading(true);
       setUserRankingsLoading(true);
@@ -237,10 +240,16 @@ export function useAnalytics() {
       setOverviewError(null);
       setIncomeTimeseriesError(null);
       setIncomeError(null);
-      setNetProfitError(null);
+      if (includeNetProfit) {
+        setNetProfitError(null);
+      }
       setExpensesError(null);
       setPaymentMethodsError(null);
       setUserRankingsError(null);
+
+      const netProfitPromise: Promise<NetProfitResponse | null> = includeNetProfit
+        ? getAnalyticsNetProfit(params)
+        : Promise.resolve(null);
 
       const [
         overviewResult,
@@ -254,7 +263,7 @@ export function useAnalytics() {
         getAnalyticsOverview(params),
         getAnalyticsIncomeTimeseries(params),
         getAnalyticsIncome(params),
-        getAnalyticsNetProfit(params),
+        netProfitPromise,
         getAnalyticsExpenses(params),
         getAnalyticsPaymentMethodsSummary(params),
         getAnalyticsUserRankings(params),
@@ -263,7 +272,9 @@ export function useAnalytics() {
       if (overviewResult.status === "fulfilled") setOverview(overviewResult.value);
       if (incomeTimeseriesResult.status === "fulfilled") setIncomeTimeseries(incomeTimeseriesResult.value);
       if (incomeResult.status === "fulfilled") setIncome(incomeResult.value);
-      if (netProfitResult.status === "fulfilled") setNetProfit(netProfitResult.value);
+      if (includeNetProfit && netProfitResult.status === "fulfilled" && netProfitResult.value) {
+        setNetProfit(netProfitResult.value);
+      }
       if (expensesResult.status === "fulfilled") setExpenses(expensesResult.value);
       if (paymentMethodsResult.status === "fulfilled") setPaymentMethodsSummary(paymentMethodsResult.value);
       if (userRankingsResult.status === "fulfilled") setUserRankings(userRankingsResult.value);
@@ -273,7 +284,9 @@ export function useAnalytics() {
         setIncomeTimeseriesError(normalizeApiError(incomeTimeseriesResult.reason));
       }
       if (incomeResult.status === "rejected") setIncomeError(normalizeApiError(incomeResult.reason));
-      if (netProfitResult.status === "rejected") setNetProfitError(normalizeApiError(netProfitResult.reason));
+      if (includeNetProfit && netProfitResult.status === "rejected") {
+        setNetProfitError(normalizeApiError(netProfitResult.reason));
+      }
       if (expensesResult.status === "rejected") setExpensesError(normalizeApiError(expensesResult.reason));
       if (paymentMethodsResult.status === "rejected") {
         setPaymentMethodsError(normalizeApiError(paymentMethodsResult.reason));
@@ -286,7 +299,9 @@ export function useAnalytics() {
       const overviewErr = overviewResult.status === "rejected" ? normalizeApiError(overviewResult.reason) : null;
       const incomeTimeseriesErr = incomeTimeseriesResult.status === "rejected" ? normalizeApiError(incomeTimeseriesResult.reason) : null;
       const incomeErr = incomeResult.status === "rejected" ? normalizeApiError(incomeResult.reason) : null;
-      const netProfitErr = netProfitResult.status === "rejected" ? normalizeApiError(netProfitResult.reason) : null;
+      const netProfitErr = includeNetProfit && netProfitResult.status === "rejected"
+        ? normalizeApiError(netProfitResult.reason)
+        : null;
       const expensesErr = expensesResult.status === "rejected" ? normalizeApiError(expensesResult.reason) : null;
       const paymentMethodsErr = paymentMethodsResult.status === "rejected" ? normalizeApiError(paymentMethodsResult.reason) : null;
       const userRankingsErr = userRankingsResult.status === "rejected" ? normalizeApiError(userRankingsResult.reason) : null;
@@ -328,7 +343,9 @@ export function useAnalytics() {
             : (null as IncomeTimeSeriesResponse | null),
         income: incomeResult.status === "fulfilled" ? incomeResult.value : (null as IncomeResponse | null),
         netProfit:
-          netProfitResult.status === "fulfilled" ? netProfitResult.value : (null as NetProfitResponse | null),
+          includeNetProfit && netProfitResult.status === "fulfilled" && netProfitResult.value
+            ? netProfitResult.value
+            : (null as NetProfitResponse | null),
         expenses: expensesResult.status === "fulfilled" ? expensesResult.value : (null as ExpensesResponse | null),
         paymentMethodsSummary:
           paymentMethodsResult.status === "fulfilled"

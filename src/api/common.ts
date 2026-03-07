@@ -7,6 +7,8 @@ export interface ApiQueryParams {
   storeId?: string;
   compareFrom?: string;
   compareTo?: string;
+  page?: number;
+  pageSize?: number;
 }
 
 export interface ApiRequestError {
@@ -23,6 +25,8 @@ export function buildQueryParams(params: ApiQueryParams): ApiQueryParams {
   if (params.storeId) normalized.storeId = params.storeId;
   if (params.compareFrom) normalized.compareFrom = params.compareFrom;
   if (params.compareTo) normalized.compareTo = params.compareTo;
+  if (typeof params.page === "number") normalized.page = params.page;
+  if (typeof params.pageSize === "number") normalized.pageSize = params.pageSize;
 
   return normalized;
 }
