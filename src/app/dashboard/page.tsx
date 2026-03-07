@@ -143,10 +143,12 @@ function DynamicLineChart({ chart }: { chart: GenericChart }) {
   const yKeys = chart.yKeys ?? [];
   const yLabels = chart.yLabels ?? yKeys;
   const series = chart.series;
-  const maxValue = Math.max(
-    1,
-    ...series.flatMap((row) => yKeys.map((key) => toNumber(row[key])))
-  );
+  
+  // Calcular maxValue por separado para cada yKey
+  const maxValues = yKeys.reduce((acc, key) => {
+    acc[key] = Math.max(1, ...series.map((row) => toNumber(row[key])));
+    return acc;
+  }, {} as Record<string, number>);
 
   if (series.length === 0 || yKeys.length === 0) {
     return <p className="text-sm text-muted-foreground">No hay datos para el gráfico.</p>;
@@ -161,6 +163,7 @@ function DynamicLineChart({ chart }: { chart: GenericChart }) {
             <div className="space-y-1">
               {yKeys.map((key, keyIndex) => {
                 const value = toNumber(row[key]);
+                const maxValue = maxValues[key];
                 const width = Math.max(3, (value / maxValue) * 100);
                 const label = yLabels[keyIndex] || key;
                 return (
@@ -457,7 +460,7 @@ export default function DashboardPage() {
 
   
   
-
+ 
   const salesTrendChart: GenericChart | null = charts
     ? {
         type: charts.charts.salesTrend.type,
