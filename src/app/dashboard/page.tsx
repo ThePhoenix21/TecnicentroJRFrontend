@@ -364,6 +364,7 @@ export default function DashboardPage() {
     expensesError,
     paymentMethodsError,
     userRankingsError,
+    fetchNetProfit,
     fetchAnalytics,
   } = analytics;
 
@@ -372,6 +373,10 @@ export default function DashboardPage() {
   const [to, setTo] = useState("");
   const [compareFrom, setCompareFrom] = useState("");
   const [compareTo, setCompareTo] = useState("");
+  const [timelinePage, setTimelinePage] = useState(1);
+  const [timelineOnlyCurrentStore, setTimelineOnlyCurrentStore] = useState(false);
+
+  const TIMELINE_PAGE_SIZE = 20;
 
   const applyQuickRange = useCallback((range: { from: string; to: string }) => {
     setFrom(range.from);
@@ -401,6 +406,18 @@ export default function DashboardPage() {
     return params;
   }, [from, to, currentStore?.id, compareFrom, compareTo]);
 
+  const timelineParams = useMemo(() => {
+    if (!from || !to) return null;
+    const dateRange = toUtcRange(from, to);
+    return {
+      from: dateRange.fromDate,
+      to: dateRange.toDate,
+      storeId: timelineOnlyCurrentStore ? currentStore?.id : undefined,
+      page: timelinePage,
+      pageSize: TIMELINE_PAGE_SIZE,
+    };
+  }, [from, to, timelineOnlyCurrentStore, currentStore?.id, timelinePage]);
+
   const loadDashboard = useCallback(async () => {
     if (!currentStore?.id) return;
     try {
@@ -415,7 +432,7 @@ export default function DashboardPage() {
     if (!hasPermission('VIEW_ANALYTICS')) return;
     if (!currentStore?.id) return;
     try {
-      await fetchAnalytics(commonParams);
+      await fetchAnalytics(commonParams, {includeNetProfit: false});
     } catch {
       toast.error("No se pudieron cargar Análíticas.");
     }
@@ -426,6 +443,16 @@ export default function DashboardPage() {
     void loadDashboard();
     void loadAnalytics();
   }, [from, to, currentStore?.id, loadDashboard, loadAnalytics]);
+
+  useEffect(() => {
+    if (!timelineParams) return;
+    if (timelineOnlyCurrentStore && !currentStore?.id) return;
+    void fetchNetProfit(timelineParams);
+  }, [timelineParams, timelineOnlyCurrentStore, currentStore?.id, fetchNetProfit]);
+
+  useEffect(() => {
+    setTimelinePage(1);
+  }, [from, to, timelineOnlyCurrentStore]);
 
   const canRefresh = Boolean(from && to && currentStore?.id);
   const dashboardErrors = [
@@ -856,6 +883,21 @@ export default function DashboardPage() {
               <CardTitle className="text-lg md:text-xl">Línea de tiempo de ingresos y egresos</CardTitle>
             </CardHeader>
             <CardContent>
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-input"
+                    checked={timelineOnlyCurrentStore}
+                    onChange={(e) => setTimelineOnlyCurrentStore(e.target.checked)}
+                  />
+                  Mostrar solo movimientos de la tienda seleccionada
+                </label>
+                <div className="text-xs text-muted-foreground text-left sm:text-right">
+                  <div>Total de operaciones: <span className="font-medium">{netProfit?.total ?? 0}</span></div>
+                  <div>Página {netProfit?.page ?? timelinePage} de {Math.max(netProfit?.totalPages ?? 1, 1)}</div>
+                </div>
+              </div>
               <div className="rounded-md border overflow-hidden">
                 <div className="overflow-x-auto">
                   <Table>
@@ -909,7 +951,7 @@ export default function DashboardPage() {
                               {item.source === "PAYMENT_METHOD" ? "Pago de orden" : "Movimiento de caja"}
                             </TableCell>
                             <TableCell className="px-2 py-2 text-right font-medium text-sm">
-                              {formatCurrency(item.amount)}
+                              {formatCurrency(Number(item.amount))}
                             </TableCell>
                           </TableRow>
                         ))
@@ -917,6 +959,26 @@ export default function DashboardPage() {
                     </TableBody>
                   </Table>
                 </div>
+              </div>
+              <div className="mt-3 flex items-center justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTimelinePage((prev) => Math.max(prev - 1, 1))}
+                  disabled={(netProfit?.page ?? timelinePage) <= 1 || netProfitLoading}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTimelinePage((prev) => prev + 1)}
+                  disabled={(netProfit?.page ?? timelinePage) >= Math.max(netProfit?.totalPages ?? 1, 1) || netProfitLoading}
+                >
+                  Siguiente
+                </Button>
               </div>
             </CardContent>
           </Card>
