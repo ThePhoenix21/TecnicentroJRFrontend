@@ -1832,7 +1832,7 @@ export function SaleForm({
         overlayPointerDownOutsideRef.current = false;
       }}
     >
-      <div className="bg-background border border-muted rounded-3xl shadow-xl w-full max-w-4xl max-w-[95vw] sm:max-w-2xl md:max-w-4xl max-h-[95vh] md:max-h-[90vh] flex flex-col">
+      <div className="bg-background border border-muted rounded-3xl shadow-xl w-full max-w-[95vw] sm:max-w-2xl md:max-w-4xl max-h-[95vh] md:max-h-[90vh] flex flex-col">
         <div className="flex justify-between items-center p-3 md:p-4 border-b rounded-t-3xl sticky top-0 bg-background z-10">
           <h2 className="text-lg md:text-xl font-semibold">Nueva Venta</h2>
           <div className="flex items-center gap-2">
