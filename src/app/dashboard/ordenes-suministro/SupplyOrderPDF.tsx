@@ -1,5 +1,5 @@
 import React from 'react';
-import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet, Font, Image } from '@react-pdf/renderer';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { SupplyOrderDetail } from '@/types/supply-order.types';
@@ -12,86 +12,95 @@ Font.register({
   ],
 });
 
+const PAGE_WIDTH = 226.77; // 80mm en puntos
+const PAGE_HEIGHT = 841.89; // alto fijo grande
+const MARGIN = 10;
+const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2;
+
 const styles = StyleSheet.create({
   page: {
     flexDirection: 'column',
     backgroundColor: 'white',
-    padding: 20,
-    fontSize: 10,
+    padding: 0,
+    width: PAGE_WIDTH,
+    maxWidth: PAGE_WIDTH,
+    fontSize: 8,
     fontFamily: 'Helvetica',
   },
-  title: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
   section: {
-    marginBottom: 15,
+    margin: 0,
+    padding: MARGIN,
+    width: CONTENT_WIDTH,
   },
   header: {
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  logoContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  logo: {
+    width: 60,
+    height: 40,
+    objectFit: 'contain',
+  },
+  systemName: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  title: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  divider: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#000',
+    borderBottomStyle: 'dashed',
+    marginVertical: 4,
+  },
+  row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  column: {
-    flex: 1,
+    marginBottom: 2,
   },
   label: {
     fontWeight: 'bold',
-    marginBottom: 2,
   },
-  value: {
-    marginBottom: 5,
-  },
-  table: {
-    display: 'flex',
-    flexDirection: 'column',
-    width: '100%',
-    marginBottom: 10,
-  },
-  tableRow: {
+  tableHeaderRow: {
     flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#000',
-    borderBottomStyle: 'solid',
-  },
-  tableHeader: {
-    backgroundColor: '#f0f0f0',
+    justifyContent: 'space-between',
+    marginBottom: 2,
     fontWeight: 'bold',
   },
-  tableCell: {
-    flex: 1,
-    padding: 5,
-    borderRightWidth: 1,
-    borderRightColor: '#000',
-    borderRightStyle: 'solid',
+  colLeft: {
+    flex: 4,
   },
-  tableCellLast: {
+  colRight: {
     flex: 1,
-    padding: 5,
-  },
-  totals: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 10,
+    textAlign: 'right',
   },
   footer: {
-    marginTop: 20,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#000',
-    borderTopStyle: 'solid',
-    fontSize: 8,
+    marginTop: 8,
+    fontSize: 7,
     textAlign: 'center',
+    fontStyle: 'italic',
   },
 });
 
 interface SupplyOrderPDFProps {
   order: SupplyOrderDetail;
+  tenantLogoUrl?: string;
 }
 
-export const SupplyOrderPDF: React.FC<SupplyOrderPDFProps> = ({ order }) => {
+export const SupplyOrderPDF: React.FC<SupplyOrderPDFProps> = ({ order, tenantLogoUrl }) => {
   const formatDate = (dateString: string) => {
     try {
       return format(new Date(dateString), 'dd/MM/yyyy HH:mm', { locale: es });
@@ -100,96 +109,92 @@ export const SupplyOrderPDF: React.FC<SupplyOrderPDFProps> = ({ order }) => {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-DO', {
-      style: 'currency',
-      currency: 'DOP',
-    }).format(amount);
-  };
-
   return (
     <Document>
-      <Page size="A4" style={styles.page}>
-        <Text style={styles.title}>ORDEN DE SUMINISTRO</Text>
-        
+      <Page size={[PAGE_WIDTH, PAGE_HEIGHT]} style={styles.page}>
         <View style={styles.section}>
+          {/* Encabezado */}
           <View style={styles.header}>
-            <View style={styles.column}>
-              <Text style={styles.label}>Código:</Text>
-              <Text style={styles.value}>{order.code}</Text>
-              
-              <Text style={styles.label}>Estado:</Text>
-              <Text style={styles.value}>{order.status}</Text>
-              
-              <Text style={styles.label}>Fecha de emisión:</Text>
-              <Text style={styles.value}>{formatDate(order.createdAt)}</Text>
-            </View>
-            
-            <View style={styles.column}>
-              <Text style={styles.label}>Almacén:</Text>
-              <Text style={styles.value}>{order.warehouse?.name || '-'}</Text>
-              
-              <Text style={styles.label}>Creado por:</Text>
-              <Text style={styles.value}>{order.createdBy?.name || '-'}</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.label}>Datos del Proveedor:</Text>
-          <Text style={styles.value}>{order.provider?.name || '-'}</Text>
-          {order.provider?.ruc && <Text style={styles.value}>RUC: {order.provider.ruc}</Text>}
-          {order.provider?.phone && <Text style={styles.value}>Tel: {order.provider.phone}</Text>}
-          {order.provider?.email && <Text style={styles.value}>Email: {order.provider.email}</Text>}
-          {order.provider?.address && <Text style={styles.value}>Dirección: {order.provider.address}</Text>}
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.label}>Productos:</Text>
-          <View style={styles.table}>
-            <View style={[styles.tableRow, styles.tableHeader]}>
-              <Text style={styles.tableCell}>Producto</Text>
-              <Text style={styles.tableCell}>Cantidad</Text>
-              <Text style={styles.tableCell}>Precio Unit.</Text>
-              <Text style={styles.tableCellLast}>Total</Text>
-            </View>
-            
-            {order.products?.map((item: any, index: number) => (
-              <View key={index} style={styles.tableRow}>
-                <Text style={styles.tableCell}>{item.product?.name || '-'}</Text>
-                <Text style={styles.tableCell}>{item.quantity}</Text>
-                <Text style={styles.tableCell}>{formatCurrency(0)}</Text>
-                <Text style={styles.tableCellLast}>{formatCurrency(0)}</Text>
+            {!!tenantLogoUrl && (
+              <View style={styles.logoContainer}>
+                <Image src={tenantLogoUrl} style={styles.logo} />
               </View>
-            ))}
+            )}
+            <Text style={styles.systemName}>Sistema de Gestión</Text>
           </View>
-          
-          <View style={styles.totals}>
-            <View style={styles.column}>
-              <Text style={styles.label}>Subtotal:</Text>
-              <Text style={styles.value}>{formatCurrency(0)}</Text>
-              
-              <Text style={styles.label}>ITBIS (18%):</Text>
-              <Text style={styles.value}>{formatCurrency(0)}</Text>
-              
-              <Text style={[styles.label, { fontSize: 12 }]}>Total:</Text>
-              <Text style={[styles.value, { fontSize: 12, fontWeight: 'bold' }]}>
-                {formatCurrency(0)}
-              </Text>
+
+          <View style={styles.divider} />
+
+          {/* Título */}
+          <Text style={styles.title}>ORDEN DE SUMINISTRO</Text>
+
+          <View style={styles.divider} />
+
+          {/* Datos de la orden */}
+          <View style={{ marginBottom: 4 }}>
+            <View style={styles.row}>
+              <Text style={styles.label}>Código:</Text>
+              <Text>{order.code}</Text>
             </View>
+            <View style={styles.row}>
+              <Text style={styles.label}>Fecha:</Text>
+              <Text>{formatDate(order.createdAt)}</Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.label}>Estado:</Text>
+              <Text>{order.status}</Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.label}>Proveedor:</Text>
+              <Text>{order.provider?.name || '-'}</Text>
+            </View>
+            {!!order.provider?.ruc && (
+              <View style={styles.row}>
+                <Text style={styles.label}>RUC:</Text>
+                <Text>{order.provider.ruc}</Text>
+              </View>
+            )}
+            {!!order.createdBy?.name && (
+              <View style={styles.row}>
+                <Text style={styles.label}>Creado por:</Text>
+                <Text>{order.createdBy.name}</Text>
+              </View>
+            )}
+            {!!(order.warehouse?.name || order.store?.name) && (
+              <View style={styles.row}>
+                <Text style={styles.label}>{order.warehouse?.name ? 'Almacén:' : 'Tienda:'}</Text>
+                <Text>{order.warehouse?.name || order.store?.name || '-'}</Text>
+              </View>
+            )}
+            {!!order.description && (
+              <View style={styles.row}>
+                <Text style={styles.label}>Descripción:</Text>
+                <Text>{order.description}</Text>
+              </View>
+            )}
           </View>
-        </View>
 
-        {order.description && (
-          <View style={styles.section}>
-            <Text style={styles.label}>Descripción:</Text>
-            <Text style={styles.value}>{order.description}</Text>
+          <View style={styles.divider} />
+
+          {/* Tabla de productos — solo nombre y cantidad */}
+          <View style={styles.tableHeaderRow}>
+            <Text style={styles.colLeft}>Producto</Text>
+            <Text style={styles.colRight}>Cant.</Text>
           </View>
-        )}
+          <View style={styles.divider} />
+          {(order.products ?? []).map((item: any, index: number) => (
+            <View key={index} style={styles.row}>
+              <Text style={styles.colLeft}>{item.product?.name || '-'}</Text>
+              <Text style={styles.colRight}>{item.quantity}</Text>
+            </View>
+          ))}
 
-        <View style={styles.footer}>
-          <Text>Documento generado automáticamente - Sistema de Gestión</Text>
-          <Text>Fecha de impresión: {formatDate(new Date().toISOString())}</Text>
+          <View style={styles.divider} />
+
+          {/* Pie */}
+          <Text style={styles.footer}>
+            Impreso el {formatDate(new Date().toISOString())}
+          </Text>
         </View>
       </Page>
     </Document>
