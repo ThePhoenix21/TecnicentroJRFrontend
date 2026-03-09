@@ -101,15 +101,13 @@ const shortId = (value?: string | null) => {
 };
 
 export default function OrdenesSuministroPage() {
-  const { isAdmin, hasPermission, isAuthenticated } = useAuth();
+  const { isAdmin, hasPermission, isAuthenticated, currentStore, currentWarehouse, activeLoginMode } = useAuth();
   const canViewSupplyOrders = isAdmin || hasPermission?.("VIEW_SUPPLY_ORDERS");
   const canCreateSupplyOrder = isAdmin || hasPermission?.("CREATE_SUPPLY_ORDER");
   const canReceiveSupplyOrder = isAdmin || hasPermission?.("RECEIVE_SUPPLY_ORDER");
   const canApproveSupplyOrder = isAdmin || hasPermission?.("APPROVE_SUPPLY_ORDER");
   const canCancelSupplyOrder = isAdmin || hasPermission?.("CANCEL_SUPPLY_ORDER");
   const canEditEmittedSupplyOrder = isAdmin || hasPermission?.("EDIT_EMITTED_SUPPLY_ORDER");
-
-  const currentMode = getActiveLoginMode();
 
   const [activeTab, setActiveTab] = useState<"manage" | "receive">("manage");
   const [orders, setOrders] = useState<SupplyOrderItem[]>([]);
@@ -197,6 +195,16 @@ export default function OrdenesSuministroPage() {
   });
 
   const loadOrdersRef = useRef<((targetPage?: number) => void) | null>(null);
+
+  useEffect(() => {
+    if (createOpen && activeLoginMode) {
+      setCreateForm((prev) => ({
+        ...prev,
+        storeId: activeLoginMode === 'STORE' ? currentStore?.id : undefined,
+        warehouseId: activeLoginMode === 'WAREHOUSE' ? currentWarehouse?.id : undefined,
+      }));
+    }
+  }, [createOpen, activeLoginMode, currentStore?.id, currentWarehouse?.id]);
 
   const filtersKey = useMemo(
     () => [statusFilter, createdByFilter, codeFilter, fromDate, toDate].join("|"),
@@ -468,10 +476,7 @@ export default function OrdenesSuministroPage() {
 
     const nextErrors = {
       providerId: !createForm.providerId.trim(),
-      locationId:
-        locationType === "store"
-          ? !createForm.storeId?.trim()
-          : !createForm.warehouseId?.trim(),
+      locationId: false, // Ya no validamos locationId porque se determina automáticamente
       products: createForm.products.map((item) => ({
         productId: !item.productId.trim(),
         quantity: !item.quantity || item.quantity <= 0,
@@ -481,9 +486,6 @@ export default function OrdenesSuministroPage() {
     setCreateErrors(nextErrors);
 
     if (nextErrors.providerId) toast.error("Selecciona un proveedor");
-    if (nextErrors.locationId) {
-      toast.error(locationType === "store" ? "Selecciona una tienda" : "Selecciona un almacén");
-    }
 
     const hasProductErrors = nextErrors.products.some((item) => item.productId || item.quantity);
     if (hasProductErrors) {
@@ -502,8 +504,8 @@ export default function OrdenesSuministroPage() {
       setCreateSubmitting(true);
       await supplyOrderService.createSupplyOrder({
         providerId: createForm.providerId.trim(),
-        storeId: locationType === "store" ? createForm.storeId?.trim() : undefined,
-        warehouseId: locationType === "warehouse" ? createForm.warehouseId?.trim() : undefined,
+        storeId: activeLoginMode === 'STORE' ? createForm.storeId : undefined,
+        warehouseId: activeLoginMode === 'WAREHOUSE' ? createForm.warehouseId : undefined,
         description: createForm.description?.trim() || undefined,
         products: validProducts.map((item) => ({
           productId: item.productId.trim(),
@@ -547,8 +549,8 @@ export default function OrdenesSuministroPage() {
     setIsEditing(true);
     setEditForm({
       description: detail.description || '',
-      storeId: currentMode === 'STORE' ? (detail.store?.id || '') : '',
-      warehouseId: currentMode === 'WAREHOUSE' ? (detail.warehouse?.id || '') : '',
+      storeId: activeLoginMode === 'STORE' ? (detail.store?.id || '') : '',
+      warehouseId: activeLoginMode === 'WAREHOUSE' ? (detail.warehouse?.id || '') : '',
       products: detail.products.map(p => ({
         productId: p.productId,
         quantity: p.quantity,
@@ -575,8 +577,8 @@ export default function OrdenesSuministroPage() {
     if (!detail) return;
     
     // Validaciones básicas
-    const locationField = currentMode === 'STORE' ? editForm.storeId : editForm.warehouseId;
-    const locationLabel = currentMode === 'STORE' ? 'tienda' : 'almacén';
+    const locationField = activeLoginMode === 'STORE' ? editForm.storeId : editForm.warehouseId;
+    const locationLabel = activeLoginMode === 'STORE' ? 'tienda' : 'almacén';
     if (!locationField) {
       toast.error(`Seleccione una ${locationLabel}`);
       return;
@@ -592,8 +594,8 @@ export default function OrdenesSuministroPage() {
       
       const updateData = {
         description: editForm.description,
-        storeId: currentMode === 'STORE' ? editForm.storeId : undefined,
-        warehouseId: currentMode === 'WAREHOUSE' ? editForm.warehouseId : undefined,
+        storeId: activeLoginMode === 'STORE' ? editForm.storeId : undefined,
+        warehouseId: activeLoginMode === 'WAREHOUSE' ? editForm.warehouseId : undefined,
         products: editForm.products
       };
 
@@ -1091,10 +1093,10 @@ export default function OrdenesSuministroPage() {
                         <TableHead className="hidden sm:table-cell min-w-[140px]">Emisión</TableHead>
                         <TableHead className="hidden md:table-cell min-w-[150px]">Proveedor</TableHead>
                         <TableHead className="hidden lg:table-cell min-w-[150px]">Creado por</TableHead>
-                        {currentMode === 'STORE' && (
+                        {activeLoginMode === 'STORE' && (
                           <TableHead className="hidden xl:table-cell min-w-[120px]">Tienda</TableHead>
                         )}
-                        {currentMode === 'WAREHOUSE' && (
+                        {activeLoginMode === 'WAREHOUSE' && (
                           <TableHead className="hidden xl:table-cell min-w-[120px]">Almacén</TableHead>
                         )}
                       </TableRow>
@@ -1122,10 +1124,10 @@ export default function OrdenesSuministroPage() {
                                 <div className="text-xs text-muted-foreground">{order.creatorUserEmail || "-"}</div>
                               </div>
                             </TableCell>
-                            {currentMode === 'STORE' && (
+                            {activeLoginMode === 'STORE' && (
                               <TableCell className="hidden xl:table-cell text-muted-foreground">{order.storeName || "-"}</TableCell>
                             )}
-                            {currentMode === 'WAREHOUSE' && (
+                            {activeLoginMode === 'WAREHOUSE' && (
                               <TableCell className="hidden xl:table-cell text-muted-foreground">{order.warehouseName || "-"}</TableCell>
                             )}
                           </TableRow>
@@ -1351,7 +1353,7 @@ export default function OrdenesSuministroPage() {
                         {detail.createdBy?.username && <div className="text-muted-foreground">@{detail.createdBy.username}</div>}
                       </div>
                     </div>
-                    {currentMode === 'STORE' && detail.store && (
+                    {activeLoginMode === 'STORE' && detail.store && (
                       <div className="space-y-2 rounded-lg border bg-background p-4">
                         <h3 className="text-sm font-semibold">Tienda</h3>
                         {isEditing ? (
@@ -1379,7 +1381,7 @@ export default function OrdenesSuministroPage() {
                         )}
                       </div>
                     )}
-                    {currentMode === 'WAREHOUSE' && detail.warehouse && (
+                    {activeLoginMode === 'WAREHOUSE' && detail.warehouse && (
                       <div className="space-y-2 rounded-lg border bg-background p-4">
                         <h3 className="text-sm font-semibold">Almacén</h3>
                         {isEditing ? (
@@ -1905,65 +1907,20 @@ export default function OrdenesSuministroPage() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Destino</label>
-                    <Select value={locationType} onValueChange={(value) => setLocationType(value as "store" | "warehouse")}>
-                      <SelectTrigger className="h-10">
-                        <SelectValue placeholder="Tipo de destino" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="store">Tienda</SelectItem>
-                        <SelectItem value="warehouse">Almacén</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div className="h-10 px-3 py-2 rounded-md border bg-muted/30 text-sm flex items-center">
+                      {activeLoginMode === 'STORE' ? (
+                        <>
+                          <span className="font-medium">Tienda:</span>
+                          <span className="ml-2">{currentStore?.name || 'No seleccionada'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="font-medium">Almacén:</span>
+                          <span className="ml-2">{currentWarehouse?.name || 'No seleccionado'}</span>
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    {locationType === "store" ? "Tienda" : "Almacén"}
-                  </label>
-                  {locationType === "store" ? (
-                    <Select
-                      value={createForm.storeId ?? ""}
-                      onValueChange={(value) => {
-                        setCreateForm((prev) => ({ ...prev, storeId: value, warehouseId: undefined }));
-                        setCreateErrors((prev) => ({ ...prev, locationId: false }));
-                      }}
-                    >
-                      <SelectTrigger
-                        className={`h-10 ${createErrors.locationId ? "border-destructive focus-visible:ring-destructive/30" : undefined}`}
-                      >
-                        <SelectValue placeholder={lookupLoading ? "Cargando..." : "Selecciona tienda"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {storesLookup.map((store) => (
-                          <SelectItem key={store.id} value={store.id}>
-                            {store.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Select
-                      value={createForm.warehouseId ?? ""}
-                      onValueChange={(value) => {
-                        setCreateForm((prev) => ({ ...prev, warehouseId: value, storeId: undefined }));
-                        setCreateErrors((prev) => ({ ...prev, locationId: false }));
-                      }}
-                    >
-                      <SelectTrigger
-                        className={`h-10 ${createErrors.locationId ? "border-destructive focus-visible:ring-destructive/30" : undefined}`}
-                      >
-                        <SelectValue placeholder={lookupLoading ? "Cargando..." : "Selecciona almacén"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {warehousesLookup.map((warehouse) => (
-                          <SelectItem key={warehouse.id} value={warehouse.id}>
-                            {warehouse.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
                 </div>
 
                 <div className="space-y-2">
