@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { jwtDecode } from "jwt-decode";
 import { Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { pdf } from '@react-pdf/renderer';
@@ -815,18 +816,95 @@ export default function OrdenesSuministroPage() {
 
     try {
       setDetailSubmitting(true);
-      
-      // Generate PDF
-      const pdfBlob = await pdf(<SupplyOrderPDF order={detail} />).toBlob();
-      
-      // Optional: Open PDF in new tab for preview
+
+      // 1. Aprobar en el backend primero
+      const response = await supplyOrderService.approveSupplyOrderWithEmail(detail.id);
+
+      // 2. Solo si el backend confirma éxito, generar y abrir el PDF
+      let tenantLogoUrl: string | undefined;
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+        if (token) {
+          const decoded = jwtDecode<{ tenantLogoUrl?: string }>(token);
+          tenantLogoUrl = decoded.tenantLogoUrl || undefined;
+        }
+      } catch {
+        // si falla el decode, seguimos sin logo
+      }
+
+      const pdfBlob = await pdf(<SupplyOrderPDF order={detail} tenantLogoUrl={tenantLogoUrl} />).toBlob();
+
       const pdfUrl = URL.createObjectURL(pdfBlob);
-      window.open(pdfUrl, '_blank');
-      
-      // Send email with PDF
-      const response = await supplyOrderService.approveSupplyOrderWithEmail(detail.id, pdfBlob);
-      
-      // Show detailed success message
+
+      // Abrir PDF y disparar impresión automática
+      const openedWindow = window.open(pdfUrl, '_blank');
+      const printWithHiddenIframe = () => {
+        try {
+          const iframe = document.createElement('iframe');
+          iframe.style.position = 'fixed';
+          iframe.style.right = '0';
+          iframe.style.bottom = '0';
+          iframe.style.width = '0';
+          iframe.style.height = '0';
+          iframe.style.border = '0';
+          iframe.src = pdfUrl;
+          iframe.onload = () => {
+            setTimeout(() => {
+              try {
+                iframe.contentWindow?.focus();
+                iframe.contentWindow?.print();
+              } catch {
+                // noop
+              }
+            }, 250);
+          };
+          document.body.appendChild(iframe);
+          setTimeout(() => {
+            try {
+              document.body.removeChild(iframe);
+            } catch {
+              // noop
+            }
+            try {
+              URL.revokeObjectURL(pdfUrl);
+            } catch {
+              // noop
+            }
+          }, 60_000);
+        } catch {
+          // noop
+        }
+      };
+if (openedWindow) {
+        const start = Date.now();
+        const timer = window.setInterval(() => {
+          try {
+            if (openedWindow.closed) {
+              window.clearInterval(timer);
+              return;
+            }
+            const readyState = openedWindow.document?.readyState;
+            if (readyState === 'complete') {
+              window.clearInterval(timer);
+              openedWindow.focus();
+              openedWindow.print();
+            }
+          } catch {
+            // Si el navegador no permite acceder al documento (o el viewer no está listo), usamos fallback.
+            window.clearInterval(timer);
+            printWithHiddenIframe();
+          }
+
+          if (Date.now() - start > 5_000) {
+            window.clearInterval(timer);
+            printWithHiddenIframe();
+          }
+        }, 250);
+      } else {
+        // Popups bloqueados
+        printWithHiddenIframe();
+      }
+
       if (response.emailSent) {
         toast.success(`Orden aprobada y email enviado a ${detail.provider?.email}`);
       } else {
@@ -2084,7 +2162,7 @@ export default function OrdenesSuministroPage() {
               </div>
             </div>
 
-            <DialogFooter className="px-4 sm:px-6 py-4 border-t flex flex-col sm:flex-row gap-3 pt-4 border-t">
+            <DialogFooter className="px-4 sm:px-6 py-4 border-t flex flex-col sm:flex-row gap-3 pt-4">
               <Button
                 variant="outline"
                 onClick={() => {
