@@ -33,11 +33,25 @@ export type WarehouseEmployee = {
   };
 };
 
+export type WarehouseProduct = {
+  id: string;
+  stock: number;
+  product: {
+    name: string;
+  };
+};
+
 export type WarehouseDetail = WarehouseListItem & {
   createdAt?: string;
   updatedAt?: string;
+  createdBy?: {
+    id: string;
+    name: string;
+    email: string;
+  };
   warehouseStores?: WarehouseStore[];
   warehouseEmployees?: WarehouseEmployee[];
+  warehouseProducts?: WarehouseProduct[];
 };
 
 export type CreateWarehouseDto = {

@@ -51,6 +51,9 @@ export default function WarehousesPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detail, setDetail] = useState<WarehouseDetail | null>(null);
 
+  // Estado para filtrar productos sin stock
+  const [hideOutOfStock, setHideOutOfStock] = useState(true);
+
   const [isEditing, setIsEditing] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editForm, setEditForm] = useState<UpdateWarehouseDto>({
@@ -119,6 +122,11 @@ export default function WarehousesPage() {
       );
     });
   }, [warehouses, searchTerm]);
+
+  // Filtrar productos según el estado del checkbox
+  const filteredProducts = detail?.warehouseProducts?.filter(product => 
+    !hideOutOfStock || product.stock > 0
+  ) ?? [];
 
   const openCreate = () => {
     setIsCreateOpen(true);
@@ -390,6 +398,33 @@ export default function WarehousesPage() {
     }
   };
 
+  // Función para eliminar desde la lista principal
+  const handleDeleteWarehouseFromList = async (warehouseId: string) => {
+    const warehouse = filteredWarehouses.find(w => w.id === warehouseId);
+    const ok = confirm(`¿Estás seguro de que quieres eliminar el almacén "${warehouse?.name}"? Esta acción no se puede deshacer.`);
+    if (!ok) return;
+
+    try {
+      setDeleteSubmitting(true);
+      await warehouseService.deleteWarehouse(warehouseId);
+      toast.success('Almacén eliminado');
+      setWarehouses((prev) => prev.filter((w) => w.id !== warehouseId));
+    } catch (error: any) {
+      const status = error?.response?.status;
+      if (status === 401 || status === 403) {
+        toast.error('No tienes acceso para eliminar este almacén');
+        return;
+      }
+      if (status === 429) {
+        toast.error('Demasiadas solicitudes. Inténtelo de nuevo en unos segundos.');
+        return;
+      }
+      toast.error(error?.response?.data?.message || error?.message || 'Error al eliminar almacén');
+    } finally {
+      setDeleteSubmitting(false);
+    }
+  };
+
   return (
     <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
       <Card className="shadow-sm">
@@ -461,6 +496,7 @@ export default function WarehousesPage() {
                     {/* Hide Dirección and Teléfono in mobile */}
                     <TableHead className="hidden sm:table-cell min-w-[200px]">Dirección</TableHead>
                     <TableHead className="hidden md:table-cell min-w-[120px]">Teléfono</TableHead>
+                    <TableHead className="w-[80px]">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -468,11 +504,31 @@ export default function WarehousesPage() {
                     <TableRow
                       key={w.id}
                       className="cursor-pointer"
-                      onClick={() => openDetail(w.id)}
+                      onClick={(e) => {
+                        // Solo abrir detalles si no se hizo clic en el área de acciones
+                        if (!(e.target as HTMLElement).closest('[data-action-button]')) {
+                          openDetail(w.id);
+                        }
+                      }}
                     >
                       <TableCell className="font-medium">{w.name}</TableCell>
                       <TableCell className="hidden sm:table-cell">{w.address}</TableCell>
                       <TableCell className="hidden md:table-cell">{w.phone}</TableCell>
+                      <TableCell className="text-center" data-action-button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation(); // Evitar que se abra el detalle
+                            handleDeleteWarehouseFromList(w.id);
+                          }}
+                          disabled={deleteSubmitting}
+                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                          title="Eliminar almacén"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -483,8 +539,8 @@ export default function WarehousesPage() {
       </Card>
 
       <Dialog open={isDetailOpen} onOpenChange={(open) => (open ? setIsDetailOpen(true) : closeDetail())}>
-        <DialogContent className="sm:max-w-[980px] max-h-[90vh] p-0 overflow-hidden">
-          <div className="flex flex-col max-h-[90vh]">
+        <DialogContent className="sm:max-w-[980px] h-[80vh] p-0 overflow-hidden">
+          <div className="flex flex-col h-full">
             <DialogHeader className="p-4 sm:p-6 pb-2 sm:pb-2 flex-shrink-0">
               <DialogTitle className="text-lg sm:text-xl">Detalle de almacén</DialogTitle>
             </DialogHeader>
@@ -499,12 +555,10 @@ export default function WarehousesPage() {
               ) : (
                 <div className="space-y-4 sm:space-y-6">
                   <Tabs defaultValue="general" className="w-full">
-                    <TabsList className="w-full h-auto p-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1">
+                    <TabsList className="w-full h-auto p-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1">
                       <TabsTrigger value="general" className="text-xs sm:text-sm">General</TabsTrigger>
                       <TabsTrigger value="employees" className="text-xs sm:text-sm">Empleados</TabsTrigger>
                       <TabsTrigger value="stores" className="text-xs sm:text-sm">Tiendas</TabsTrigger>
-                      <TabsTrigger value="supply-orders" className="text-xs sm:text-sm">Órdenes</TabsTrigger>
-                      <TabsTrigger value="receipts" className="text-xs sm:text-sm">Recepciones</TabsTrigger>
                       <TabsTrigger value="stock" className="text-xs sm:text-sm">Stock</TabsTrigger>
                     </TabsList>
 
@@ -742,16 +796,66 @@ export default function WarehousesPage() {
                       </div>
                     </TabsContent>
 
-                    <TabsContent value="supply-orders">
-                      <div className="text-sm text-muted-foreground">No implementado aún</div>
-                    </TabsContent>
-
-                    <TabsContent value="receipts">
-                      <div className="text-sm text-muted-foreground">No implementado aún</div>
-                    </TabsContent>
 
                     <TabsContent value="stock">
-                      <div className="text-sm text-muted-foreground">No implementado aún</div>
+                      {detail.warehouseProducts && detail.warehouseProducts.length > 0 ? (
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-semibold">Productos en almacén</h3>
+                            <span className="text-xs text-muted-foreground">
+                              {filteredProducts.length} productos
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              id="hide-out-of-stock"
+                              checked={hideOutOfStock}
+                              onChange={(e) => setHideOutOfStock(e.target.checked)}
+                              className="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary"
+                            />
+                            <label htmlFor="hide-out-of-stock" className="text-sm text-muted-foreground">
+                              Ocultar sin stock
+                            </label>
+                          </div>
+                          
+                          <div className="rounded-md border overflow-hidden">
+                            <div className="max-h-96 overflow-y-auto">
+                              <Table>
+                                <TableHeader className="bg-muted/50 sticky top-0">
+                                  <TableRow>
+                                    <TableHead>Producto</TableHead>
+                                    <TableHead className="text-right">Stock</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {filteredProducts.map((product) => (
+                                    <TableRow key={product.id}>
+                                      <TableCell className="font-medium">
+                                        {product.product.name}
+                                      </TableCell>
+                                      <TableCell className="text-right">
+                                        <span className={`text-sm px-2 py-1 rounded-full ${
+                                          product.stock > 0 
+                                            ? 'bg-green-100 text-green-800' 
+                                            : 'bg-red-100 text-red-800'
+                                        }`}>
+                                          {product.stock} unidades
+                                        </span>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">
+                          Este almacén no tiene productos registrados.
+                        </div>
+                      )}
                     </TabsContent>
                   </Tabs>
                 </div>
@@ -759,17 +863,7 @@ export default function WarehousesPage() {
             </div>
 
             <div className="border-t bg-background px-6 py-4">
-              <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
-                <Button
-                  variant="destructive"
-                  onClick={handleDeleteWarehouse}
-                  disabled={detailLoading || editSubmitting || deleteSubmitting}
-                  className="sm:mr-auto"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  {deleteSubmitting ? 'Eliminando...' : 'Eliminar'}
-                </Button>
-
+              <div className="flex justify-end">
                 <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:justify-end">
                   <Button variant="outline" onClick={closeDetail} disabled={editSubmitting || deleteSubmitting}>
                     Cerrar
