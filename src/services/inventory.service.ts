@@ -202,7 +202,6 @@ export const inventoryService = {
 
   async getSessions(storeId: string): Promise<InventoryCountSession[]> {
     try {
-      // Corregido: Usamos singular '/inventory-count/session' igual que en creación
       const response = await domainApi.get<InventoryCountSession[]>({
         store: '/inventory-count/session',
         warehouse: '/warehouse/count/session',
