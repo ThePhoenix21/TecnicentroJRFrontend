@@ -12,7 +12,10 @@ import { toast } from 'sonner';
 import { authService } from '@/services/auth';
 import { Checkbox } from '@/components/ui/checkbox';
 import { PermissionsSelectorForm } from '@/components/ui/permissions-selector-new';
-import { userService, UpdateUserDto, Store, User } from '@/services/user.service';
+import { userService, UpdateUserDto } from '@/services/user.service';
+import { AssignmentType, Warehouse, UserResponse as UserType, Store } from '@/types/user.types';
+import { storeService } from '@/services/store.service';
+import { warehouseService } from '@/services/warehouse.service';
 import { useAuth } from '@/contexts/auth-context';
 import { tenantService } from '@/services/tenant.service';
 
@@ -36,15 +39,18 @@ const userEditSchema = z.object({
   language: z.string().optional(),
   timezone: z.string().optional(),
   status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+  assignmentType: z.enum(['store', 'warehouse']).default('store'), // ✅ NUEVO: Selector de tipo
   storeId: z.string().optional(),
+  warehouseId: z.string().optional(),
   permissions: z.array(z.string()).default([]),
 });
 
 type UserEditFormValues = z.infer<typeof userEditSchema>;
 
 interface UserEditFormProps {
-  user: User;
+  user: UserType; // Cambiar de User a UserType para incluir warehouses
   stores: Store[];
+  warehouses: Warehouse[];
   onSuccess: () => void;
 }
 
@@ -123,9 +129,9 @@ const formatPermissionLabel = (permission: string): string => {
   return translated.join(' · ');
 };
 
-export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
+export function UserEditForm({ user, stores, warehouses, onSuccess }: UserEditFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [userComplete, setUserComplete] = useState<User | null>(null);
+  const [userComplete, setUserComplete] = useState<UserType | null>(null);
   const [availablePermissions, setAvailablePermissions] = useState<string[]>([]);
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(true);
   const [storesCount, setStoresCount] = useState<number | null>(null);
@@ -285,9 +291,16 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
     loadStoresCount();
   }, []);
 
-  const shouldShowStoreSelect = (count: number | null, storesList: Store[]) => {
-    if (count === 1 && storesList.length === 1) return false;
-    return true;
+  const shouldShowStoreSelect = (storesList: Store[]) => {
+    return storesList.length > 0;
+  };
+
+  const shouldShowWarehouseSelect = (warehousesList: Warehouse[]) => {
+    return warehousesList.length > 0;
+  };
+
+  const shouldShowAssignmentSelectors = (user: UserType) => {
+    return user.role === 'USER';
   };
 
   // Obtener el usuario completo al montar el componente
@@ -315,7 +328,9 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
       language: 'es',
       timezone: 'America/Lima',
       status: 'ACTIVE',
+      assignmentType: 'store', // ✅ Agregado
       storeId: '',
+      warehouseId: '', // ✅ Agregado
       permissions: [],
     },
   });
@@ -323,6 +338,11 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
   // Resetear el formulario cuando userComplete esté disponible
   useEffect(() => {
     if (userComplete) {
+      // Determinar el tipo de asignación basado en las asignaciones actuales
+      const hasStore = userComplete.stores && userComplete.stores.length > 0;
+      const hasWarehouse = userComplete.warehouses && userComplete.warehouses.length > 0;
+      const assignmentType: AssignmentType = hasStore ? 'store' : hasWarehouse ? 'warehouse' : 'store';
+
       form.reset({
         name: userComplete.name || '',
         username: userComplete.username || '',
@@ -331,7 +351,9 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
         language: userComplete.language || 'es',
         timezone: userComplete.timezone || 'America/Lima',
         status: (userComplete.status === 'ACTIVE' || userComplete.status === 'INACTIVE') ? userComplete.status : 'ACTIVE',
-        storeId: userComplete.stores?.[0]?.id || '',
+        assignmentType, // ✅ Determinar automáticamente basado en asignaciones existentes
+        storeId: hasStore ? userComplete.stores[0].id : '',
+        warehouseId: hasWarehouse ? userComplete.warehouses[0].id : '',
         permissions: userComplete.permissions || [],
       });
     }
@@ -373,8 +395,9 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
         language: data.language || 'es',
         timezone: data.timezone || 'America/Lima',
         status: data.status || 'ACTIVE',
-        // Solo incluir storeId si es USER y hay una tienda seleccionada
-        ...(user.role === 'USER' && data.storeId && { storeId: data.storeId }),
+        // Aplicar lógica XOR para asignación
+        ...(data.assignmentType === 'store' && data.storeId && { storeId: data.storeId }),
+        ...(data.assignmentType === 'warehouse' && data.warehouseId && { warehouseId: data.warehouseId }),
         permissions: data.permissions,
       };
 
@@ -525,32 +548,95 @@ export function UserEditForm({ user, stores, onSuccess }: UserEditFormProps) {
             )}
           />
 
-          {/* Solo mostrar selector de tienda para usuarios USER */}
-          {user.role === 'USER' && shouldShowStoreSelect(storesCount, stores) && (
-            <FormField
-              control={form.control}
-              name="storeId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-medium">Tienda asignada</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="h-10">
-                        <SelectValue placeholder="Selecciona una tienda" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {stores.map((store) => (
-                        <SelectItem key={store.id} value={store.id}>
-                          {store.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
+          {/* Selector de tipo de asignación solo visible para usuarios USER */}
+          {shouldShowAssignmentSelectors(user) && (
+            <>
+              <div className="sm:col-span-2">
+                <FormField
+                  control={form.control}
+                  name="assignmentType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-medium">Tipo de asignación</FormLabel>
+                      <Select
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          // Limpiar selecciones anteriores al cambiar tipo
+                          form.setValue('storeId', '');
+                          form.setValue('warehouseId', '');
+                        }}
+                        defaultValue={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="h-10">
+                            <SelectValue placeholder="Selecciona el tipo de asignación" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="store">🏪 Tienda</SelectItem>
+                          <SelectItem value="warehouse">🏭 Almacén</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {form.watch('assignmentType') === 'store' && shouldShowStoreSelect(stores) && (
+                <FormField
+                  control={form.control}
+                  name="storeId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-medium">Tienda asignada</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="h-10">
+                            <SelectValue placeholder="Selecciona una tienda" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {stores.map((store) => (
+                            <SelectItem key={store.id} value={store.id}>
+                              {store.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               )}
-            />
+
+              {form.watch('assignmentType') === 'warehouse' && shouldShowWarehouseSelect(warehouses) && (
+                <FormField
+                  control={form.control}
+                  name="warehouseId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm font-medium">Almacén asignado</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="h-10">
+                            <SelectValue placeholder="Selecciona un almacén" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {warehouses.map((warehouse: Warehouse) => (
+                            <SelectItem key={warehouse.id} value={warehouse.id}>
+                              {warehouse.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+            </>
           )}
           
           {/* Sección de Permisos */}

@@ -2,7 +2,7 @@
 "use client";
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Plus, Search, X, Building } from 'lucide-react';
+import { Plus, Search, X, Building, Warehouse } from 'lucide-react';
 import { UserTable } from './_components/user-table';
 import { UserDialog } from './_components/user-dialog';
 import { Input } from '@/components/ui/input';
@@ -23,7 +23,7 @@ export default function UsersPage() {
   const { canViewUsers } = usePermissions();
   const [refreshKey, setRefreshKey] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
-  const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
+  const [stores, setStores] = useState<{ id: string; name: string; type: 'store' | 'warehouse' }[]>([]);
   const [storeId, setStoreId] = useState('all');
   const [isNewUserDialogOpen, setIsNewUserDialogOpen] = useState(false);
   const [selectedStore, setSelectedStore] = useState<string>('all');
@@ -38,28 +38,46 @@ export default function UsersPage() {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Load stores from users
+  // Load establishments (stores and warehouses) from users
   useEffect(() => {
-    const loadStoresFromUsers = async () => {
+    const loadEstablishmentsFromUsers = async () => {
       try {
         const users = await userService.getAllUsers();
-        const uniqueStores = new Map<string, string>();
+        const uniqueEstablishments = new Map<string, { id: string; name: string; type: 'store' | 'warehouse' }>();
         
         users.forEach(user => {
-          user.stores.forEach(store => {
-            if (!uniqueStores.has(store.id)) {
-              uniqueStores.set(store.id, store.name);
+          // Add stores
+          user.stores?.forEach(store => {
+            const key = `store-${store.id}`;
+            if (!uniqueEstablishments.has(key)) {
+              uniqueEstablishments.set(key, { 
+                id: store.id, 
+                name: store.name, 
+                type: 'store' 
+              });
+            }
+          });
+          
+          // Add warehouses
+          user.warehouses?.forEach(warehouse => {
+            const key = `warehouse-${warehouse.id}`;
+            if (!uniqueEstablishments.has(key)) {
+              uniqueEstablishments.set(key, { 
+                id: warehouse.id, 
+                name: warehouse.name, 
+                type: 'warehouse' 
+              });
             }
           });
         });
         
-        const storesArray = Array.from(uniqueStores.entries()).map(([id, name]) => ({ id, name }));
-        setStores(storesArray);
+        const establishmentsArray = Array.from(uniqueEstablishments.values());
+        setStores(establishmentsArray);
       } catch (error) {
-        console.error('Error loading stores from users:', error);
+        console.error('Error loading establishments from users:', error);
       }
     };
-    loadStoresFromUsers();
+    loadEstablishmentsFromUsers();
   }, []);
 
   const handleUserCreated = () => {
@@ -139,13 +157,20 @@ export default function UsersPage() {
                   <Select value={selectedStore} onValueChange={setSelectedStore}>
                     <SelectTrigger>
                       <Building className="h-4 w-4 mr-2" />
-                      <SelectValue placeholder="Filtrar por tienda..." />
+                      <SelectValue placeholder="Filtrar por establecimiento..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todas las tiendas</SelectItem>
-                      {stores.map((store) => (
-                        <SelectItem key={store.id} value={store.id}>
-                          {store.name}
+                      <SelectItem value="all">Todos los establecimientos</SelectItem>
+                      {stores.map((establishment) => (
+                        <SelectItem key={`${establishment.type}-${establishment.id}`} value={establishment.id}>
+                          <div className="flex items-center gap-2">
+                            {establishment.type === 'store' ? (
+                              <Building className="h-4 w-4 text-blue-500" />
+                            ) : (
+                              <Warehouse className="h-4 w-4 text-green-500" />
+                            )}
+                            <span>{establishment.name}</span>
+                          </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -171,7 +196,7 @@ export default function UsersPage() {
                     Filtrando por:
                     {debouncedSearchTerm && ` "${debouncedSearchTerm}"`}
                     {debouncedSearchTerm && selectedStore !== 'all' && " - "}
-                    {selectedStore !== 'all' && ` tienda: ${stores.find(s => s.id === selectedStore)?.name}`}
+                    {selectedStore !== 'all' && ` ${stores.find(s => s.id === selectedStore)?.type === 'store' ? 'tienda' : 'almacén'}: ${stores.find(s => s.id === selectedStore)?.name}`}
                   </span>
                 </div>
               )}
@@ -183,7 +208,7 @@ export default function UsersPage() {
           <UserTable
             key={refreshKey}
             searchTerm={debouncedSearchTerm}
-            storeId={selectedStore}
+            establishmentId={selectedStore}
             onSearchChange={setSearchTerm}
           />
         </CardContent>

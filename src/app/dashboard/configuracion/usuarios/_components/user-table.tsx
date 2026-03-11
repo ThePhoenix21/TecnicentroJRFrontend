@@ -11,10 +11,11 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Edit, Trash2, Users as UsersIcon, ChevronLeft, ChevronRight, X, Building, HelpCircle } from "lucide-react";
+import { Edit, Trash2, Users as UsersIcon, ChevronLeft, ChevronRight, X, Building, Warehouse, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
 import { UserDialog } from "./user-dialog";
-import { userService, type User } from "@/services/user.service";
+import { userService } from "@/services/user.service";
+import { UserResponse as User } from "@/types/user.types";
 import { usePermissions } from "@/hooks/usePermissions";
 import {
   Dialog,
@@ -44,13 +45,13 @@ import {
 
 interface UserTableProps {
   searchTerm?: string;
-  storeId?: string;
+  establishmentId?: string;
   onSearchChange?: (search: string) => void;
 }
 
 export function UserTable({
   searchTerm = '',
-  storeId = '',
+  establishmentId = '',
   onSearchChange
 }: UserTableProps) {
   const { canManageUsers, canDeleteUsers } = usePermissions();
@@ -87,10 +88,11 @@ export function UserTable({
       const data = await userService.getAllUsers(searchTerm);
 
       let filteredUsers = data.filter((user: User) => {
-        // Filtrar por tienda solo si se especifica una tienda específica (no "all")
-        if (storeId && storeId !== 'all' && user.stores) {
-          const hasStore = user.stores.some(store => store.id === storeId);
-          if (!hasStore) return false;
+        // Filtrar por establecimiento solo si se especifica uno específico (no "all")
+        if (establishmentId && establishmentId !== 'all') {
+          const hasStore = user.stores?.some(store => store.id === establishmentId);
+          const hasWarehouse = user.warehouses?.some(warehouse => warehouse.id === establishmentId);
+          if (!hasStore && !hasWarehouse) return false;
         }
         return true;
       });
@@ -128,7 +130,7 @@ export function UserTable({
     } finally {
       setIsLoading(false);
     }
-  }, [searchTerm, storeId, showDeletedUsers]);
+  }, [searchTerm, establishmentId, showDeletedUsers]);
 
   useEffect(() => {
     fetchUsers();
@@ -332,7 +334,7 @@ export function UserTable({
               <TableHead className="hidden sm:table-cell w-[120px]">Rol</TableHead>
               {/* Hide Estado, Tienda, Teléfono, Creado, Actualizado in mobile */}
               <TableHead className="hidden sm:table-cell w-[100px]">Estado</TableHead>
-              <TableHead className="hidden lg:table-cell">Tienda</TableHead>
+              <TableHead className="hidden lg:table-cell">Establecimiento</TableHead>
               <TableHead className="hidden xl:table-cell">Teléfono</TableHead>
               <TableHead className="hidden xl:table-cell">Creado</TableHead>
               <TableHead className="hidden xl:table-cell">Actualizado</TableHead>
@@ -360,19 +362,34 @@ export function UserTable({
               <TableCell className="hidden sm:table-cell">{getRoleBadge(user.role)}</TableCell>
               <TableCell className="hidden sm:table-cell">{getStatusBadge(user.status)}</TableCell>
               <TableCell className="hidden lg:table-cell">
-                {user.stores && user.stores.length > 0 ? (
+                {user.role === 'ADMIN' ? (
+                  <div className="flex items-center gap-1">
+                    <span className="text-sm font-medium text-primary">Todos los establecimientos</span>
+                  </div>
+                ) : (user.stores && user.stores.length > 0) || (user.warehouses && user.warehouses.length > 0) ? (
                   <div className="space-y-1">
-                    {user.stores.slice(0, 2).map((store) => (
-                      <div key={store.id} className="flex items-center gap-1">
-                        <Building className="h-4 w-4 text-gray-400" />
+                    {/* Mostrar tiendas */}
+                    {user.stores && user.stores.slice(0, 2).map((store) => (
+                      <div key={`store-${store.id}`} className="flex items-center gap-1">
+                        <Building className="h-4 w-4 text-blue-500" />
                         <span className="truncate max-w-[150px]" title={store.name}>
                           {store.name}
                         </span>
                       </div>
                     ))}
-                    {user.stores.length > 2 && (
+                    {/* Mostrar almacenes */}
+                    {user.warehouses && user.warehouses.slice(0, 2).map((warehouse) => (
+                      <div key={`warehouse-${warehouse.id}`} className="flex items-center gap-1">
+                        <Warehouse className="h-4 w-4 text-green-500" />
+                        <span className="truncate max-w-[150px]" title={warehouse.name}>
+                          {warehouse.name}
+                        </span>
+                      </div>
+                    ))}
+                    {/* Contador de elementos adicionales */}
+                    {((user.stores?.length || 0) + (user.warehouses?.length || 0)) > 4 && (
                       <span className="text-xs text-muted-foreground">
-                        +{user.stores.length - 2} más
+                        +{((user.stores?.length || 0) + (user.warehouses?.length || 0)) - 4} más
                       </span>
                     )}
                   </div>

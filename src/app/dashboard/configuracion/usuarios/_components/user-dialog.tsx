@@ -11,7 +11,9 @@ import {
 } from '@/components/ui/dialog';
 import { UserForm } from './user-form';
 import { UserEditForm } from './user-edit-form';
-import { userService, type Store, type User } from '@/services/user.service';
+import { storeService } from '@/services/store.service';
+import { warehouseService } from '@/services/warehouse.service';
+import { type Store, type Warehouse, type UserResponse as User } from '@/types/user.types';
 
 interface UserDialogProps {
   open: boolean;
@@ -29,6 +31,7 @@ export function UserDialog({
   children,
 }: UserDialogProps) {
   const [stores, setStores] = useState<Store[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleFormSuccess = () => {
@@ -36,39 +39,36 @@ export function UserDialog({
     onOpenChange(false);
   };
 
-  // Cargar tiendas para el selector
+  // Cargar tiendas y almacenes para los selectores
   useEffect(() => {
-    const loadStores = async () => {
+    const loadData = async () => {
       try {
-        const users = await userService.getAllUsers();
-        const uniqueStores = new Map<string, string>();
+        setIsLoading(true);
+        const [storesData, warehousesData] = await Promise.all([
+          storeService.getAllStores(),
+          warehouseService.getWarehousesSimple()
+        ]);
 
-        // Extraer tiendas únicas de todos los usuarios
-        users.forEach((user) => {
-          if (user.stores) {
-            user.stores.forEach((store) => {
-              if (!uniqueStores.has(store.id)) {
-                uniqueStores.set(store.id, store.name);
-              }
-            });
-          }
-        });
+        // Transformar datos de almacenes al formato esperado
+        const formattedWarehouses = (warehousesData || []).map((w: any) => ({
+          id: w.id,
+          name: w.name,
+          address: w.address || null,
+          phone: w.phone || null,
+          createdAt: w.createdAt || '',
+          updatedAt: w.updatedAt || '',
+          createdById: w.createdById || null
+        }));
 
-        const storesArray = Array.from(uniqueStores.entries()).map(([id, name]) => ({ 
-          id, 
-          name,
-          address: '',
-          phone: '',
-          createdAt: '',
-          updatedAt: '',
-          createdById: ''
-        } as Store));
-        setStores(storesArray);
+        setStores(storesData || []);
+        setWarehouses(formattedWarehouses);
       } catch (error) {
-        console.error('Error loading stores:', error);
+        console.error('Error loading stores and warehouses:', error);
+      } finally {
+        setIsLoading(false);
       }
     };
-    loadStores();
+    loadData();
   }, []);
 
   return (
@@ -94,6 +94,7 @@ export function UserDialog({
               <UserEditForm
                 user={user}
                 stores={stores}
+                warehouses={warehouses} // ✅ NUEVO: Pasar almacenes
                 onSuccess={handleFormSuccess}
               />
             ) : (

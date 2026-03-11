@@ -1,40 +1,5 @@
 import { api, ApiError } from './api';
-
-export interface Store {
-  id: string;
-  name: string;
-  address: string | null;
-  phone: string | null;
-  createdAt: string;
-  updatedAt: string;
-  createdById: string;
-}
-
-export interface User {
-  id: string;
-  name: string;
-  username: string;
-  email: string;
-  phone: string;
-  role: "ADMIN" | "USER";
-  permissions?: string[]; // Permisos del usuario
-  stores: Store[];
-  createdAt: string;
-  updatedAt: string;
-  lastLoginAt?: string;
-  verified?: boolean;
-  language?: string;
-  timezone?: string;
-  status?: "ACTIVE" | "INACTIVE" | "SUSPENDED" | "DELETED";
-  birthdate?: string | null;
-  lastLoginIp?: string;
-  avatarUrl?: string | null;
-  passwordChangedAt?: string | null;
-  passwordResetToken?: string | null;
-  passwordResetTokenExpires?: string | null;
-  verifyToken?: string;
-  verifyTokenExpires?: string;
-}
+import { Warehouse, Store, CreateUserFromEmployedRequest, CreateUserRequest, UpdateUserRequest, UserResponse } from '@/types/user.types';
 
 export interface UserLookupItem {
   id: string;
@@ -48,7 +13,8 @@ export interface CreateUserRegularDto {
   email: string;
   phone: string;
   password: string;
-  storeId: string; // Obligatorio para USER
+  storeId?: string;        // XOR con warehouseId
+  warehouseId?: string;    // XOR con storeId
   permissions?: string[]; // Permisos para el usuario
 }
 
@@ -64,7 +30,8 @@ export interface UpdateUserDto {
   avatarUrl?: string;
   verified?: boolean;
   birthdate?: string | null;
-  storeId?: string; // Solo para USER y solo ADMIN puede modificarlo
+  storeId?: string;        // XOR con warehouseId
+  warehouseId?: string;    // XOR con storeId
   permissions?: string[]; // Permisos para el usuario
 }
 
@@ -79,7 +46,8 @@ export interface ChangeRoleDto {
 export interface CreateUserFromEmployedDto {
   employedId: string;
   role: "ADMIN" | "USER";
-  storeId?: string;
+  storeId?: string;        // XOR con warehouseId
+  warehouseId?: string;    // XOR con storeId
   password: string;
   permissions?: string[];
 }
@@ -97,14 +65,14 @@ class UserService {
     }
   }
 
-  async getAllUsers(search?: string): Promise<User[]> {
+  async getAllUsers(search?: string): Promise<UserResponse[]> {
     try {
       let url = this.baseUrl;
       if (search) {
         url += `?search=${encodeURIComponent(search)}`;
       }
       
-      const response = await api.get<User[]>(url);
+      const response = await api.get<UserResponse[]>(url);
       return response.data;
     } catch (error) {
       this.handleError(error);
@@ -112,9 +80,9 @@ class UserService {
     }
   }
 
-  async getUserById(id: string): Promise<User> {
+  async getUserById(id: string): Promise<UserResponse> {
     try {
-      const response = await api.get<User>(`${this.baseUrl}/${id}`);
+      const response = await api.get<UserResponse>(`${this.baseUrl}/${id}`);
       return response.data;
     } catch (error) {
       this.handleError(error);
@@ -122,9 +90,17 @@ class UserService {
     }
   }
 
-  async createUserFromEmployed(data: CreateUserFromEmployedDto): Promise<User> {
+  async createUserFromEmployed(data: CreateUserFromEmployedDto): Promise<UserResponse> {
     try {
-      const response = await api.post<User>(`${this.baseUrl}/from-employed`, data);
+      // Validar XOR: Debe proporcionar storeId O warehouseId, pero NO ambos
+      if (!data.storeId && !data.warehouseId) {
+        throw new Error('Debe seleccionar una tienda o almacén');
+      }
+      if (data.storeId && data.warehouseId) {
+        throw new Error('No puede seleccionar tanto tienda como almacén');
+      }
+
+      const response = await api.post<UserResponse>(`${this.baseUrl}/from-employed`, data);
       return response.data;
     } catch (error) {
       this.handleError(error);
@@ -133,15 +109,18 @@ class UserService {
   }
 
   // Crear usuario regular (solo USER) - requiere ADMIN
-  async createUser(userData: CreateUserRegularDto): Promise<User> {
+  async createUser(userData: CreateUserRegularDto): Promise<UserResponse> {
     try {
-      // Validar que storeId esté presente
-      if (!userData.storeId) {
-        throw new Error('Los usuarios tipo USER requieren una tienda asignada');
+      // Validar XOR: Debe proporcionar storeId O warehouseId, pero NO ambos
+      if (!userData.storeId && !userData.warehouseId) {
+        throw new Error('Debe seleccionar una tienda o almacén');
       }
-      
+      if (userData.storeId && userData.warehouseId) {
+        throw new Error('No puede seleccionar tanto tienda como almacén');
+      }
+
       // El backend genera username automáticamente si no se proporciona
-      const response = await api.post<User>('/users/create', userData);
+      const response = await api.post<UserResponse>('/users/create', userData);
       return response.data;
     } catch (error) {
       this.handleError(error);
@@ -150,10 +129,10 @@ class UserService {
   }
 
   // Actualizar usuario
-  async updateUser(id: string, userData: UpdateUserDto): Promise<User> {
+  async updateUser(id: string, userData: UpdateUserDto): Promise<UserResponse> {
     try {
       // Endpoint correcto para actualizar usuarios
-      const response = await api.put<User>(`${this.baseUrl}/update/${id}`, userData);
+      const response = await api.put<UserResponse>(`${this.baseUrl}/update/${id}`, userData);
       return response.data;
     } catch (error) {
       this.handleError(error);
@@ -186,9 +165,9 @@ class UserService {
   }
 
   // Eliminar usuario (soft delete) - requiere ADMIN
-  async deleteUser(id: string): Promise<User> {
+  async deleteUser(id: string): Promise<UserResponse> {
     try {
-      const response = await api.delete<User>(`${this.baseUrl}/${id}`);
+      const response = await api.delete<UserResponse>(`${this.baseUrl}/${id}`);
       return response.data;
     } catch (error) {
       this.handleError(error);

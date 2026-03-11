@@ -148,6 +148,8 @@ export default function EmpleadosPage() {
   const [isConvertOpen, setIsConvertOpen] = useState(false);
   const [convertSubmitting, setConvertSubmitting] = useState(false);
   const [convertStoreId, setConvertStoreId] = useState<string>("");
+  const [convertWarehouseId, setConvertWarehouseId] = useState<string>("");
+  const [convertAssignmentMode, setConvertAssignmentMode] = useState<AssignmentMode>("STORE");
   const [convertPassword, setConvertPassword] = useState<string>("");
   const [convertPermissions, setConvertPermissions] = useState<string[]>([]);
   const [availablePermissions, setAvailablePermissions] = useState<string[]>([]);
@@ -555,9 +557,12 @@ export default function EmpleadosPage() {
     setIsConvertOpen(true);
     setConvertSubmitting(false);
     setConvertStoreId("");
+    setConvertWarehouseId("");
+    setConvertAssignmentMode("STORE");
     setConvertPassword("");
     setConvertPermissions([]);
     await ensureStoresLoaded();
+    await ensureWarehousesLoaded();
     await ensurePermissionsLoaded();
   };
 
@@ -640,8 +645,13 @@ export default function EmpleadosPage() {
       return;
     }
 
-    if (!convertStoreId.trim()) {
-      toast.error("Seleccione una tienda");
+    // Validar XOR: Debe proporcionar storeId O warehouseId, pero NO ambos
+    if (!convertStoreId.trim() && !convertWarehouseId.trim()) {
+      toast.error("Debe seleccionar una tienda o almacén");
+      return;
+    }
+    if (convertStoreId.trim() && convertWarehouseId.trim()) {
+      toast.error("No puede seleccionar tanto tienda como almacén");
       return;
     }
 
@@ -650,7 +660,8 @@ export default function EmpleadosPage() {
       await userService.createUserFromEmployed({
         employedId: detail.id,
         role: "USER",
-        storeId: convertStoreId,
+        storeId: convertAssignmentMode === "STORE" ? convertStoreId : undefined,
+        warehouseId: convertAssignmentMode === "WAREHOUSE" ? convertWarehouseId : undefined,
         password: convertPassword,
         permissions: convertPermissions,
       });
@@ -1691,24 +1702,67 @@ export default function EmpleadosPage() {
                 />
               </div>
               <div className="space-y-2 sm:col-span-2">
-                <label className="text-sm font-medium">Tienda asignada</label>
+                <label className="text-sm font-medium">Tipo de asignación</label>
                 <Select
-                  value={convertStoreId}
-                  onValueChange={setConvertStoreId}
-                  disabled={convertSubmitting || storesLoading}
+                  value={convertAssignmentMode}
+                  onValueChange={(v) => {
+                    setConvertAssignmentMode(v as AssignmentMode);
+                    setConvertStoreId("");
+                    setConvertWarehouseId("");
+                  }}
+                  disabled={convertSubmitting}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={storesLoading ? "Cargando..." : "Seleccione una tienda"} />
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {storeOptions.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="STORE">🏪 Tienda</SelectItem>
+                    <SelectItem value="WAREHOUSE">🏭 Almacén</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+
+              {convertAssignmentMode === "STORE" ? (
+                <div className="space-y-2 sm:col-span-2">
+                  <label className="text-sm font-medium">Tienda asignada</label>
+                  <Select
+                    value={convertStoreId}
+                    onValueChange={setConvertStoreId}
+                    disabled={convertSubmitting || storesLoading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={storesLoading ? "Cargando..." : "Seleccione una tienda"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {storeOptions.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div className="space-y-2 sm:col-span-2">
+                  <label className="text-sm font-medium">Almacén asignado</label>
+                  <Select
+                    value={convertWarehouseId}
+                    onValueChange={setConvertWarehouseId}
+                    disabled={convertSubmitting || warehousesLoading}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={warehousesLoading ? "Cargando..." : "Seleccione un almacén"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {warehouseOptions.map((w) => (
+                        <SelectItem key={w.id} value={w.id}>
+                          {w.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             <PermissionsSelector

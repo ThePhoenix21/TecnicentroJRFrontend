@@ -30,6 +30,9 @@ import { userService, type CreateUserRegularDto, type UpdateUserDto } from '@/se
 import { adminRegisterService, type CreateAdminData } from '@/services/admin-register';
 import { useAuth } from '@/contexts/auth-context';
 import { tenantService } from '@/services/tenant.service';
+import { AssignmentType, type Store, type Warehouse, type UserFormData } from '@/types/user.types';
+import { storeService } from '@/services/store.service';
+import { warehouseService } from '@/services/warehouse.service';
 
 const UserRole = z.enum(['ADMIN', 'USER']);
 type UserRoleType = z.infer<typeof UserRole>;
@@ -54,7 +57,9 @@ const userFormSchema = z.object({
   role: UserRole,
   password: z.string().optional(),
   confirmPassword: z.string().optional(),
+  assignmentType: z.enum(['store', 'warehouse']).default('store'), // ✅ NUEVO: Selector de tipo
   storeId: z.string().optional(),
+  warehouseId: z.string().optional(),
   permissions: z.array(z.string()).default([]),
 }).refine((data) => {
   // Solo validar contraseña si estamos creando (no hay id)
@@ -69,23 +74,19 @@ const userFormSchema = z.object({
   message: "Las contraseñas no coinciden",
   path: ["confirmPassword"],
 }).refine((data) => {
-  // Si es USER y estamos creando, requiere storeId
-  if (!data.id && data.role === 'USER' && !data.storeId) {
-    return false;
+  // Validar XOR: Debe proporcionar storeId O warehouseId, pero NO ambos
+  if (!data.id) { // Solo en creación
+    if (data.assignmentType === 'store' && !data.storeId) {
+      return false;
+    }
+    if (data.assignmentType === 'warehouse' && !data.warehouseId) {
+      return false;
+    }
   }
   return true;
 }, {
-  message: "Los usuarios tipo USER deben seleccionar una tienda",
+  message: "Debe seleccionar una tienda o almacén",
   path: ["storeId"],
-}).refine((data) => {
-  // En creación, la contraseña es requerida
-  if (!data.id && !data.password) {
-    return false;
-  }
-  return true;
-}, {
-  message: "La contraseña es requerida para crear usuarios",
-  path: ["password"],
 }).refine((data) => {
   // Si hay contraseña, validar formato (solo en creación)
   if (!data.id && data.password) {
@@ -99,13 +100,14 @@ const userFormSchema = z.object({
   message: "La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula y un número",
   path: ["password"],
 }).refine((data) => {
-  // Si es USER y estamos creando, el username es opcional (se genera automáticamente)
-  // Si es ADMIN y estamos creando, el username también es opcional
-  // No validar username requerido en creación
+  // En creación, la contraseña es requerida
+  if (!data.id && !data.password) {
+    return false;
+  }
   return true;
 }, {
-  message: "El nombre de usuario es opcional",
-  path: ["username"],
+  message: "La contraseña es requerida para crear usuarios",
+  path: ["password"],
 });
 
 const validatePasswordRequirement = (password: string, requirement: string): boolean => {
@@ -241,14 +243,18 @@ interface UserFormProps {
     id?: string;
     password?: string;
     permissions?: string[];
+    assignmentType?: AssignmentType; // ✅ NUEVO
+    storeId?: string;
+    warehouseId?: string;
   };
 }
 
 export function UserForm({ onSuccess, initialData }: UserFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [stores, setStores] = useState<{ id: string; name: string }[]>([]);
-  const [storesCount, setStoresCount] = useState<number | null>(null);
+  const [stores, setStores] = useState<Store[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [isLoadingStores, setIsLoadingStores] = useState(true);
+  const [isLoadingWarehouses, setIsLoadingWarehouses] = useState(true);
   const [availablePermissions, setAvailablePermissions] = useState<string[]>([]);
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(true);
 
@@ -330,7 +336,9 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
       role: (initialData?.role as UserRoleType) || 'USER',
       password: initialData?.password || '',
       confirmPassword: '',
+      assignmentType: initialData?.assignmentType || 'store', // ✅ NUEVO: Selector de tipo
       storeId: initialData?.storeId || '',
+      warehouseId: initialData?.warehouseId || '',
       permissions: initialData?.permissions || [],
     },
   });
@@ -369,64 +377,66 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
     }
   }, [allowedPermissionsSet, form]);
 
-  // Cargar tiendas y permisos al montar
+  // Cargar tiendas, almacenes y permisos al montar
   useEffect(() => {
     const loadData = async () => {
       try {
         setIsLoadingStores(true);
+        setIsLoadingWarehouses(true);
         setIsLoadingPermissions(true);
 
-        try {
-          const count = await tenantService.getStoresCount();
-          setStoresCount(count);
-        } catch (error) {
-          setStoresCount(null);
-        }
-        
         // Cargar tiendas
-        const users = await userService.getAllUsers();
-        const uniqueStores = new Map<string, string>();
-        
-        users.forEach(user => {
-          user.stores.forEach(store => {
-            if (!uniqueStores.has(store.id)) {
-              uniqueStores.set(store.id, store.name);
-            }
-          });
-        });
-        
-        const storesArray = Array.from(uniqueStores.entries()).map(([id, name]) => ({ id, name }));
-        setStores(storesArray);
-        
+        const storesData = await storeService.getAllStores();
+        setStores(storesData);
+
+        // Cargar almacenes
+        const warehousesData = await warehouseService.getWarehousesSimple();
+        const formattedWarehouses = (warehousesData || []).map((w: any) => ({
+          id: w.id,
+          name: w.name,
+          address: w.address || null,
+          phone: w.phone || null,
+          createdAt: w.createdAt || '',
+          updatedAt: w.updatedAt || '',
+          createdById: w.createdById || null
+        }));
+        setWarehouses(formattedWarehouses);
+
         // Cargar permisos
         const permissions = await authService.getPermissions();
         setAvailablePermissions(permissions);
-        
+
       } catch (error) {
+        console.error('Error loading data:', error);
       } finally {
         setIsLoadingStores(false);
+        setIsLoadingWarehouses(false);
         setIsLoadingPermissions(false);
       }
     };
     loadData();
   }, []);
 
-  const shouldShowStoreSelect = (count: number | null, storesList: { id: string; name: string }[]) => {
-    if (count === 1 && storesList.length === 1) return false;
-    return true;
+  const shouldShowStoreSelect = (storesList: Store[]) => {
+    return storesList.length > 0;
+  };
+
+  const shouldShowWarehouseSelect = (warehousesList: Warehouse[]) => {
+    return warehousesList.length > 0;
   };
 
   useEffect(() => {
     if (initialData?.id) return;
     if (form.watch('role') !== 'USER') return;
 
-    if (storesCount === 1 && stores.length === 1) {
-      const current = form.getValues('storeId');
-      if (!current) {
-        form.setValue('storeId', stores[0].id);
-      }
+    // Auto-seleccionar si hay solo una opción disponible
+    const assignmentType = form.watch('assignmentType');
+    if (assignmentType === 'store' && stores.length === 1 && !form.getValues('storeId')) {
+      form.setValue('storeId', stores[0].id);
+    } else if (assignmentType === 'warehouse' && warehouses.length === 1 && !form.getValues('warehouseId')) {
+      form.setValue('warehouseId', warehouses[0].id);
     }
-  }, [storesCount, stores, form, initialData?.id]);
+  }, [stores, warehouses, form, initialData?.id]);
 
 
   const onSubmit = async (data: UserFormValues) => {
@@ -434,7 +444,7 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
       setIsSubmitting(true);
 
       if (initialData?.id) {
-        
+
         // Para actualizaciones, solo enviar campos permitidos
         const updateUserData: UpdateUserDto = {
           name: data.name,
@@ -443,8 +453,9 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
           }),
           email: data.email,
           phone: data.phone,
-          // Solo incluir storeId si es USER
-          ...(initialData.role === 'USER' && data.storeId && { storeId: data.storeId }),
+          // Aplicar lógica XOR para asignación
+          ...(data.assignmentType === 'store' && data.storeId && { storeId: data.storeId }),
+          ...(data.assignmentType === 'warehouse' && data.warehouseId && { warehouseId: data.warehouseId }),
           permissions: data.permissions,
         };
 
@@ -469,13 +480,14 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
 
           const createdAdmin = await adminRegisterService.createAdmin(adminData);
         } else {
-          // Crear usuario regular usando userService
+          // Crear usuario regular usando userService con lógica XOR
           const userData: CreateUserRegularDto = {
             name: data.name,
             email: data.email,
             phone: data.phone,
             password: data.password,
-            storeId: data.storeId!, // Obligatorio para USER
+            // Aplicar lógica XOR: solo uno de los dos
+            ...(data.assignmentType === 'store' ? { storeId: data.storeId } : { warehouseId: data.warehouseId }),
             ...(data.username && String(data.username).trim().length > 0 && {
               username: String(data.username).trim(),
             }),
@@ -489,7 +501,7 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
       toast.success(
         initialData
           ? 'Usuario actualizado correctamente'
-          : data.role === 'ADMIN' 
+          : data.role === 'ADMIN'
             ? 'Administrador creado correctamente'
             : 'Usuario creado correctamente'
       );
@@ -605,35 +617,96 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
               />
             )}
 
-            {/* Selector de tienda visible para USER en creación, o para edición de USER */}
-            {((!initialData?.id && form.watch('role') === 'USER') || 
+            {/* Selector de tipo de asignación visible para USER en creación, o para edición de USER */}
+            {((!initialData?.id && form.watch('role') === 'USER') ||
               (initialData?.id && initialData.role === 'USER')) && (
-              shouldShowStoreSelect(storesCount, stores) && (
-                <FormField
-                  control={form.control as UserFormControl}
-                  name="storeId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Tienda asignada</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecciona una tienda" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {stores.map((store) => (
-                            <SelectItem key={store.id} value={store.id}>
-                              {store.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )
+              <>
+                <div className="md:col-span-2">
+                  <FormField
+                    control={form.control as UserFormControl}
+                    name="assignmentType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tipo de asignación</FormLabel>
+                        <Select
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            // Limpiar selecciones anteriores al cambiar tipo
+                            form.setValue('storeId', '');
+                            form.setValue('warehouseId', '');
+                          }}
+                          defaultValue={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecciona el tipo de asignación" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="store">🏪 Tienda</SelectItem>
+                            <SelectItem value="warehouse">🏭 Almacén</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {form.watch('assignmentType') === 'store' && shouldShowStoreSelect(stores) && (
+                  <FormField
+                    control={form.control as UserFormControl}
+                    name="storeId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tienda asignada</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder={isLoadingStores ? "Cargando..." : "Selecciona una tienda"} />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {stores.map((store) => (
+                              <SelectItem key={store.id} value={store.id}>
+                                {store.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
+                {form.watch('assignmentType') === 'warehouse' && shouldShowWarehouseSelect(warehouses) && (
+                  <FormField
+                    control={form.control as UserFormControl}
+                    name="warehouseId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Almacén asignado</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder={isLoadingWarehouses ? "Cargando..." : "Selecciona un almacén"} />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {warehouses.map((warehouse) => (
+                              <SelectItem key={warehouse.id} value={warehouse.id}>
+                                {warehouse.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+              </>
             )}
 
             {/* Sección de Permisos */}
