@@ -187,6 +187,8 @@ export interface UpdateEmployedDto {
   email?: string;
   position?: string;
   status?: string;
+  storeId?: string;
+  warehouseId?: string;
 }
 
 export interface CreateEmployedDto {

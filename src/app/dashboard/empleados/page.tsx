@@ -125,7 +125,10 @@ export default function EmpleadosPage() {
     email: "",
     position: "",
     status: "",
+    storeId: "",
+    warehouseId: "",
   });
+  const [editAssignmentType, setEditAssignmentType] = useState<AssignmentMode>("STORE");
 
   const [isDeletedOpen, setIsDeletedOpen] = useState(false);
   const [deletedLoading, setDeletedLoading] = useState(false);
@@ -343,7 +346,27 @@ export default function EmpleadosPage() {
         email: d.email ?? "",
         position: d.position ?? "",
         status: d.status ?? "",
+        storeId: "",
+        warehouseId: "",
       });
+
+      // Determinar tipo de asignación actual
+      const hasStoreAssignment = d.assignment?.type === 'STORE' || (d.storeAssignments && d.storeAssignments.length > 0);
+      const hasWarehouseAssignment = d.assignment?.type === 'WAREHOUSE' || (d.warehouseAssignments && d.warehouseAssignments.length > 0);
+
+      if (hasWarehouseAssignment) {
+        setEditAssignmentType("WAREHOUSE");
+        setEditForm(prev => ({
+          ...prev,
+          warehouseId: d.assignment?.warehouse?.id || d.warehouseAssignments?.[0]?.warehouse?.id || "",
+        }));
+      } else {
+        setEditAssignmentType("STORE");
+        setEditForm(prev => ({
+          ...prev,
+          storeId: d.assignment?.store?.id || d.storeAssignments?.[0]?.store?.id || "",
+        }));
+      }
 
       setRecreateForm({
         firstName: d.firstName ?? "",
@@ -699,6 +722,20 @@ export default function EmpleadosPage() {
   const handleSaveEdit = async () => {
     if (!selectedEmployeeId) return;
 
+    // Validación XOR: Debe proporcionar storeId O warehouseId, pero NO ambos
+    const hasStore = Boolean(editForm.storeId?.trim());
+    const hasWarehouse = Boolean(editForm.warehouseId?.trim());
+
+    if (!hasStore && !hasWarehouse) {
+      toast.error("Debe seleccionar una tienda o almacén");
+      return;
+    }
+
+    if (hasStore && hasWarehouse) {
+      toast.error("No puede seleccionar tanto tienda como almacén");
+      return;
+    }
+
     try {
       setEditSubmitting(true);
       const updated = await employedService.updateEmployed(selectedEmployeeId, {
@@ -708,10 +745,13 @@ export default function EmpleadosPage() {
         email: editForm.email?.trim() || undefined,
         position: editForm.position?.trim() || undefined,
         status: editForm.status?.trim() || undefined,
+        storeId: editForm.storeId?.trim() || undefined,
+        warehouseId: editForm.warehouseId?.trim() || undefined,
       });
 
       setDetail(updated);
       setIsEditing(false);
+      closeDetail(); // Cerrar el modal completo después de guardar
       toast.success("Empleado actualizado");
       await loadEmployees();
     } catch (error: any) {
@@ -1472,11 +1512,51 @@ export default function EmpleadosPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Rol de asignación</label>
-                  <Input
-                    value={detail.assignment?.role ?? detail.storeAssignments?.[0]?.role ?? detail.warehouseAssignments?.[0]?.role ?? "-"}
-                    disabled
-                  />
+                  <label className="text-sm font-medium">Tipo de asignación</label>
+                  <Select
+                    value={editAssignmentType}
+                    onValueChange={(v) => {
+                      setEditAssignmentType(v as AssignmentMode);
+                      // Limpiar selecciones al cambiar tipo
+                      setEditForm(prev => ({ ...prev, storeId: "", warehouseId: "" }));
+                    }}
+                    disabled={!isEditing || editSubmitting}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="STORE">🏪 Tienda</SelectItem>
+                      <SelectItem value="WAREHOUSE">🏭 Almacén</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Selector condicional simplificado */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    {editAssignmentType === "STORE" ? "Tienda asignada" : "Almacén asignado"}
+                  </label>
+                  <Select
+                    value={editAssignmentType === "STORE" ? (editForm.storeId || "") : (editForm.warehouseId || "")}
+                    onValueChange={(v) => setEditForm(prev => ({
+                      ...prev,
+                      storeId: editAssignmentType === "STORE" ? v : "",
+                      warehouseId: editAssignmentType === "WAREHOUSE" ? v : ""
+                    }))}
+                    disabled={!isEditing || editSubmitting}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccione una opción" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(editAssignmentType === "STORE" ? storeOptions : warehouseOptions).map((item) => (
+                        <SelectItem key={item.id} value={item.id}>
+                          {item.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 {detail.storeAssignments && detail.storeAssignments.length > 0 && (
@@ -1652,15 +1732,44 @@ export default function EmpleadosPage() {
                   variant="outline"
                   onClick={() => {
                     if (!detail) return;
-                    setIsEditing((v) => !v);
-                    setEditForm({
-                      firstName: detail.firstName ?? "",
-                      lastName: detail.lastName ?? "",
-                      phone: detail.phone ?? "",
-                      email: detail.email ?? "",
-                      position: detail.position ?? "",
-                      status: detail.status ?? "",
-                    });
+                    const isStartingEdit = !isEditing;
+                    setIsEditing(isStartingEdit);
+
+                    if (isStartingEdit) {
+                      // Cargar opciones si no están cargadas
+                      ensureStoresLoaded();
+                      ensureWarehousesLoaded();
+
+                      // Inicializar formulario con valores actuales
+                      setEditForm({
+                        firstName: detail.firstName ?? "",
+                        lastName: detail.lastName ?? "",
+                        phone: detail.phone ?? "",
+                        email: detail.email ?? "",
+                        position: detail.position ?? "",
+                        status: detail.status ?? "",
+                        storeId: "",
+                        warehouseId: "",
+                      });
+
+                      // Determinar tipo de asignación actual y valores
+                      const hasStoreAssignment = detail.assignment?.type === 'STORE' || (detail.storeAssignments && detail.storeAssignments.length > 0);
+                      const hasWarehouseAssignment = detail.assignment?.type === 'WAREHOUSE' || (detail.warehouseAssignments && detail.warehouseAssignments.length > 0);
+
+                      if (hasWarehouseAssignment) {
+                        setEditAssignmentType("WAREHOUSE");
+                        setEditForm(prev => ({
+                          ...prev,
+                          warehouseId: detail.assignment?.warehouse?.id || detail.warehouseAssignments?.[0]?.warehouse?.id || "",
+                        }));
+                      } else {
+                        setEditAssignmentType("STORE");
+                        setEditForm(prev => ({
+                          ...prev,
+                          storeId: detail.assignment?.store?.id || detail.storeAssignments?.[0]?.store?.id || "",
+                        }));
+                      }
+                    }
                   }}
                   disabled={detailLoading || editSubmitting}
                 >
