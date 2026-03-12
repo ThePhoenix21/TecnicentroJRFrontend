@@ -15,6 +15,8 @@ export type EmployedFilters = {
   firstName?: string;
   lastName?: string;
   position?: string;
+  positionId?: string;
+  establishmentRoleId?: string;
   storeId?: string;
   warehouseId?: string;
   fromDate?: string;
@@ -198,9 +200,9 @@ export interface CreateEmployedDto {
   phone?: string;
   email?: string;
   position: string;
+  assignmentRole: string;
   storeId?: string;
   warehouseId?: string;
-  assignmentRole: string;
 }
 
 export interface RecreateEmployedDto {

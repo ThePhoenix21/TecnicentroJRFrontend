@@ -7,6 +7,8 @@ import { userService, type UserLookupItem } from "@/services/user.service";
 import { storeService } from "@/services/store.service";
 import { warehouseService } from "@/services/warehouse.service";
 import { authService } from "@/services/auth";
+import { employeePositionService, type EmployeePositionLookupItem } from "@/services/employee-position.service";
+import { establishmentRoleService, type EstablishmentRoleLookupItem } from "@/services/establishment-role.service";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/auth-context";
 import { formatCurrency } from "@/lib/utils";
@@ -20,7 +22,6 @@ import type {
   EmployedListItem,
   EmployedStatus,
   EmployedNameLookupItem,
-  EmployedPositionLookupItem,
   EmployedStatusLookupItem,
   CreateEmployedDto,
   RecreateEmployedDto,
@@ -90,9 +91,18 @@ const statusLabel: Record<EmployedStatus, string> = {
 export default function EmpleadosPage() {
   const { canViewEmployees, hasAllPermissions } = usePermissions();
   const canRecreateEmployee = hasAllPermissions(['RECREATE_EMPLOYEE', 'MANAGE_EMPLOYEES']);
+
+  const { currentStore, currentWarehouse, activeLoginMode } = useAuth();
   
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<EmployedListItem[]>([]);
+
+  const normalizeLookupText = (value: string) =>
+    value
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
 
   const [firstNameFilter, setFirstNameFilter] = useState("");
   const [firstNameQuery, setFirstNameQuery] = useState("");
@@ -100,14 +110,12 @@ export default function EmpleadosPage() {
   const [lastNameFilter, setLastNameFilter] = useState("");
   const [lastNameQuery, setLastNameQuery] = useState("");
   const [showLastNameSuggestions, setShowLastNameSuggestions] = useState(false);
-  const [positionFilter, setPositionFilter] = useState("all");
+  const [positionIdFilter, setPositionIdFilter] = useState("all");
+  const [roleIdFilter, setRoleIdFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<EmployedStatus | "all">("all");
-  const [storeIdFilter, setStoreIdFilter] = useState("all");
-  const [warehouseIdFilter, setWarehouseIdFilter] = useState("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
-  const [positionOptions, setPositionOptions] = useState<EmployedPositionLookupItem[]>([]);
   const [statusOptions, setStatusOptions] = useState<EmployedStatusLookupItem[]>([]);
   const [nameLookup, setNameLookup] = useState<EmployedNameLookupItem[]>([]);
 
@@ -169,6 +177,12 @@ export default function EmpleadosPage() {
   const [warehouseOptions, setWarehouseOptions] = useState<WarehouseOption[]>([]);
   const [warehousesLoading, setWarehousesLoading] = useState(false);
 
+  const [employeePositionOptions, setEmployeePositionOptions] = useState<EmployeePositionLookupItem[]>([]);
+  const [employeePositionsLoading, setEmployeePositionsLoading] = useState(false);
+
+  const [establishmentRoleOptions, setEstablishmentRoleOptions] = useState<EstablishmentRoleLookupItem[]>([]);
+  const [establishmentRolesLoading, setEstablishmentRolesLoading] = useState(false);
+
   const [recreateAssignmentMode, setRecreateAssignmentMode] = useState<AssignmentMode>("STORE");
   const [recreateForm, setRecreateForm] = useState<RecreateEmployedDto>({
     firstName: "",
@@ -182,7 +196,6 @@ export default function EmpleadosPage() {
     assignmentRole: "",
   });
 
-  const [createAssignmentMode, setCreateAssignmentMode] = useState<AssignmentMode>("STORE");
   const [createForm, setCreateForm] = useState<CreateEmployedDto>({
     firstName: "",
     lastName: "",
@@ -190,8 +203,6 @@ export default function EmpleadosPage() {
     phone: "",
     email: "",
     position: "",
-    storeId: "",
-    warehouseId: "",
     assignmentRole: "",
   });
 
@@ -199,17 +210,31 @@ export default function EmpleadosPage() {
   const [bulkStatus, setBulkStatus] = useState<string>("");
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
 
+  const showStoreAssignedColumn = activeLoginMode !== 'WAREHOUSE';
+  const showWarehouseAssignedColumn = activeLoginMode !== 'STORE';
+
   const loadEmployees = useCallback(async () => {
     try {
       setLoading(true);
       const dateRange = fromDate && toDate ? toUtcRange(fromDate, toDate) : null;
+
+      const contextStoreId = activeLoginMode === 'STORE' ? (currentStore?.id ?? '') : '';
+      const contextWarehouseId = activeLoginMode === 'WAREHOUSE' ? (currentWarehouse?.id ?? '') : '';
+
+      if (!contextStoreId && !contextWarehouseId) {
+        setEmployees([]);
+        toast.error('No hay contexto activo. Selecciona una tienda o almacén antes de continuar.');
+        return;
+      }
+
       const data = await employedService.getEmployedList({
         status: statusFilter === "all" ? undefined : statusFilter,
         firstName: firstNameFilter.trim() || undefined,
         lastName: lastNameFilter.trim() || undefined,
-        position: positionFilter === "all" ? undefined : positionFilter,
-        storeId: storeIdFilter === "all" ? undefined : storeIdFilter,
-        warehouseId: warehouseIdFilter === "all" ? undefined : warehouseIdFilter,
+        positionId: positionIdFilter === "all" ? undefined : positionIdFilter,
+        establishmentRoleId: roleIdFilter === "all" ? undefined : roleIdFilter,
+        storeId: contextStoreId || undefined,
+        warehouseId: contextWarehouseId || undefined,
         fromDate: dateRange?.fromDate,
         toDate: dateRange?.toDate,
       });
@@ -224,27 +249,27 @@ export default function EmpleadosPage() {
   }, [
     firstNameFilter,
     lastNameFilter,
-    positionFilter,
+    positionIdFilter,
+    roleIdFilter,
     statusFilter,
-    storeIdFilter,
-    warehouseIdFilter,
     fromDate,
     toDate,
+    activeLoginMode,
+    currentStore,
+    currentWarehouse,
   ]);
 
   useEffect(() => {
     const loadLookups = async () => {
       try {
-        const [positions, statuses, stores, warehouses, names] = await Promise.all([
-          employedService.getPositionsLookup(),
+        const [statuses, stores, warehouses, names, positions, roles] = await Promise.all([
           employedService.getStatusLookup(),
           storeService.getStoresLookup(),
           warehouseService.getWarehousesLookup(),
           employedService.getEmployedLookup(),
+          employeePositionService.getPositionsLookup(),
+          establishmentRoleService.getRolesLookup(),
         ]);
-        const safePositions = Array.isArray(positions)
-          ? uniqueBy(positions, (item) => item?.toLowerCase())
-          : [];
         const safeStatuses = Array.isArray(statuses)
           ? uniqueBy(statuses, (item) => item)
           : [];
@@ -261,11 +286,12 @@ export default function EmpleadosPage() {
                 `${item.firstName?.trim().toLowerCase() ?? ""}|${item.lastName?.trim().toLowerCase() ?? ""}`
             )
           : [];
-        setPositionOptions(safePositions);
         setStatusOptions(safeStatuses);
         setStoreOptions(safeStores);
         setWarehouseOptions(safeWarehouses);
         setNameLookup(safeNames);
+        setEmployeePositionOptions(Array.isArray(positions) ? positions : []);
+        setEstablishmentRoleOptions(Array.isArray(roles) ? roles : []);
       } catch (error: any) {
         console.error(error);
         toast.error(error?.message || "No se pudieron cargar los lookups");
@@ -284,10 +310,9 @@ export default function EmpleadosPage() {
   }, [
     firstNameFilter,
     lastNameFilter,
-    positionFilter,
+    positionIdFilter,
+    roleIdFilter,
     statusFilter,
-    storeIdFilter,
-    warehouseIdFilter,
     fromDate,
     toDate,
     loadEmployees,
@@ -322,10 +347,9 @@ export default function EmpleadosPage() {
     setLastNameFilter("");
     setLastNameQuery("");
     setShowLastNameSuggestions(false);
-    setPositionFilter("all");
+    setPositionIdFilter("all");
+    setRoleIdFilter("all");
     setStatusFilter("all");
-    setStoreIdFilter("all");
-    setWarehouseIdFilter("all");
     setFromDate("");
     setToDate("");
   };
@@ -421,6 +445,38 @@ export default function EmpleadosPage() {
     }
   };
 
+  const ensureEmployeePositionsLoaded = async () => {
+    if (employeePositionOptions.length > 0 || employeePositionsLoading) return;
+
+    try {
+      setEmployeePositionsLoading(true);
+      const positions = await employeePositionService.getPositionsLookup();
+      setEmployeePositionOptions(Array.isArray(positions) ? positions : []);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.message || "No se pudieron cargar las posiciones");
+      setEmployeePositionOptions([]);
+    } finally {
+      setEmployeePositionsLoading(false);
+    }
+  };
+
+  const ensureEstablishmentRolesLoaded = async () => {
+    if (establishmentRoleOptions.length > 0 || establishmentRolesLoading) return;
+
+    try {
+      setEstablishmentRolesLoading(true);
+      const roles = await establishmentRoleService.getRolesLookup();
+      setEstablishmentRoleOptions(Array.isArray(roles) ? roles : []);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.message || "No se pudieron cargar los roles");
+      setEstablishmentRoleOptions([]);
+    } finally {
+      setEstablishmentRolesLoading(false);
+    }
+  };
+
   const openCreate = async () => {
     setIsCreateOpen(true);
     setCreateStep("form");
@@ -430,7 +486,6 @@ export default function EmpleadosPage() {
     setCreateUploadedDocuments([]);
     setCreateFailedDocuments([]);
     setCreateWarningMessage(null);
-    setCreateAssignmentMode("STORE");
     setCreateForm({
       firstName: "",
       lastName: "",
@@ -438,12 +493,10 @@ export default function EmpleadosPage() {
       phone: "",
       email: "",
       position: "",
-      storeId: "",
-      warehouseId: "",
       assignmentRole: "",
     });
-    await ensureStoresLoaded();
-    await ensureWarehousesLoaded();
+    await ensureEmployeePositionsLoaded();
+    await ensureEstablishmentRolesLoaded();
   };
 
   const closeCreate = () => {
@@ -458,6 +511,9 @@ export default function EmpleadosPage() {
   };
 
   const submitCreate = async () => {
+    const inferredStoreId = activeLoginMode === 'STORE' ? (currentStore?.id ?? '') : '';
+    const inferredWarehouseId = activeLoginMode === 'WAREHOUSE' ? (currentWarehouse?.id ?? '') : '';
+
     const dto: CreateEmployedDto = {
       firstName: createForm.firstName?.trim(),
       lastName: createForm.lastName?.trim(),
@@ -466,25 +522,31 @@ export default function EmpleadosPage() {
       email: createForm.email?.trim() || undefined,
       position: createForm.position?.trim(),
       assignmentRole: createForm.assignmentRole?.trim(),
-      storeId: undefined,
-      warehouseId: undefined,
+      storeId: inferredStoreId || undefined,
+      warehouseId: inferredWarehouseId || undefined,
     };
 
-    if (!dto.firstName || !dto.lastName || !dto.document || !dto.position || !dto.assignmentRole) {
-      toast.error("Complete todos los campos obligatorios");
+    const missing: string[] = [];
+    if (!dto.firstName) missing.push('Nombres');
+    if (!dto.lastName) missing.push('Apellidos');
+    if (!dto.document) missing.push('Documento');
+    if (!dto.position) missing.push('Posición');
+    if (!dto.assignmentRole) missing.push('Rol');
+
+    if (missing.length > 0) {
+      toast.error(
+        `Campos obligatorios faltantes: ${missing.join(', ')}`
+      );
       return;
     }
 
-    if (createAssignmentMode === "STORE") {
-      const storeId = createForm.storeId?.trim();
-      if (storeId) dto.storeId = storeId;
-    } else {
-      const warehouseId = createForm.warehouseId?.trim();
-      if (warehouseId) dto.warehouseId = warehouseId;
+    if (!dto.storeId && !dto.warehouseId) {
+      toast.error('No hay contexto activo. Selecciona una tienda o almacén antes de continuar.');
+      return;
     }
 
-    if (!dto.storeId && !dto.warehouseId) {
-      toast.error("Debe asignar el empleado a una tienda o a un almacén");
+    if (dto.storeId && dto.warehouseId) {
+      toast.error('Conflicto de contexto: no se puede asignar tienda y almacén al mismo tiempo.');
       return;
     }
 
@@ -528,13 +590,14 @@ export default function EmpleadosPage() {
       // Refresh all data including employees list and lookups
       await Promise.all([
         loadEmployees(),
-        // Reload all lookup data
-        employedService.getPositionsLookup().then(positions => {
-          const safePositions = Array.isArray(positions)
-            ? uniqueBy(positions, (item) => item?.toLowerCase())
-            : [];
-          setPositionOptions(safePositions);
+        // Always reload new lookups (positions + roles) after create
+        employeePositionService.getPositionsLookup().then((positions) => {
+          setEmployeePositionOptions(Array.isArray(positions) ? positions : []);
         }),
+        establishmentRoleService.getRolesLookup().then((roles) => {
+          setEstablishmentRoleOptions(Array.isArray(roles) ? roles : []);
+        }),
+        // Reload all lookup data
         employedService.getStatusLookup().then(statuses => {
           const safeStatuses = Array.isArray(statuses)
             ? uniqueBy(statuses, (item) => item)
@@ -1129,16 +1192,32 @@ export default function EmpleadosPage() {
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="flex flex-wrap items-start gap-2">
                   <div className="space-y-1">
-                    <span className="text-xs font-medium text-muted-foreground">Cargo</span>
-                    <Select value={positionFilter} onValueChange={setPositionFilter}>
+                    <span className="text-xs font-medium text-muted-foreground">Posición</span>
+                    <Select value={positionIdFilter} onValueChange={setPositionIdFilter}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Cargo" />
+                        <SelectValue placeholder={employeePositionsLoading ? "Cargando..." : "Posición"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas</SelectItem>
+                        {employeePositionOptions.map((pos) => (
+                          <SelectItem key={pos.id} value={pos.id}>
+                            {pos.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs font-medium text-muted-foreground">Rol</span>
+                    <Select value={roleIdFilter} onValueChange={setRoleIdFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder={establishmentRolesLoading ? "Cargando..." : "Rol"} />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Todos</SelectItem>
-                        {positionOptions.map((item) => (
-                          <SelectItem key={item} value={item}>
-                            {item}
+                        {establishmentRoleOptions.map((role) => (
+                          <SelectItem key={role.id} value={role.id}>
+                            {role.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -1158,38 +1237,6 @@ export default function EmpleadosPage() {
                         {statusOptions.map((item) => (
                           <SelectItem key={item} value={item}>
                             {statusLabel[item] ?? item}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-xs font-medium text-muted-foreground">Tienda</span>
-                    <Select value={storeIdFilter} onValueChange={setStoreIdFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Tienda" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todas</SelectItem>
-                        {storeOptions.map((store) => (
-                          <SelectItem key={store.id} value={store.id}>
-                            {store.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-xs font-medium text-muted-foreground">Almacén</span>
-                    <Select value={warehouseIdFilter} onValueChange={setWarehouseIdFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Almacén" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todos</SelectItem>
-                        {warehouseOptions.map((warehouse) => (
-                          <SelectItem key={warehouse.id} value={warehouse.id}>
-                            {warehouse.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -1222,7 +1269,7 @@ export default function EmpleadosPage() {
             </div>
 
             <ActiveFilters 
-              hasActiveFilters={!!(firstNameFilter || lastNameFilter || positionFilter !== "all" || statusFilter !== "all" || storeIdFilter !== "all" || warehouseIdFilter !== "all" || fromDate || toDate)}
+              hasActiveFilters={!!(firstNameFilter || lastNameFilter || positionIdFilter !== "all" || roleIdFilter !== "all" || statusFilter !== "all" || fromDate || toDate)}
               onClearFilters={clearFilters}
             />
           </div>
@@ -1239,10 +1286,9 @@ export default function EmpleadosPage() {
               <p className="text-gray-500">
                 {firstNameFilter ||
                 lastNameFilter ||
-                positionFilter !== "all" ||
+                positionIdFilter !== "all" ||
+                roleIdFilter !== "all" ||
                 statusFilter !== "all" ||
-                storeIdFilter !== "all" ||
-                warehouseIdFilter !== "all" ||
                 fromDate ||
                 toDate
                   ? "No se encontraron empleados que coincidan con el filtro"
@@ -1273,8 +1319,12 @@ export default function EmpleadosPage() {
                       {/* Hide Cargo, Estado, Tienda asignada, Almacén asignado in mobile */}
                       <TableHead className="hidden sm:table-cell min-w-[100px]">Cargo</TableHead>
                       <TableHead className="hidden md:table-cell min-w-[80px]">Estado</TableHead>
-                      <TableHead className="hidden lg:table-cell min-w-[120px]">Tienda asignada</TableHead>
-                      <TableHead className="hidden xl:table-cell min-w-[120px]">Almacén asignado</TableHead>
+                      {showStoreAssignedColumn && (
+                        <TableHead className="hidden lg:table-cell min-w-[120px]">Tienda asignada</TableHead>
+                      )}
+                      {showWarehouseAssignedColumn && (
+                        <TableHead className="hidden xl:table-cell min-w-[120px]">Almacén asignado</TableHead>
+                      )}
                       <TableHead className="min-w-[100px] sticky right-0 bg-muted/50 z-10">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1321,20 +1371,24 @@ export default function EmpleadosPage() {
                               {statusLabel[e.status] ?? e.status}
                             </span>
                           </TableCell>
-                          <TableCell className="hidden lg:table-cell">
-                            <div className="flex flex-col">
-                              <span className="truncate max-w-[100px]" title={assigned.store ?? "-"}>
-                                {assigned.store ?? "-"}
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="hidden xl:table-cell">
-                            <div className="flex flex-col">
-                              <span className="truncate max-w-[100px]" title={assigned.warehouse ?? "-"}>
-                                {assigned.warehouse ?? "-"}
-                              </span>
-                            </div>
-                          </TableCell>
+                          {showStoreAssignedColumn && (
+                            <TableCell className="hidden lg:table-cell">
+                              <div className="flex flex-col">
+                                <span className="truncate max-w-[100px]" title={assigned.store ?? "-"}>
+                                  {assigned.store ?? "-"}
+                                </span>
+                              </div>
+                            </TableCell>
+                          )}
+                          {showWarehouseAssignedColumn && (
+                            <TableCell className="hidden xl:table-cell">
+                              <div className="flex flex-col">
+                                <span className="truncate max-w-[100px]" title={assigned.warehouse ?? "-"}>
+                                  {assigned.warehouse ?? "-"}
+                                </span>
+                              </div>
+                            </TableCell>
+                          )}
                           <TableCell onClick={(e) => e.stopPropagation()} className="sticky right-0 bg-background z-10">
                             <div className="flex gap-1">
                               <Button
@@ -2237,12 +2291,35 @@ export default function EmpleadosPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Cargo</label>
+                  <label className="text-sm font-medium">Posición</label>
                   <Input
                     value={createForm.position}
                     onChange={(e) => setCreateForm((p) => ({ ...p, position: e.target.value }))}
-                    disabled={createSubmitting}
+                    list="employee-position-lookup"
+                    placeholder={employeePositionsLoading ? "Cargando..." : "Escriba o seleccione una posición"}
+                    disabled={createSubmitting || employeePositionsLoading}
                   />
+                  <datalist id="employee-position-lookup">
+                    {employeePositionOptions.map((pos) => (
+                      <option key={pos.id} value={pos.name} />
+                    ))}
+                  </datalist>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Rol</label>
+                  <Input
+                    value={createForm.assignmentRole}
+                    onChange={(e) => setCreateForm((p) => ({ ...p, assignmentRole: e.target.value }))}
+                    list="establishment-role-lookup"
+                    placeholder={establishmentRolesLoading ? "Cargando..." : "Escriba o seleccione un rol"}
+                    disabled={createSubmitting || establishmentRolesLoading}
+                  />
+                  <datalist id="establishment-role-lookup">
+                    {establishmentRoleOptions.map((role) => (
+                      <option key={role.id} value={role.name} />
+                    ))}
+                  </datalist>
                 </div>
 
                 <div className="space-y-2">
@@ -2262,86 +2339,6 @@ export default function EmpleadosPage() {
                     disabled={createSubmitting}
                   />
                 </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Rol de asignación</label>
-                  <Input
-                    value={createForm.assignmentRole}
-                    onChange={(e) => setCreateForm((p) => ({ ...p, assignmentRole: e.target.value }))}
-                    disabled={createSubmitting}
-                    placeholder="Ej: OPERADOR"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Tipo de asignación</label>
-                  <Select
-                    value={createAssignmentMode}
-                    onValueChange={async (v) => {
-                      const mode = v as AssignmentMode;
-                      setCreateAssignmentMode(mode);
-                      if (mode === "STORE") {
-                        await ensureStoresLoaded();
-                      } else {
-                        await ensureWarehousesLoaded();
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="STORE">Tienda</SelectItem>
-                      <SelectItem value="WAREHOUSE">Almacén</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {createAssignmentMode === "STORE" ? (
-                  <div className="space-y-2 sm:col-span-2">
-                    <label className="text-sm font-medium">Tienda asignada</label>
-                    <Select
-                      value={createForm.storeId || ""}
-                      onValueChange={(v) =>
-                        setCreateForm((p) => ({ ...p, storeId: v, warehouseId: "" }))
-                      }
-                      disabled={createSubmitting || storesLoading}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={storesLoading ? "Cargando..." : "Seleccione una tienda"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {storeOptions.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : (
-                  <div className="space-y-2 sm:col-span-2">
-                    <label className="text-sm font-medium">Almacén asignado</label>
-                    <Select
-                      value={createForm.warehouseId || ""}
-                      onValueChange={(v) =>
-                        setCreateForm((p) => ({ ...p, warehouseId: v, storeId: "" }))
-                      }
-                      disabled={createSubmitting || warehousesLoading}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={warehousesLoading ? "Cargando..." : "Seleccione un almacén"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {warehouseOptions.map((w) => (
-                          <SelectItem key={w.id} value={w.id}>
-                            {w.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
 
                 <div className="space-y-2 sm:col-span-2">
                   <label className="text-sm font-medium">Documentos</label>
