@@ -57,6 +57,15 @@ class StoreService {
         }
     }
 
+    async deleteStore(id: string): Promise<void> {
+        try {
+            await api.delete(`${this.baseUrl}/${id}`);
+        } catch (error) {
+            this.handleError(error);
+            throw error;
+        }
+    }
+
     private handleError(error: unknown): void {
         if (error && typeof error === 'object' && 'response' in error) {
             const apiError = error as ApiError;

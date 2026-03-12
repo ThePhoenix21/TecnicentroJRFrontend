@@ -23,8 +23,6 @@ export interface Store {
 export interface CreateUserFromEmployedRequest {
   employedId: string;
   role: 'ADMIN' | 'USER';
-  storeId?: string;        // XOR con warehouseId
-  warehouseId?: string;    // XOR con storeId
   password: string;
   permissions?: string[];
 }

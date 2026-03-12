@@ -46,8 +46,6 @@ export interface ChangeRoleDto {
 export interface CreateUserFromEmployedDto {
   employedId: string;
   role: "ADMIN" | "USER";
-  storeId?: string;        // XOR con warehouseId
-  warehouseId?: string;    // XOR con storeId
   password: string;
   permissions?: string[];
 }
@@ -90,17 +88,26 @@ class UserService {
     }
   }
 
-  async createUserFromEmployed(data: CreateUserFromEmployedDto): Promise<UserResponse> {
+  async createUserFromEmployed(
+    data: CreateUserFromEmployedDto,
+    storeId?: string,
+    warehouseId?: string
+  ): Promise<UserResponse> {
     try {
-      // Validar XOR: Debe proporcionar storeId O warehouseId, pero NO ambos
-      if (!data.storeId && !data.warehouseId) {
-        throw new Error('Debe seleccionar una tienda o almacén');
+      // Validar que se proporcione storeId O warehouseId (XOR)
+      if (!storeId && !warehouseId) {
+        throw new Error('Debe proporcionar una tienda o almacén');
       }
-      if (data.storeId && data.warehouseId) {
-        throw new Error('No puede seleccionar tanto tienda como almacén');
+      if (storeId && warehouseId) {
+        throw new Error('No puede proporcionar tanto tienda como almacén');
       }
 
-      const response = await api.post<UserResponse>(`${this.baseUrl}/from-employed`, data);
+      // Construir URL con storeId o warehouseId en params
+      const endpoint = storeId
+        ? `${this.baseUrl}/from-employed/store/${storeId}`
+        : `${this.baseUrl}/from-employed/warehouse/${warehouseId}`;
+
+      const response = await api.post<UserResponse>(endpoint, data);
       return response.data;
     } catch (error) {
       this.handleError(error);

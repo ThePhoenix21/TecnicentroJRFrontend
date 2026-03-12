@@ -158,9 +158,6 @@ export default function EmpleadosPage() {
 
   const [isConvertOpen, setIsConvertOpen] = useState(false);
   const [convertSubmitting, setConvertSubmitting] = useState(false);
-  const [convertStoreId, setConvertStoreId] = useState<string>("");
-  const [convertWarehouseId, setConvertWarehouseId] = useState<string>("");
-  const [convertAssignmentMode, setConvertAssignmentMode] = useState<AssignmentMode>("STORE");
   const [convertPassword, setConvertPassword] = useState<string>("");
   const [convertPermissions, setConvertPermissions] = useState<string[]>([]);
   const [availablePermissions, setAvailablePermissions] = useState<string[]>([]);
@@ -642,13 +639,8 @@ export default function EmpleadosPage() {
     if (!detail) return;
     setIsConvertOpen(true);
     setConvertSubmitting(false);
-    setConvertStoreId("");
-    setConvertWarehouseId("");
-    setConvertAssignmentMode("STORE");
     setConvertPassword("");
     setConvertPermissions([]);
-    await ensureStoresLoaded();
-    await ensureWarehousesLoaded();
     await ensurePermissionsLoaded();
   };
 
@@ -731,26 +723,27 @@ export default function EmpleadosPage() {
       return;
     }
 
-    // Validar XOR: Debe proporcionar storeId O warehouseId, pero NO ambos
-    if (!convertStoreId.trim() && !convertWarehouseId.trim()) {
-      toast.error("Debe seleccionar una tienda o almacén");
-      return;
-    }
-    if (convertStoreId.trim() && convertWarehouseId.trim()) {
-      toast.error("No puede seleccionar tanto tienda como almacén");
+    // Inferir storeId/warehouseId del contexto activo
+    const contextStoreId = activeLoginMode === 'STORE' ? (currentStore?.id ?? '') : '';
+    const contextWarehouseId = activeLoginMode === 'WAREHOUSE' ? (currentWarehouse?.id ?? '') : '';
+
+    if (!contextStoreId && !contextWarehouseId) {
+      toast.error('No hay contexto activo. Selecciona una tienda o almacén antes de continuar.');
       return;
     }
 
     try {
       setConvertSubmitting(true);
-      await userService.createUserFromEmployed({
-        employedId: detail.id,
-        role: "USER",
-        storeId: convertAssignmentMode === "STORE" ? convertStoreId : undefined,
-        warehouseId: convertAssignmentMode === "WAREHOUSE" ? convertWarehouseId : undefined,
-        password: convertPassword,
-        permissions: convertPermissions,
-      });
+      await userService.createUserFromEmployed(
+        {
+          employedId: detail.id,
+          role: "USER",
+          password: convertPassword,
+          permissions: convertPermissions,
+        },
+        contextStoreId || undefined,
+        contextWarehouseId || undefined
+      );
       toast.success("Usuario creado desde empleado");
       closeConvert();
       await loadEmployees();
@@ -1854,78 +1847,15 @@ export default function EmpleadosPage() {
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Contraseña</label>
-                <Input
-                  type="password"
-                  value={convertPassword}
-                  onChange={(e) => setConvertPassword(e.target.value)}
-                  disabled={convertSubmitting}
-                />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <label className="text-sm font-medium">Tipo de asignación</label>
-                <Select
-                  value={convertAssignmentMode}
-                  onValueChange={(v) => {
-                    setConvertAssignmentMode(v as AssignmentMode);
-                    setConvertStoreId("");
-                    setConvertWarehouseId("");
-                  }}
-                  disabled={convertSubmitting}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="STORE">🏪 Tienda</SelectItem>
-                    <SelectItem value="WAREHOUSE">🏭 Almacén</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {convertAssignmentMode === "STORE" ? (
-                <div className="space-y-2 sm:col-span-2">
-                  <label className="text-sm font-medium">Tienda asignada</label>
-                  <Select
-                    value={convertStoreId}
-                    onValueChange={setConvertStoreId}
-                    disabled={convertSubmitting || storesLoading}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={storesLoading ? "Cargando..." : "Seleccione una tienda"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {storeOptions.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : (
-                <div className="space-y-2 sm:col-span-2">
-                  <label className="text-sm font-medium">Almacén asignado</label>
-                  <Select
-                    value={convertWarehouseId}
-                    onValueChange={setConvertWarehouseId}
-                    disabled={convertSubmitting || warehousesLoading}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={warehousesLoading ? "Cargando..." : "Seleccione un almacén"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {warehouseOptions.map((w) => (
-                        <SelectItem key={w.id} value={w.id}>
-                          {w.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Contraseña</label>
+              <Input
+                type="password"
+                value={convertPassword}
+                onChange={(e) => setConvertPassword(e.target.value)}
+                disabled={convertSubmitting}
+                placeholder="Ingrese una contraseña segura"
+              />
             </div>
 
             <PermissionsSelector

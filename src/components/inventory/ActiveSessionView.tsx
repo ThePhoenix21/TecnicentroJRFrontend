@@ -397,6 +397,12 @@ export function ActiveSessionView({
                                 const countItem = countedItems.find(i => i.storeProductId === product.id);
                                 const isSaving = savingItems.has(product.id);
                                 
+                                // En sesión cerrada: usar expectedStock histórico
+                                // En sesión abierta: usar stock actual del producto
+                                const theoreticalStock = !isOpen && countItem 
+                                  ? countItem.expectedStock 
+                                  : product.stock;
+                                
                                 // Valor actual del input (lo que ve el usuario)
                                 const inputValue = inputValues[product.id];
                                 // Es válido visualmente si no es undefined y no es cadena vacía
@@ -423,7 +429,7 @@ export function ActiveSessionView({
                                             {product.name}
                                         </TableCell>
                                         <TableCell className="text-center text-muted-foreground py-2 px-1 sm:px-2 text-sm sm:text-base">
-                                            {product.stock}
+                                            {theoreticalStock}
                                         </TableCell>
                                         <TableCell className="text-center py-2 px-1 sm:px-2">
                                             <div className="relative flex items-center justify-center">

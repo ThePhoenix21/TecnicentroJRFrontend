@@ -20,7 +20,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Search, Plus, Edit2, MapPin, Phone, Building, Mail } from "lucide-react";
+import { Search, Plus, Edit2, Trash2, MapPin, Phone, Building, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { jwtDecode } from "jwt-decode";
 import { authService } from "@/services/auth";
@@ -172,6 +172,21 @@ export default function TiendasPage() {
         if (!canManage) return;
         setEditingStore(store);
         setIsFormOpen(true);
+    };
+
+    const handleDeleteStore = async (store: Store) => {
+        if (!canManage) return;
+        const confirmed = window.confirm(`¿Seguro que deseas eliminar la tienda "${store.name}"?`);
+        if (!confirmed) return;
+
+        try {
+            await storeService.deleteStore(store.id);
+            toast.success("Tienda eliminada");
+            await loadStores();
+            refreshStores();
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Error al eliminar la tienda");
+        }
     };
 
     const handleStoreSaved = () => {
@@ -379,7 +394,7 @@ export default function TiendasPage() {
                         </TableCell>
                         {canManage && (
                           <TableCell className="px-2 py-1">
-                            <div className="flex justify-center items-center">
+                            <div className="flex justify-center items-center gap-2">
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -387,6 +402,14 @@ export default function TiendasPage() {
                                 className="flex items-center justify-center h-8 w-8 p-0"
                               >
                                 <Edit2 className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteStore(store)}
+                                className="flex items-center justify-center h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                              >
+                                <Trash2 className="h-3 w-3" />
                               </Button>
                             </div>
                           </TableCell>
