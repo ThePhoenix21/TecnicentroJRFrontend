@@ -9,6 +9,7 @@ import type {
   EmployedPositionLookupItem,
   EmployedStatusLookupItem,
   EmployedNameLookupItem,
+  EstablishmentsResponse,
 } from '@/types/employed.types';
 
 class EmployedService {
@@ -120,6 +121,11 @@ class EmployedService {
 
   async getDeletedEmployed(): Promise<EmployedDetail[]> {
     const response = await api.get<EmployedDetail[]>('/employed/deleted');
+    return response.data;
+  }
+
+  async getEstablishments(): Promise<EstablishmentsResponse> {
+    const response = await api.get<EstablishmentsResponse>('/employed/establishments');
     return response.data;
   }
 }

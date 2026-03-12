@@ -10,6 +10,25 @@ export type EmployedNameLookupItem = {
   lastName: string;
 };
 
+export interface EstablishmentsResponse {
+  stores: Array<{
+    id: string;
+    name: string;
+    type: 'store';
+  }>;
+  warehouses: Array<{
+    id: string;
+    name: string;
+    type: 'warehouse';
+  }>;
+}
+
+export interface EstablishmentOption {
+  id: string;
+  name: string;
+  type: 'store' | 'warehouse' | 'all';
+}
+
 export type EmployedFilters = {
   status?: EmployedStatus;
   firstName?: string;

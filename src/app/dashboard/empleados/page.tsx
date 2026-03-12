@@ -26,6 +26,8 @@ import type {
   CreateEmployedDto,
   RecreateEmployedDto,
   UpdateEmployedDto,
+  EstablishmentsResponse,
+  EstablishmentOption,
 } from "@/types/employed.types";
 
 import { Button } from "@/components/ui/button";
@@ -67,7 +69,9 @@ import {
   Save, 
   CheckCircle2,
   AlertTriangle,
-  Users 
+  Users,
+  Building,
+  Warehouse
 } from "lucide-react";
 
 type AssignmentMode = "STORE" | "WAREHOUSE";
@@ -174,6 +178,18 @@ export default function EmpleadosPage() {
   const [warehouseOptions, setWarehouseOptions] = useState<WarehouseOption[]>([]);
   const [warehousesLoading, setWarehousesLoading] = useState(false);
 
+  // Estados para establecimientos
+  const [establishments, setEstablishments] = useState<EstablishmentsResponse>({ stores: [], warehouses: [] });
+  const [selectedEstablishment, setSelectedEstablishment] = useState<EstablishmentOption | null>(null);
+  const [establishmentsLoading, setEstablishmentsLoading] = useState(false);
+
+  // Opciones combinadas de establecimientos para el select
+  const establishmentOptions = useMemo(() => [
+    { id: 'all', name: 'Todos los establecimientos', type: 'all' as const },
+    ...establishments.stores,
+    ...establishments.warehouses
+  ], [establishments]);
+
   const [employeePositionOptions, setEmployeePositionOptions] = useState<EmployeePositionLookupItem[]>([]);
   const [employeePositionsLoading, setEmployeePositionsLoading] = useState(false);
 
@@ -215,14 +231,17 @@ export default function EmpleadosPage() {
       setLoading(true);
       const dateRange = fromDate && toDate ? toUtcRange(fromDate, toDate) : null;
 
-      const contextStoreId = activeLoginMode === 'STORE' ? (currentStore?.id ?? '') : '';
-      const contextWarehouseId = activeLoginMode === 'WAREHOUSE' ? (currentWarehouse?.id ?? '') : '';
-
-      if (!contextStoreId && !contextWarehouseId) {
+      // Validar que hay un establecimiento seleccionado
+      if (!selectedEstablishment) {
         setEmployees([]);
-        toast.error('No hay contexto activo. Selecciona una tienda o almacén antes de continuar.');
         return;
       }
+
+      // Si se seleccionó 'Todos los establecimientos', no enviar filtros de establecimiento
+      const establishmentFilters = selectedEstablishment.id === 'all' ? {} : {
+        storeId: selectedEstablishment.type === 'store' ? selectedEstablishment.id : undefined,
+        warehouseId: selectedEstablishment.type === 'warehouse' ? selectedEstablishment.id : undefined,
+      };
 
       const data = await employedService.getEmployedList({
         status: statusFilter === "all" ? undefined : statusFilter,
@@ -230,8 +249,7 @@ export default function EmpleadosPage() {
         lastName: lastNameFilter.trim() || undefined,
         positionId: positionIdFilter === "all" ? undefined : positionIdFilter,
         establishmentRoleId: roleIdFilter === "all" ? undefined : roleIdFilter,
-        storeId: contextStoreId || undefined,
-        warehouseId: contextWarehouseId || undefined,
+        ...establishmentFilters,
         fromDate: dateRange?.fromDate,
         toDate: dateRange?.toDate,
       });
@@ -251,9 +269,7 @@ export default function EmpleadosPage() {
     statusFilter,
     fromDate,
     toDate,
-    activeLoginMode,
-    currentStore,
-    currentWarehouse,
+    selectedEstablishment,
   ]);
 
   useEffect(() => {
@@ -298,6 +314,45 @@ export default function EmpleadosPage() {
     loadLookups();
   }, []);
 
+  // Cargar establecimientos al montar componente
+  useEffect(() => {
+    const loadEstablishments = async () => {
+      try {
+        setEstablishmentsLoading(true);
+        const establishmentsData = await employedService.getEstablishments();
+        setEstablishments(establishmentsData);
+      } catch (error: any) {
+        console.error(error);
+        toast.error(error?.message || "No se pudieron cargar los establecimientos");
+        setEstablishments({ stores: [], warehouses: [] });
+      } finally {
+        setEstablishmentsLoading(false);
+      }
+    };
+
+    loadEstablishments();
+  }, []);
+
+  // Seleccionar automáticamente el establecimiento actual del usuario
+  useEffect(() => {
+    if (establishmentOptions.length === 0 || establishmentsLoading) return;
+
+    // Buscar el establecimiento actual del usuario
+    const currentEstablishment = establishmentOptions.find(establishment => {
+      if (activeLoginMode === 'STORE' && establishment.type === 'store') {
+        return establishment.id === currentStore?.id;
+      }
+      if (activeLoginMode === 'WAREHOUSE' && establishment.type === 'warehouse') {
+        return establishment.id === currentWarehouse?.id;
+      }
+      return false;
+    });
+
+    if (currentEstablishment && !selectedEstablishment) {
+      setSelectedEstablishment(currentEstablishment);
+    }
+  }, [establishmentOptions, activeLoginMode, currentStore, currentWarehouse, establishmentsLoading, selectedEstablishment]);
+
   useEffect(() => {
     const timeout = setTimeout(() => {
       loadEmployees();
@@ -312,6 +367,7 @@ export default function EmpleadosPage() {
     statusFilter,
     fromDate,
     toDate,
+    selectedEstablishment,
     loadEmployees,
   ]);
 
@@ -1009,17 +1065,27 @@ export default function EmpleadosPage() {
       return { store: null, warehouse: e.assignmentName ?? warehouse };
     }
 
-    // 2) Si vienen nombres explícitos (más confiable)
-    if (store) {
-      return { store, warehouse: null };
-    }
+    // 2) Si vienen nombres explícitos (más confiable) - PRIORIZAR WAREHOUSE SOBRE STORE
     if (warehouse) {
       return { store: null, warehouse };
     }
+    if (store) {
+      return { store, warehouse: null };
+    }
 
-    // 3) Si solo viene assignmentName (informativo), lo mostramos como tienda por defecto
-    // (si el backend no especifica el tipo, no hay forma segura de inferir)
+    // 3) Si solo viene assignmentName, intentar inferir por el nombre
     if (e.assignmentName) {
+      // Detectar si es un almacén por palabras clave en el nombre
+      const warehouseKeywords = ['almacen', 'almacén', 'bodega', 'deposito', 'depósito'];
+      const isWarehouse = warehouseKeywords.some(keyword => 
+        e.assignmentName!.toLowerCase().includes(keyword)
+      );
+      
+      if (isWarehouse) {
+        return { store: null, warehouse: e.assignmentName };
+      }
+      
+      // Si no, asumir que es tienda
       return { store: e.assignmentName, warehouse: null };
     }
 
@@ -1065,6 +1131,39 @@ export default function EmpleadosPage() {
             </div>
 
             <div className="rounded-md border bg-muted/30 p-4 space-y-4">
+              {/* Selector obligatorio de establecimiento */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Establecimiento <span className="text-red-500">*</span>
+                </label>
+                <Select
+                  value={selectedEstablishment?.id || ""}
+                  onValueChange={(value) => {
+                    if (value === 'all') {
+                      setSelectedEstablishment({ id: 'all', name: 'Todos los establecimientos', type: 'all' });
+                    } else {
+                      const establishment = establishmentOptions.find(opt => opt.id === value);
+                      setSelectedEstablishment(establishment || null);
+                    }
+                  }}
+                  disabled={establishmentsLoading}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={establishmentsLoading ? "Cargando establecimientos..." : "Selecciona tienda o almacén"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">
+                      📍 Todos los establecimientos
+                    </SelectItem>
+                    {establishmentOptions.filter(opt => opt.id !== 'all').map((establishment) => (
+                      <SelectItem key={establishment.id} value={establishment.id}>
+                        {establishment.type === 'store' ? '🏪' : '🏭'} {establishment.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="relative">
                   <Input
@@ -1312,12 +1411,7 @@ export default function EmpleadosPage() {
                       {/* Hide Cargo, Estado, Tienda asignada, Almacén asignado in mobile */}
                       <TableHead className="hidden sm:table-cell min-w-[100px]">Cargo</TableHead>
                       <TableHead className="hidden md:table-cell min-w-[80px]">Estado</TableHead>
-                      {showStoreAssignedColumn && (
-                        <TableHead className="hidden lg:table-cell min-w-[120px]">Tienda asignada</TableHead>
-                      )}
-                      {showWarehouseAssignedColumn && (
-                        <TableHead className="hidden xl:table-cell min-w-[120px]">Almacén asignado</TableHead>
-                      )}
+                      <TableHead className="hidden lg:table-cell min-w-[120px]">Establecimiento asignado</TableHead>
                       <TableHead className="min-w-[100px] sticky right-0 bg-muted/50 z-10">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1364,24 +1458,17 @@ export default function EmpleadosPage() {
                               {statusLabel[e.status] ?? e.status}
                             </span>
                           </TableCell>
-                          {showStoreAssignedColumn && (
-                            <TableCell className="hidden lg:table-cell">
-                              <div className="flex flex-col">
-                                <span className="truncate max-w-[100px]" title={assigned.store ?? "-"}>
-                                  {assigned.store ?? "-"}
-                                </span>
-                              </div>
-                            </TableCell>
-                          )}
-                          {showWarehouseAssignedColumn && (
-                            <TableCell className="hidden xl:table-cell">
-                              <div className="flex flex-col">
-                                <span className="truncate max-w-[100px]" title={assigned.warehouse ?? "-"}>
-                                  {assigned.warehouse ?? "-"}
-                                </span>
-                              </div>
-                            </TableCell>
-                          )}
+                          <TableCell className="hidden lg:table-cell">
+                            <div className="flex flex-col">
+                              <span className="truncate max-w-[200px]" title={(assigned.store || assigned.warehouse) ?? "-"}>
+                                <div className="flex items-center gap-1">
+                                  {assigned.store && <Building className="h-4 w-4 text-blue-500 flex-shrink-0" />}
+                                  {assigned.warehouse && <Warehouse className="h-4 w-4 text-green-500 flex-shrink-0" />}
+                                  <span className="truncate">{(assigned.store || assigned.warehouse) ?? "-"}</span>
+                                </div>
+                              </span>
+                            </div>
+                          </TableCell>
                           <TableCell onClick={(e) => e.stopPropagation()} className="sticky right-0 bg-background z-10">
                             <div className="flex gap-1">
                               <Button
