@@ -19,6 +19,7 @@ import {
   ChevronDown,
   Check,
   Menu,
+  ArrowLeftRight,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from '@/contexts/auth-context';
@@ -147,6 +148,12 @@ const getSidebarItems = (
       requiredPermissions: ["VIEW_SUPPLY_ORDERS"],
     },
     {
+      name: "Movimientos de Stock",
+      href: "/dashboard/movimientos-stock",
+      icon: ArrowLeftRight,
+      requiredPermissions: ["VIEW_STOCK_TRANSFERS"],
+    },
+    {
       name: "Usuarios",
       href: "/dashboard/configuracion/usuarios",
       icon: Users,
@@ -163,6 +170,7 @@ const getSidebarItems = (
     '/dashboard/empleados',
     '/dashboard/proveedores',
     '/dashboard/ordenes-suministro',
+    '/dashboard/movimientos-stock',
     '/dashboard/configuracion/usuarios',
   ]);
   const hasTenantFeature = (required?: string[]) => {

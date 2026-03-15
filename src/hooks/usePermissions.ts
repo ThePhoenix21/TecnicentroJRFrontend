@@ -77,6 +77,14 @@ export const PERMISSIONS = {
   // soporte técnico
   VIEW_SUPPORT: 'VIEW_SUPPORT',
   MANAGE_SUPPORT: 'MANAGE_SUPPORT',
+
+  // movimientos de stock
+  VIEW_STOCK_TRANSFERS: 'VIEW_STOCK_TRANSFERS',
+  CREATE_STOCK_TRANSFER: 'CREATE_STOCK_TRANSFER',
+  CONFIRM_STOCK_TRANSFER: 'CONFIRM_STOCK_TRANSFER',
+  CANCEL_STOCK_TRANSFER: 'CANCEL_STOCK_TRANSFER',
+  EDIT_STOCK_TRANSFER: 'EDIT_STOCK_TRANSFER',
+  RECEIVE_STOCK_TRANSFER: 'RECEIVE_STOCK_TRANSFER',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -200,6 +208,14 @@ export const usePermissions = () => {
   // Soporte técnico
   const canViewSupport = () => resolvePermission(PERMISSIONS.VIEW_SUPPORT);
   const canManageSupport = () => resolvePermission(PERMISSIONS.MANAGE_SUPPORT);
+
+  // Movimientos de stock
+  const canViewStockTransfers = () => resolvePermission(PERMISSIONS.VIEW_STOCK_TRANSFERS);
+  const canCreateStockTransfer = () => resolvePermission(PERMISSIONS.CREATE_STOCK_TRANSFER);
+  const canConfirmStockTransfer = () => resolvePermission(PERMISSIONS.CONFIRM_STOCK_TRANSFER);
+  const canCancelStockTransfer = () => resolvePermission(PERMISSIONS.CANCEL_STOCK_TRANSFER);
+  const canEditStockTransfer = () => resolvePermission(PERMISSIONS.EDIT_STOCK_TRANSFER);
+  const canReceiveStockTransfer = () => resolvePermission(PERMISSIONS.RECEIVE_STOCK_TRANSFER);
   
   return {
     hasPermission,
@@ -284,5 +300,13 @@ export const usePermissions = () => {
     // Soporte técnico
     canViewSupport,
     canManageSupport,
+
+    // Movimientos de stock
+    canViewStockTransfers,
+    canCreateStockTransfer,
+    canConfirmStockTransfer,
+    canCancelStockTransfer,
+    canEditStockTransfer,
+    canReceiveStockTransfer,
   };
 };

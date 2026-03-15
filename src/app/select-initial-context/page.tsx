@@ -52,6 +52,9 @@ export default function SelectInitialContextPage() {
       if (hasStores) setMode('STORE');
       else if (hasWarehouses) setMode('WAREHOUSE');
       else setMode(null);
+    } else {
+      // Si tiene ambos, mostrar tiendas primero
+      setMode('STORE');
     }
   }, [loading, isAuthenticated, activeLoginMode, hasBoth, hasStores, hasWarehouses]);
 

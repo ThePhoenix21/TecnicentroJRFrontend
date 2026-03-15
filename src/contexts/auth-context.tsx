@@ -267,7 +267,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setCurrentWarehouse(null);
 
     if (typeof window !== 'undefined') {
-      window.location.href = '/dashboard';
+      // Recargar la página actual para actualizar datos sin cambiar de sección
+      window.location.reload();
     }
   }, [logout]);
 
@@ -295,7 +296,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setCurrentStore(null);
 
     if (typeof window !== 'undefined') {
-      window.location.href = '/dashboard';
+      // Recargar la página actual para actualizar datos sin cambiar de sección
+      window.location.reload();
     }
   }, [logout]);
 
