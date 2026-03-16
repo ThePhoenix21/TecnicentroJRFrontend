@@ -73,7 +73,9 @@ api.interceptors.response.use(
         // Si ya no hay token (logout en progreso/completado), no forzar redirección.
         // Evita errores transitorios cuando quedan requests en vuelo al cerrar sesión.
         if (!hasToken) {
-          return Promise.reject(error);
+          // En lugar de rechazar la promesa, devolver una promesa resuelta vacía
+          // para evitar unhandled rejections durante logout
+          return Promise.resolve({ data: null, status: 401, statusText: 'Unauthorized', headers: {}, config: originalRequest } as any);
         }
 
         if (originalRequest) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, ReactNode, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, ReactNode, useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { jwtDecode } from 'jwt-decode';
 import { authService, api, type LoginContextPayload, type LoginMode } from '@/services/auth';
@@ -36,9 +36,9 @@ interface JwtPayload {
   tenantFeatures?: TenantFeature[];
   tenantLogoUrl?: string;
   verified?: boolean;
-  stores?: string[]; // 🆕 IDs de tiendas en el JWT
+  stores?: string[]; // IDs de tiendas en el JWT
   warehouses?: string[];
-  permissions?: string[]; // 🆕 Permisos del usuario
+  permissions?: string[]; // Permisos del usuario
   currency?: SupportedCurrency;
   tenantCurrency?: SupportedCurrency;
   iat?: number;
@@ -50,7 +50,7 @@ export interface User {
   email: string;
   name: string;
   role: string;  // Changed from UserRole to string to match backend
-  permissions?: string[]; // 🆕 Permisos del usuario
+  permissions?: string[]; // Permisos del usuario
   verified: boolean;
   stores?: AuthStore[];  // Tiendas asociadas al usuario (formato simplificado)
   warehouses?: AuthStore[];  // Almacenes asociados al usuario
@@ -96,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [tenantDefaultServiceLoaded, setTenantDefaultServiceLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const suppressRejectionsRef = useRef(false);
   const router = useRouter();
 
   const normalizedTenantFeatures = tenantFeatures.map((feature) => String(feature).toUpperCase());
@@ -147,37 +148,68 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback((redirect: boolean = true) => {
-    // Clear all auth related data
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('user');
-    localStorage.removeItem('stores_cache'); // Limpiar cache de tiendas
-    localStorage.removeItem(CURRENT_STORE_STORAGE_KEY);
-    localStorage.removeItem(CURRENT_WAREHOUSE_STORAGE_KEY);
-    localStorage.removeItem(TENANT_FEATURES_STORAGE_KEY);
-    localStorage.removeItem(TENANT_DEFAULT_SERVICE_STORAGE_KEY);
-    localStorage.removeItem(CURRENCY_STORAGE_KEY);
-    
-    // Clear axios default headers
-    if (api?.defaults?.headers?.common) {
-      delete api.defaults.headers.common['Authorization'];
-    }
-    
-    // Resetear el estado del usuario y tienda
-    setUser(null);
-    setCurrentStore(null);
-    setCurrentWarehouse(null);
-    setActiveLoginMode(null);
-    setTenantFeatures([]);
-    setTenantFeaturesLoaded(false);
-    setTenantDefaultService('REPAIR');
-    setTenantDefaultServiceLoaded(false);
-    setError(null);
-    
-    if (redirect) {
-      // Redirección única para evitar navegación duplicada y errores transitorios de runtime.
-      router.replace('/login');
+    try {
+      // Clear all auth related data
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('stores_cache'); // Limpiar cache de tiendas
+        localStorage.removeItem(CURRENT_STORE_STORAGE_KEY);
+        localStorage.removeItem(CURRENT_WAREHOUSE_STORAGE_KEY);
+        localStorage.removeItem(TENANT_FEATURES_STORAGE_KEY);
+        localStorage.removeItem(TENANT_DEFAULT_SERVICE_STORAGE_KEY);
+        localStorage.removeItem(CURRENCY_STORAGE_KEY);
+      }
+
+      // Clear axios default headers
+      if (api?.defaults?.headers?.common) {
+        delete api.defaults.headers.common['Authorization'];
+      }
+
+      // Resetear el estado del usuario y tienda
+      setUser(null);
+      setCurrentStore(null);
+      setCurrentWarehouse(null);
+      setActiveLoginMode(null);
+      setLoading(false);
+      setTenantFeatures([]);
+      setTenantFeaturesLoaded(false);
+      setTenantDefaultService('REPAIR');
+      setTenantDefaultServiceLoaded(false);
+      setError(null);
+      setLoading(false);
+
+      if (redirect && typeof window !== 'undefined') {
+        suppressRejectionsRef.current = true;
+        setTimeout(() => {
+          suppressRejectionsRef.current = false;
+        }, 2000);
+        window.location.href = '/login';
+      }
+    } catch (error) {
+      console.error('Error durante logout:', error);
+      // Forzar limpieza de estado incluso si hay error
+      setUser(null);
+      setCurrentStore(null);
+      setCurrentWarehouse(null);
+      setActiveLoginMode(null);
+      if (redirect && typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
     }
   }, [router]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = (event: PromiseRejectionEvent) => {
+      if (!suppressRejectionsRef.current) return;
+      event.preventDefault();
+    };
+    window.addEventListener('unhandledrejection', handler);
+    return () => {
+      window.removeEventListener('unhandledrejection', handler);
+    };
+  }, []);
 
   // Normalize role function
   const normalizeRole = useCallback((role?: string): UserRole => {
@@ -710,7 +742,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Verificar token al cargar
   useEffect(() => {
-    checkAuth();
+    checkAuth().catch((err: unknown) => {
+      console.error('Error en checkAuth inicial:', err);
+    });
   }, [checkAuth]);
 
   const value = {
