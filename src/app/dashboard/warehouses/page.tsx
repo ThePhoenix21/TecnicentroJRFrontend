@@ -26,7 +26,7 @@ const normalize = (v: unknown) => String(v ?? '').trim().toLowerCase();
 
 export default function WarehousesPage() {
   const router = useRouter();
-  const { activeLoginMode } = useAuth();
+  const { activeLoginMode, hasPermission } = useAuth();
 
   useEffect(() => {
     if (activeLoginMode === 'WAREHOUSE') {
@@ -496,7 +496,9 @@ export default function WarehousesPage() {
                     {/* Hide Dirección and Teléfono in mobile */}
                     <TableHead className="hidden sm:table-cell min-w-[200px]">Dirección</TableHead>
                     <TableHead className="hidden md:table-cell min-w-[120px]">Teléfono</TableHead>
-                    <TableHead className="w-[80px]">Acciones</TableHead>
+                    {hasPermission('MANAGE_WAREHOUSES') && (
+                      <TableHead className="w-[80px]">Acciones</TableHead>
+                    )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -514,21 +516,23 @@ export default function WarehousesPage() {
                       <TableCell className="font-medium">{w.name}</TableCell>
                       <TableCell className="hidden sm:table-cell">{w.address}</TableCell>
                       <TableCell className="hidden md:table-cell">{w.phone}</TableCell>
-                      <TableCell className="text-center" data-action-button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation(); // Evitar que se abra el detalle
-                            handleDeleteWarehouseFromList(w.id);
-                          }}
-                          disabled={deleteSubmitting}
-                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                          title="Eliminar almacén"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
+                      {hasPermission('MANAGE_WAREHOUSES') && (
+                        <TableCell className="text-center" data-action-button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation(); // Evitar que se abra el detalle
+                              handleDeleteWarehouseFromList(w.id);
+                            }}
+                            disabled={deleteSubmitting}
+                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            title="Eliminar almacén"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>
@@ -566,25 +570,27 @@ export default function WarehousesPage() {
                       <div className="space-y-4 sm:space-y-6">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                           <h3 className="text-base sm:text-lg font-semibold">Datos generales</h3>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              if (!detail) return;
-                              setIsEditing((v) => !v);
-                              setEditForm({
-                                name: detail.name ?? '',
-                                address: detail.address ?? '',
-                                phone: detail.phone ?? '',
-                              });
-                            }}
-                            disabled={detailLoading || editSubmitting || deleteSubmitting}
-                            className="w-full sm:w-auto h-9"
-                          >
-                            <Pencil className="h-4 w-4 mr-2" />
-                            <span className="hidden sm:inline">{isEditing ? 'Cancelar edición' : 'Editar'}</span>
-                            <span className="sm:hidden">{isEditing ? 'Cancelar' : 'Editar'}</span>
-                          </Button>
+                          {hasPermission('MANAGE_WAREHOUSES') && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                if (!detail) return;
+                                setIsEditing((v) => !v);
+                                setEditForm({
+                                  name: detail.name ?? '',
+                                  address: detail.address ?? '',
+                                  phone: detail.phone ?? '',
+                                });
+                              }}
+                              disabled={detailLoading || editSubmitting || deleteSubmitting}
+                              className="w-full sm:w-auto h-9"
+                            >
+                              <Pencil className="h-4 w-4 mr-2" />
+                              <span className="hidden sm:inline">{isEditing ? 'Cancelar edición' : 'Editar'}</span>
+                              <span className="sm:hidden">{isEditing ? 'Cancelar' : 'Editar'}</span>
+                            </Button>
+                          )}
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
@@ -693,6 +699,7 @@ export default function WarehousesPage() {
                               ({localWarehouseStores.length})
                             </span>
                           </div>
+                          {hasPermission('MANAGE_WAREHOUSES') && (
                           <div className="flex flex-col sm:flex-row gap-2">
                             {!isEditingStores ? (
                               <Button
@@ -712,26 +719,23 @@ export default function WarehousesPage() {
                                   size="sm"
                                   onClick={handleSaveStoresEdit}
                                   disabled={editStoresSubmitting}
-                                  className="bg-emerald-600 text-white hover:bg-emerald-700"
                                 >
-                                  {editStoresSubmitting ? "Guardando..." : "Guardar cambios"}
+                                  {editStoresSubmitting ? 'Guardando...' : 'Guardar'}
                                 </Button>
                                 <Button
                                   variant="outline"
                                   size="sm"
                                   onClick={() => {
-                                    if (!detail) return;
-                                    setLocalWarehouseStores(Array.isArray(detail.warehouseStores) ? detail.warehouseStores : []);
-                                    setSelectedStoreId("");
                                     setIsEditingStores(false);
+                                    setEditStoresSubmitting(false);
                                   }}
-                                  disabled={editStoresSubmitting}
                                 >
                                   Cancelar
                                 </Button>
                               </>
                             )}
                           </div>
+                        )}
                         </div>
 
                         {isEditingStores && (
@@ -868,6 +872,17 @@ export default function WarehousesPage() {
                   <Button variant="outline" onClick={closeDetail} disabled={editSubmitting || deleteSubmitting}>
                     Cerrar
                   </Button>
+                  {hasPermission('MANAGE_WAREHOUSES') && (
+                    <Button
+                      variant="destructive"
+                      onClick={handleDeleteWarehouse}
+                      disabled={deleteSubmitting}
+                      className="bg-red-600 hover:bg-red-700"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      {deleteSubmitting ? 'Eliminando...' : 'Eliminar almacén'}
+                    </Button>
+                  )}
                 </DialogFooter>
               </div>
             </div>

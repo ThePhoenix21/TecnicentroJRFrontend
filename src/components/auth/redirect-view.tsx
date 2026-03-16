@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
-import { ArrowLeft, Home, Users, Package, Settings, ShoppingCart, Wrench, FileText, Truck, Store, DollarSign, BarChart3 } from 'lucide-react';
+import { ArrowLeft, Home, Users, Package, Settings, ShoppingCart, Wrench, FileText, Truck, Store, DollarSign, BarChart3, Headphones, Warehouse } from 'lucide-react';
 
 interface RedirectSection {
   title: string;
@@ -30,55 +30,6 @@ export const RedirectView: React.FC = () => {
       permission: 'VIEW_DASHBOARD'
     },
     {
-      title: 'Empleados',
-      description: 'Gestionar personal y asignaciones',
-      path: '/dashboard/empleados',
-      icon: <Users className="h-5 w-5" />,
-      permission: 'VIEW_EMPLOYEES'
-    },
-    {
-      title: 'Productos',
-      description: 'Catálogo y gestión de productos',
-      path: '/dashboard/productos',
-      icon: <Package className="h-5 w-5" />,
-      permission: 'VIEW_PRODUCTS'
-    },
-    {
-      title: 'Servicios',
-      description: 'Gestión de servicios',
-      path: '/dashboard/servicios',
-      icon: <Wrench className="h-5 w-5" />,
-      permission: 'VIEW_SERVICES'
-    },
-    {
-      title: 'Ventas',
-      description: 'Gestión de ventas y facturación',
-      path: '/dashboard/ventas',
-      icon: <ShoppingCart className="h-5 w-5" />,
-      permission: 'VIEW_SALES'
-    },
-    {
-      title: 'Clientes',
-      description: 'Gestión de clientes',
-      path: '/dashboard/clientes',
-      icon: <Users className="h-5 w-5" />,
-      permission: 'VIEW_CUSTOMERS'
-    },
-    {
-      title: 'Proveedores',
-      description: 'Gestión de proveedores',
-      path: '/dashboard/proveedores',
-      icon: <Truck className="h-5 w-5" />,
-      permission: 'VIEW_SUPPLIERS'
-    },
-    {
-      title: 'Inventario',
-      description: 'Control de stock y almacenes',
-      path: '/dashboard/inventario',
-      icon: <Package className="h-5 w-5" />,
-      permission: 'VIEW_INVENTORY'
-    },
-    {
       title: 'Tiendas',
       description: 'Gestión de tiendas',
       path: '/dashboard/tiendas',
@@ -93,14 +44,84 @@ export const RedirectView: React.FC = () => {
       permission: 'VIEW_CASH'
     },
     {
-      title: 'Reportes',
-      description: 'Reportes y análisis',
-      path: '/dashboard/reportes',
-      icon: <FileText className="h-5 w-5" />,
-      permission: 'VIEW_REPORTS'
+      title: 'Ventas',
+      description: 'Gestión de ventas y facturación',
+      path: '/dashboard/ventas',
+      icon: <ShoppingCart className="h-5 w-5" />,
+      permission: 'VIEW_ORDERS'
     },
     {
-      title: 'Configuración',
+      title: 'Servicios',
+      description: 'Gestión de servicios',
+      path: '/dashboard/servicios',
+      icon: <Wrench className="h-5 w-5" />,
+      permission: 'VIEW_SERVICES'
+    },
+    {
+      title: 'Productos',
+      description: 'Catálogo y gestión de productos',
+      path: '/dashboard/productos',
+      icon: <Package className="h-5 w-5" />,
+      permission: 'VIEW_PRODUCTS'
+    },
+    {
+      title: 'Inventario',
+      description: 'Control de stock y almacenes',
+      path: '/dashboard/inventario',
+      icon: <Package className="h-5 w-5" />,
+      permission: 'VIEW_INVENTORY'
+    },
+    {
+      title: 'Soporte Técnico',
+      description: 'Gestión de tickets y soporte',
+      path: '/dashboard/support',
+      icon: <Headphones className="h-5 w-5" />,
+      permission: 'VIEW_SUPPORT'
+    },
+    {
+      title: 'Almacenes',
+      description: 'Gestión de almacenes',
+      path: '/dashboard/warehouses',
+      icon: <Warehouse className="h-5 w-5" />,
+      permission: 'VIEW_WAREHOUSES'
+    },
+    {
+      title: 'Clientes',
+      description: 'Gestión de clientes',
+      path: '/dashboard/clientes',
+      icon: <Users className="h-5 w-5" />,
+      permission: 'VIEW_CLIENTS'
+    },
+    {
+      title: 'Empleados',
+      description: 'Gestionar personal y asignaciones',
+      path: '/dashboard/empleados',
+      icon: <Users className="h-5 w-5" />,
+      permission: 'VIEW_EMPLOYEES'
+    },
+    {
+      title: 'Proveedores',
+      description: 'Gestión de proveedores',
+      path: '/dashboard/proveedores',
+      icon: <Truck className="h-5 w-5" />,
+      permission: 'VIEW_SUPPLIERS'
+    },
+    {
+      title: 'Órdenes de Suministro',
+      description: 'Gestión de órdenes de suministro',
+      path: '/dashboard/ordenes-suministro',
+      icon: <FileText className="h-5 w-5" />,
+      permission: 'VIEW_SUPPLY_ORDERS'
+    },
+    {
+      title: 'Movimientos de Stock',
+      description: 'Control de movimientos de stock',
+      path: '/dashboard/movimientos-stock',
+      icon: <Package className="h-5 w-5" />,
+      permission: 'VIEW_STOCK_TRANSFERS'
+    },
+    {
+      title: 'Usuarios',
       description: 'Gestión de usuarios y configuración',
       path: '/dashboard/configuracion/usuarios',
       icon: <Settings className="h-5 w-5" />,
