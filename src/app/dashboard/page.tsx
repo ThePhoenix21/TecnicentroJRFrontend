@@ -12,6 +12,7 @@ import type { AnalyticsQueryParams, PaymentType } from "@/types/analytics.types"
 import type { DashboardQueryParams } from "@/types/dashboard.types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AccessDeniedView } from '@/components/auth/access-denied-view';
+import { RedirectView } from '@/components/auth/redirect-view';
 import { ProtectedButton } from '@/components/auth/protected-button';
 import { PermissionGuard } from '@/components/auth/permission-guard';
 import { Badge } from "@/components/ui/badge";
@@ -608,7 +609,7 @@ export default function DashboardPage() {
 
   // Verificar permisos de acceso al dashboard
   if (!hasPermission('VIEW_DASHBOARD')) {
-    return <AccessDeniedView />;
+    return <RedirectView />;
   }
 
   const allLoading = dashboardLoading || analyticsLoading;
