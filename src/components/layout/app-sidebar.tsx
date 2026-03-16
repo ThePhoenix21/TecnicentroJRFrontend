@@ -71,6 +71,13 @@ const getSidebarItems = (
       requiredPermissions: ["VIEW_STORES"],
     },
     {
+      name: "Almacenes",
+      href: "/dashboard/warehouses",
+      icon: Warehouse,
+      requiredTenantFeatures: ["WAREHOUSES"],
+      requiredPermissions: ["VIEW_WAREHOUSES"],
+    },
+    {
       name: "Caja",
       href: "/dashboard/caja",
       icon: DollarSign,
@@ -106,32 +113,10 @@ const getSidebarItems = (
       requiredPermissions: ["VIEW_INVENTORY"],
     },
     {
-      name: "Soporte Técnico",
-      href: "/dashboard/support",
-      icon: LifeBuoy,
-      requiredTenantFeatures: ["SUPPORT"],
-      requiredPermissions: ["VIEW_SUPPORT"],
-    },
-    {
-      name: "Almacenes",
-      href: "/dashboard/warehouses",
-      icon: Warehouse,
-      requiredTenantFeatures: ["WAREHOUSES"],
-      requiredPermissions: ["VIEW_WAREHOUSES"],
-    },
-    {
-      name: "Clientes",
-      href: "/dashboard/clientes",
-      icon: Users,
-      requiredTenantFeatures: ["CLIENTS"],
-      requiredPermissions: ["VIEW_CLIENTS"],
-    },
-    {
-      name: "Empleados",
-      href: "/dashboard/empleados",
-      icon: Users,
-      requiredTenantFeatures: ["EMPLOYEES"],
-      requiredPermissions: ["VIEW_EMPLOYEES"],
+      name: "Movimientos de Stock",
+      href: "/dashboard/movimientos-stock",
+      icon: ArrowLeftRight,
+      requiredPermissions: ["VIEW_STOCK_TRANSFERS"],
     },
     {
       name: "Proveedores",
@@ -148,10 +133,18 @@ const getSidebarItems = (
       requiredPermissions: ["VIEW_SUPPLY_ORDERS"],
     },
     {
-      name: "Movimientos de Stock",
-      href: "/dashboard/movimientos-stock",
-      icon: ArrowLeftRight,
-      requiredPermissions: ["VIEW_STOCK_TRANSFERS"],
+      name: "Empleados",
+      href: "/dashboard/empleados",
+      icon: Users,
+      requiredTenantFeatures: ["EMPLOYEES"],
+      requiredPermissions: ["VIEW_EMPLOYEES"],
+    },
+    {
+      name: "Clientes",
+      href: "/dashboard/clientes",
+      icon: Users,
+      requiredTenantFeatures: ["CLIENTS"],
+      requiredPermissions: ["VIEW_CLIENTS"],
     },
     {
       name: "Usuarios",
@@ -159,6 +152,13 @@ const getSidebarItems = (
       icon: Users,
       requiredTenantFeatures: ["USERS"],
       requiredPermissions: ["VIEW_USERS"],
+    },
+    {
+      name: "Soporte Técnico",
+      href: "/dashboard/support",
+      icon: LifeBuoy,
+      requiredTenantFeatures: ["SUPPORT"],
+      requiredPermissions: ["VIEW_SUPPORT"],
     },
   ];
 
