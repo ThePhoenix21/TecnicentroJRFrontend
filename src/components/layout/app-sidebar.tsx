@@ -234,12 +234,12 @@ export function AppSidebar() {
                     }}
                   >
                     <SelectTrigger className="h-8 px-2 text-sm font-semibold">
-                      <SelectValue />
+                      <SelectValue placeholder="Seleccionar tienda" />
                     </SelectTrigger>
                     <SelectContent>
                       {(user?.stores || []).map((store) => (
-                        <SelectItem key={store.id} value={store.id}>
-                          {store.name}
+                        <SelectItem key={store.id} value={store.id} title={store.name}>
+                          <div className="truncate max-w-[160px]">{store.name}</div>
                         </SelectItem>
                       ))}
                     </SelectContent>

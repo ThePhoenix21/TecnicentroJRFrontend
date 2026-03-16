@@ -1595,12 +1595,7 @@ export function SaleForm({
           <p className="text-sm text-muted-foreground flex items-center">
             <Info className="h-4 w-4 mr-2 flex-shrink-0" />
             <span>
-              <strong>Información del cliente:</strong> Complete los datos del cliente para un mejor seguimiento de sus ventas.
-              {selectedItems.some((item) => item.type === "service") && (
-                <span className="block mt-1">
-                  <strong>Nota:</strong> El DNI es obligatorio para servicios.
-                </span>
-              )}
+              <strong>Información del cliente:</strong> Complete los datos del cliente para un mejor seguimiento de sus ventas.              
             </span>
           </p>
         </div>
@@ -1832,7 +1827,7 @@ export function SaleForm({
         overlayPointerDownOutsideRef.current = false;
       }}
     >
-      <div className="bg-background border border-muted rounded-3xl shadow-xl w-full max-w-[95vw] sm:max-w-2xl md:max-w-4xl max-h-[95vh] md:max-h-[90vh] flex flex-col">
+      <div className="bg-background border border-muted rounded-3xl shadow-xl w-full max-w-[95vw] sm:max-w-2xl md:max-w-4xl h-[80vh] max-h-[80vh] flex flex-col">
         <div className="flex justify-between items-center p-3 md:p-4 border-b rounded-t-3xl sticky top-0 bg-background z-10">
           <h2 className="text-lg md:text-xl font-semibold">Nueva Venta</h2>
           <div className="flex items-center gap-2">
@@ -2301,399 +2296,398 @@ export function SaleForm({
                   <p className="text-sm">Agrega productos o servicios</p>
                 </div>
               ) : (
-                <>
-                  <div className="flex-1 overflow-auto mb-4">
-                    <div className="space-y-2">
-                      {selectedItems.map((item) => {
+                <div className="flex-1 overflow-auto mb-4">
+                  <div className="space-y-2">
+                    {selectedItems.map((item) => {
+                      // Para servicios, siempre usar el precio total del servicio
+                      // Para productos y personalizados, usar el precio personalizado si existe
+                      const itemKey = `${item.type}-${item.id}`;
+                      const baseUnitPrice = item.price;
+                      const currentUnitPrice = item.customPrice ?? item.price;
+
+                      const editedUnitPriceStr = item.type === "product"
+                        ? (editedProductPrices[itemKey] ?? currentUnitPrice.toString())
+                        : currentUnitPrice.toString();
+
+                      const parsedEditedUnitPrice = item.type === "product" && editedUnitPriceStr !== ""
+                        ? Number(editedUnitPriceStr)
+                        : undefined;
+
+                      const finalUnitPrice = item.type === "service"
+                        ? item.price
+                        : item.type === "product"
+                          ? (parsedEditedUnitPrice ?? 0)
+                          : currentUnitPrice;
+
+                      const isUnitPriceModified = item.type === "product" && (
+                        editedUnitPriceStr === "" ||
+                        (parsedEditedUnitPrice !== undefined && parsedEditedUnitPrice !== baseUnitPrice)
+                      );
+                      
+                      const originalTotal = baseUnitPrice * item.quantity;
+                      const finalTotal = finalUnitPrice * item.quantity;
+                      
+                      return (
+                        <div
+                          key={`${item.id}-${item.type}`}
+                          className="p-3 border rounded-lg flex justify-between items-center"
+                        >
+                          <div>
+                            <div className="font-medium">{item.name}</div>
+                            <div className="text-sm text-gray-500">
+                              {item.type === "product" ? (
+                                <>
+                                  <input
+                                    type="number"
+                                    value={editedUnitPriceStr}
+                                    onChange={(e) => {
+                                      const value = e.target.value;
+
+                                      setEditedProductPrices((prev) => ({
+                                        ...prev,
+                                        [itemKey]: value,
+                                      }));
+
+                                      setSelectedItems((prev) =>
+                                        prev.map((i) => {
+                                          if (i.type !== "product" || i.id !== item.id) return i;
+
+                                          if (value === "") {
+                                            return { ...i, customPrice: undefined };
+                                          }
+
+                                          const parsed = Number(value);
+                                          if (!Number.isFinite(parsed)) {
+                                            return i;
+                                          }
+
+                                          if (parsed === i.price) {
+                                            return { ...i, customPrice: undefined };
+                                          }
+
+                                          return { ...i, customPrice: parsed };
+                                        })
+                                      );
+                                    }}
+                                    onWheel={(e: React.WheelEvent<HTMLInputElement>) =>
+                                      (e.target as HTMLInputElement).blur()
+                                    }
+                                    className="w-20 px-1 border rounded text-sm text-right"
+                                    min="0"
+                                    step="0.1"
+                                  />
+                                </>
+                              ) : (
+                                <>{formatCurrency(finalUnitPrice)}</>
+                              )}
+                              {" "}x {item.quantity} = {formatCurrency(finalTotal)}
+                              {isUnitPriceModified && (
+                                <span className="text-xs text-muted-foreground ml-2 line-through">
+                                  {formatCurrency(originalTotal)}
+                                </span>
+                              )}
+                            </div>
+                            {item.notes && (
+                              <div className="text-xs text-gray-500 mt-1">{item.notes}</div>
+                            )}
+                          </div>
+
+                          <div className="flex items-center space-x-2">
+                            {item.type !== "service" && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() =>
+                                    setSelectedItems((prev) =>
+                                      prev.map((i) =>
+                                        i.id === item.id && i.type === item.type
+                                          ? {
+                                              ...i,
+                                              quantity: Math.max(1, i.quantity - 1),
+                                            }
+                                          : i
+                                      )
+                                    )
+                                  }
+                                >
+                                  <Minus className="h-3 w-3" />
+                                </Button>
+                                <span className="w-8 text-center">{item.quantity}</span>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() =>
+                                    setSelectedItems((prev) =>
+                                      prev.map((i) =>
+                                        i.id === item.id && i.type === item.type
+                                          ? { ...i, quantity: i.quantity + 1 }
+                                          : i
+                                      )
+                                    )
+                                  }
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </Button>
+                              </>
+                            )}
+
+                            {item.type === "service" && (
+                              <span className="w-8 text-center text-muted-foreground">
+                                {item.quantity}
+                              </span>
+                            )}
+
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removeItem(item.id)}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Resumen y botones - siempre visible */}
+              <div className="flex-shrink-0 border-t pt-4">
+                <div className="flex justify-between mb-2">
+                  <span>Subtotal:</span>
+                  <span>
+                    {formatCurrency(
+                      selectedItems.reduce((sum, item) => {
                         // Para servicios, siempre usar el precio total del servicio
                         // Para productos y personalizados, usar el precio personalizado si existe
-                        const itemKey = `${item.type}-${item.id}`;
-                        const baseUnitPrice = item.price;
-                        const currentUnitPrice = item.customPrice ?? item.price;
-
-                        const editedUnitPriceStr = item.type === "product"
-                          ? (editedProductPrices[itemKey] ?? currentUnitPrice.toString())
-                          : currentUnitPrice.toString();
-
-                        const parsedEditedUnitPrice = item.type === "product" && editedUnitPriceStr !== ""
-                          ? Number(editedUnitPriceStr)
-                          : undefined;
-
-                        const finalUnitPrice = item.type === "service"
+                        const itemPrice = item.type === "service"
                           ? item.price
-                          : item.type === "product"
-                            ? (parsedEditedUnitPrice ?? 0)
-                            : currentUnitPrice;
-
-                        const isUnitPriceModified = item.type === "product" && (
-                          editedUnitPriceStr === "" ||
-                          (parsedEditedUnitPrice !== undefined && parsedEditedUnitPrice !== baseUnitPrice)
-                        );
-                        
-                        const originalTotal = baseUnitPrice * item.quantity;
-                        const finalTotal = finalUnitPrice * item.quantity;
-                        
-                        return (
-                          <div
-                            key={`${item.id}-${item.type}`}
-                            className="p-3 border rounded-lg flex justify-between items-center"
-                          >
-                            <div>
-                              <div className="font-medium">{item.name}</div>
-                              <div className="text-sm text-gray-500">
-                                {item.type === "product" ? (
-                                  <>
-                                    <input
-                                      type="number"
-                                      value={editedUnitPriceStr}
-                                      onChange={(e) => {
-                                        const value = e.target.value;
-
-                                        setEditedProductPrices((prev) => ({
-                                          ...prev,
-                                          [itemKey]: value,
-                                        }));
-
-                                        setSelectedItems((prev) =>
-                                          prev.map((i) => {
-                                            if (i.type !== "product" || i.id !== item.id) return i;
-
-                                            if (value === "") {
-                                              return { ...i, customPrice: undefined };
-                                            }
-
-                                            const parsed = Number(value);
-                                            if (!Number.isFinite(parsed)) {
-                                              return i;
-                                            }
-
-                                            if (parsed === i.price) {
-                                              return { ...i, customPrice: undefined };
-                                            }
-
-                                            return { ...i, customPrice: parsed };
-                                          })
-                                        );
-                                      }}
-                                      onWheel={(e: React.WheelEvent<HTMLInputElement>) =>
-                                        (e.target as HTMLInputElement).blur()
-                                      }
-                                      className="w-20 px-1 border rounded text-sm text-right"
-                                      min="0"
-                                      step="0.1"
-                                    />
-                                  </>
-                                ) : (
-                                  <>{formatCurrency(finalUnitPrice)}</>
-                                )}
-                                {" "}x {item.quantity} = {formatCurrency(finalTotal)}
-                                {isUnitPriceModified && (
-                                  <span className="text-xs text-muted-foreground ml-2 line-through">
-                                    {formatCurrency(originalTotal)}
-                                  </span>
-                                )}
-                              </div>
-                              {item.notes && (
-                                <div className="text-xs text-gray-500 mt-1">{item.notes}</div>
-                              )}
-                            </div>
-
-                            <div className="flex items-center space-x-2">
-                              {item.type !== "service" && (
-                                <>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() =>
-                                      setSelectedItems((prev) =>
-                                        prev.map((i) =>
-                                          i.id === item.id && i.type === item.type
-                                            ? {
-                                                ...i,
-                                                quantity: Math.max(1, i.quantity - 1),
-                                              }
-                                            : i
-                                        )
-                                      )
-                                    }
-                                  >
-                                    <Minus className="h-3 w-3" />
-                                  </Button>
-                                  <span className="w-8 text-center">{item.quantity}</span>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() =>
-                                      setSelectedItems((prev) =>
-                                        prev.map((i) =>
-                                          i.id === item.id && i.type === item.type
-                                            ? { ...i, quantity: i.quantity + 1 }
-                                            : i
-                                        )
-                                      )
-                                    }
-                                  >
-                                    <Plus className="h-3 w-3" />
-                                  </Button>
-                                </>
-                              )}
-
-                              {item.type === "service" && (
-                                <span className="w-8 text-center text-muted-foreground">
-                                  {item.quantity}
-                                </span>
-                              )}
-
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeItem(item.id)}
-                              >
-                                <Trash2 className="h-4 w-4 text-red-500" />
-                              </Button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          : item.customPrice !== undefined
+                            ? item.customPrice
+                            : item.price;
+                        return sum + (itemPrice * item.quantity);
+                      }, 0)
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between font-medium text-lg">
+                  <div className="flex justify-between w-full gap-4">
+                    <span>Total:</span>
+                    <span className="font-medium">
+                      {formatCurrency(
+                        selectedItems.reduce((sum, item) => {
+                          // Para servicios, siempre usar el precio total del servicio
+                          // Para productos y personalizados, usar el precio personalizado si existe
+                          const itemPrice = item.type === "service"
+                            ? item.price
+                            : item.customPrice !== undefined
+                              ? item.customPrice
+                              : item.price;
+                          return sum + (itemPrice * item.quantity);
+                        }, 0)
+                      )}
+                    </span>
                   </div>
+                </div>
 
-                  <div className="border-t pt-4">
-                    <div className="flex justify-between mb-2">
-                      <span>Subtotal:</span>
-                      <span>
-                        {formatCurrency(
-                          selectedItems.reduce((sum, item) => {
-                            // Para servicios, siempre usar el precio total del servicio
-                            // Para productos y personalizados, usar el precio personalizado si existe
-                            const itemPrice = item.type === "service"
-                              ? item.price
-                              : item.customPrice !== undefined
-                                ? item.customPrice
-                                : item.price;
-                            return sum + (itemPrice * item.quantity);
-                          }, 0)
-                        )}
-                      </span>
-                    </div>
-                    <div className="flex justify-between font-medium text-lg">
-                      <div className="flex justify-between w-full gap-4">
-                        <span>Total:</span>
-                        <span className="font-medium">
-                          {formatCurrency(
-                            selectedItems.reduce((sum, item) => {
-                              // Para servicios, siempre usar el precio total del servicio
-                              // Para productos y personalizados, usar el precio personalizado si existe
-                              const itemPrice = item.type === "service"
-                                ? item.price
-                                : item.customPrice !== undefined
-                                  ? item.customPrice
-                                  : item.price;
-                              return sum + (itemPrice * item.quantity);
-                            }, 0)
-                          )}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="mt-6 items-center justify-between space-y-2">
-                      <div className="w-full space-y-4">
-                        {uploadStatus.inProgress && (
-                          <div className="w-full bg-background/50 p-3 rounded-lg border">
-                            <div className="flex items-center justify-between text-sm mb-2">
-                              <span className="font-medium">Subiendo imágenes...</span>
-                              <span className="font-semibold">{uploadStatus.progress}%</span>
-                            </div>
-                            <Progress
-                              value={uploadStatus.progress}
-                              className="h-2 w-full"
-                            />
-                          </div>
-                        )}
-                        
-                        {showUploadError && uploadStatus.error && (
-                          <div className="w-full p-4 bg-error-light/10 border-l-4 border-error rounded-r">
-                            <div className="flex items-start">
-                              <XCircle className="h-5 w-5 text-error mt-0.5 flex-shrink-0" />
-                              <div className="ml-3 flex-1">
-                                <div className="text-sm text-foreground font-medium">
-                                  {uploadStatus.error}
-                                </div>
-                                
-                                {uploadStatus.failedFiles.length > 0 && (
-                                  <div className="mt-2">
-                                    <p className="text-sm text-muted-foreground">
-                                      Archivos con errores:
-                                    </p>
-                                    <ul className="mt-1 space-y-1.5 max-h-32 overflow-y-auto pr-2">
-                                      {uploadStatus.failedFiles.map((file, index) => (
-                                        <li key={index} className="flex items-start text-sm">
-                                          <X className="h-4 w-4 text-error/80 mt-0.5 mr-1.5 flex-shrink-0" />
-                                          <div className="break-words max-w-full">
-                                            <span className="text-foreground">{file.file.name}</span>
-                                            <span className="text-xs text-muted-foreground block">
-                                              {file.error}
-                                            </span>
-                                          </div>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-
-                                <div className="mt-4 space-y-2">
-                                  <Button
-                                    type="button"
-                                    variant="default"
-                                    size="sm"
-                                    className="w-full"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setForceSubmit(true);
-                                      setShowUploadError(false);
-                                      setIsOrderPaymentsModalOpen(true);
-                                    }}
-                                  >
-                                    Continuar sin imágenes
-                                  </Button>
-                                  
-                                  <div className="grid grid-cols-2 gap-2">
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="w-full"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setShowUploadError(false);
-                                        setUploadStatus(prev => ({
-                                          ...prev,
-                                          error: null,
-                                          failedFiles: []
-                                        }));
-                                      }}
-                                    >
-                                      Reintentar
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="w-full text-destructive border-destructive/50 hover:bg-destructive/5 hover:text-destructive"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setShowUploadError(false);
-                                        setUploadStatus(prev => ({
-                                          ...prev,
-                                          inProgress: false,
-                                          progress: 0,
-                                          error: null,
-                                          failedFiles: []
-                                        }));
-                                        // Limpiar las imágenes seleccionadas
-                                        setNewItem(prev => ({
-                                          ...prev,
-                                          images: []
-                                        }));
-                                        // Limpiar todo el estado si no hay venta en progreso
-                                        if (!selectedItems.length) {
-                                          resetSaleState();
-                                          onClose();
-                                        }
-                                      }}
-                                    >
-                                      Cancelar
-                                    </Button>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Mostrar error de creación de orden */}
-                        {orderError && (
-                          <Alert variant="destructive" className="mb-4">
-                            <AlertCircle className="h-4 w-4" />
-                            <AlertTitle>Error al crear la orden</AlertTitle>
-                            <AlertDescription>
-                              {orderError.message}
-                              {orderError.code && (
-                                <span className="block mt-1 text-xs opacity-75">
-                                  Código: {orderError.code}
-                                </span>
-                              )}
-                            </AlertDescription>
-                          </Alert>
-                        )}
-                        
-                        {/* Indicador de sesión de caja */}
-                        <div className="mb-4">
-                          {isLoadingCashSession ? (
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
-                              Verificando sesión de caja abierta...
-                            </div>
-                          ) : currentCashSession ? (
-                            <div className="flex items-center gap-2 text-sm text-green-600">
-                              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                              Sesión de caja abierta
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2 text-sm text-red-600">
-                              <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                              No hay sesión de caja abierta
-                            </div>
-                          )}
+                <div className="mt-6 items-center justify-between space-y-2">
+                  <div className="w-full space-y-4">
+                    {uploadStatus.inProgress && (
+                      <div className="w-full bg-background/50 p-3 rounded-lg border">
+                        <div className="flex items-center justify-between text-sm mb-2">
+                          <span className="font-medium">Subiendo imágenes...</span>
+                          <span className="font-semibold">{uploadStatus.progress}%</span>
                         </div>
-
-                        <Button
-                          className="w-full"
-                          size="lg"
-                          onClick={() => {
-                            const orderTotal = selectedItems.reduce((sum, item) => {
-                              const itemPrice = item.type === "service"
-                                ? item.price
-                                : item.customPrice !== undefined
-                                  ? item.customPrice
-                                  : item.price;
-                              return sum + (itemPrice * item.quantity);
-                            }, 0);
-
-                            const baseMethods = orderPaymentMethods.length > 0
-                              ? orderPaymentMethods
-                              : [{ id: "1", type: PaymentType.EFECTIVO, amount: 0 }];
-
-                            const hasProducts = selectedItems.some((item) => item.type === "product");
-                            const initialAmount = hasProducts ? orderTotal : 0;
-
-                            setOrderPaymentMethodsDraft(
-                              baseMethods.map((m, idx) => ({
-                                ...m,
-                                amount: idx === 0 ? initialAmount : 0,
-                              }))
-                            );
-
-                            setIsOrderPaymentsModalOpen(true);
-                          }}
-                          disabled={selectedItems.length === 0 || uploadStatus.inProgress || !currentCashSession}
-                        >
-                          <ShoppingCart className="h-4 w-4 mr-2" />
-                          {uploadStatus.inProgress ? "Procesando..." : "Finalizar Venta"}
-                        </Button>
+                        <Progress
+                          value={uploadStatus.progress}
+                          className="h-2 w-full"
+                        />
                       </div>
-                      <Button
-                        variant="destructive"
-                        className="w-full"
-                        onClick={() => {
-                          resetSaleState();
-                          onClose();
-                        }}
-                      >
-                        Cancelar
-                      </Button>
+                    )}
+                    
+                    {showUploadError && uploadStatus.error && (
+                      <div className="w-full p-4 bg-error-light/10 border-l-4 border-error rounded-r">
+                        <div className="flex items-start">
+                          <XCircle className="h-5 w-5 text-error mt-0.5 flex-shrink-0" />
+                          <div className="ml-3 flex-1">
+                            <div className="text-sm text-foreground font-medium">
+                              {uploadStatus.error}
+                            </div>
+                            
+                            {uploadStatus.failedFiles.length > 0 && (
+                              <div className="mt-2">
+                                <p className="text-sm text-muted-foreground">
+                                  Archivos con errores:
+                                </p>
+                                <ul className="mt-1 space-y-1.5 max-h-32 overflow-y-auto pr-2">
+                                  {uploadStatus.failedFiles.map((file, index) => (
+                                    <li key={index} className="flex items-start text-sm">
+                                      <X className="h-4 w-4 text-error/80 mt-0.5 mr-1.5 flex-shrink-0" />
+                                      <div className="break-words max-w-full">
+                                        <span className="text-foreground">{file.file.name}</span>
+                                        <span className="text-xs text-muted-foreground block">
+                                          {file.error}
+                                        </span>
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            <div className="mt-4 space-y-2">
+                              <Button
+                                type="button"
+                                variant="default"
+                                size="sm"
+                                className="w-full"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setForceSubmit(true);
+                                  setShowUploadError(false);
+                                  setIsOrderPaymentsModalOpen(true);
+                                }}
+                              >
+                                Continuar sin imágenes
+                              </Button>
+                              
+                              <div className="grid grid-cols-2 gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-full"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowUploadError(false);
+                                    setUploadStatus(prev => ({
+                                      ...prev,
+                                      error: null,
+                                      failedFiles: []
+                                    }));
+                                  }}
+                                >
+                                  Reintentar
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-full text-destructive border-destructive/50 hover:bg-destructive/5 hover:text-destructive"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowUploadError(false);
+                                    setUploadStatus(prev => ({
+                                      ...prev,
+                                      inProgress: false,
+                                      progress: 0,
+                                      error: null,
+                                      failedFiles: []
+                                    }));
+                                    // Limpiar las imágenes seleccionadas
+                                    setNewItem(prev => ({
+                                      ...prev,
+                                      images: []
+                                    }));
+                                    // Limpiar todo el estado si no hay venta en progreso
+                                    if (!selectedItems.length) {
+                                      resetSaleState();
+                                      onClose();
+                                    }
+                                  }}
+                                >
+                                  Cancelar
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Mostrar error de creación de orden */}
+                    {orderError && (
+                      <Alert variant="destructive" className="mb-4">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertTitle>Error al crear la orden</AlertTitle>
+                        <AlertDescription>
+                          {orderError.message}
+                          {orderError.code && (
+                            <span className="block mt-1 text-xs opacity-75">
+                              Código: {orderError.code}
+                            </span>
+                          )}
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    
+                    {/* Indicador de sesión de caja */}
+                    <div className="mb-4">
+                      {isLoadingCashSession ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+                          Verificando sesión de caja abierta...
+                        </div>
+                      ) : currentCashSession ? (
+                        <div className="flex items-center gap-2 text-sm text-green-600">
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          Sesión de caja abierta
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-sm text-red-600">
+                          <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                          No hay sesión de caja abierta
+                        </div>
+                      )}
                     </div>
+
+                    <Button
+                      className="w-full"
+                      size="lg"
+                      onClick={() => {
+                        const orderTotal = selectedItems.reduce((sum, item) => {
+                          const itemPrice = item.type === "service"
+                            ? item.price
+                            : item.customPrice !== undefined
+                              ? item.customPrice
+                              : item.price;
+                          return sum + (itemPrice * item.quantity);
+                        }, 0);
+
+                        const baseMethods = orderPaymentMethods.length > 0
+                          ? orderPaymentMethods
+                          : [{ id: "1", type: PaymentType.EFECTIVO, amount: 0 }];
+
+                        const hasProducts = selectedItems.some((item) => item.type === "product");
+                        const initialAmount = hasProducts ? orderTotal : 0;
+
+                        setOrderPaymentMethodsDraft(
+                          baseMethods.map((m, idx) => ({
+                            ...m,
+                            amount: idx === 0 ? initialAmount : 0,
+                          }))
+                        );
+
+                        setIsOrderPaymentsModalOpen(true);
+                      }}
+                      disabled={selectedItems.length === 0 || uploadStatus.inProgress || !currentCashSession}
+                    >
+                      <ShoppingCart className="h-4 w-4 mr-2" />
+                      {uploadStatus.inProgress ? "Procesando..." : "Finalizar Venta"}
+                    </Button>
                   </div>
-                </>
-              )}
+                  <Button
+                    variant="destructive"
+                    className="w-full"
+                    onClick={() => {
+                      resetSaleState();
+                      onClose();
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

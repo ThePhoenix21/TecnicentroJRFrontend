@@ -1252,157 +1252,169 @@ export default function ProductsPage() {
       <Dialog open={isModalOpen} onOpenChange={(open) => {
         if (!open) setIsModalOpen(false);
       }}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] p-0 overflow-hidden">
+        <DialogContent className="sm:max-w-[820px] max-h-[90vh] p-0 overflow-hidden">
           <div className="flex flex-col max-h-[90vh]">
-            <DialogHeader className="p-4 sm:p-6 pb-2 sm:pb-2 flex-shrink-0">
+            <DialogHeader className="px-6 sm:px-8 pt-6 sm:pt-7 pb-4 flex-shrink-0 border-b bg-muted/40">
               <DialogTitle className="text-lg sm:text-xl">
                 {isEditing ? 'Editar Producto' : 'Nuevo Producto'}
               </DialogTitle>
             </DialogHeader>
 
-            <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-4 sm:pb-6">
-              <form onSubmit={handleSubmit}>
-                <div className="space-y-4 sm:space-y-6">
-                  {/* Campos visibles para todos */}
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Nombre <span className="text-destructive">*</span>
-                    </label>
-                    <Input
-                      name="name"
-                      value={formData.name}
-                      onChange={handleInputChange}
-                      required
-                      disabled={isWarehouseMode ? (isEditing ? !isAdmin : false) : !canCreateProducts}
-                      className="h-10"
-                    />
-                  </div>
+            <form onSubmit={handleSubmit} className="flex flex-1 flex-col min-h-0">
+              <div className="flex-1 overflow-y-auto px-6 sm:px-8 pb-7 sm:pb-8 pt-5">
+                <div className="space-y-6">
+                  <section className="rounded-lg border bg-card p-4 sm:p-5 shadow-sm">
+                    <h3 className="text-sm font-semibold text-foreground mb-4">Datos generales</h3>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="sm:col-span-2">
+                        <label className="block text-sm font-medium mb-2">
+                          Nombre <span className="text-destructive">*</span>
+                        </label>
+                        <Input
+                          name="name"
+                          value={formData.name}
+                          onChange={handleInputChange}
+                          required
+                          disabled={isWarehouseMode ? (isEditing ? !isAdmin : false) : !canCreateProducts}
+                          className="h-10"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-sm font-medium mb-2">
+                          Descripción
+                        </label>
+                        <textarea
+                          name="description"
+                          value={formData.description}
+                          onChange={handleInputChange}
+                          className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                          rows={4}
+                          disabled={isWarehouseMode ? !isAdmin : !canCreateProducts}
+                        />
+                      </div>
+                    </div>
+                  </section>
 
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Descripción
-                    </label>
-                    <textarea
-                      name="description"
-                      value={formData.description}
-                      onChange={handleInputChange}
-                      className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                      rows={3}
-                      disabled={isWarehouseMode ? !isAdmin : !canCreateProducts}
-                    />
-                  </div>
+                  <section className="rounded-lg border bg-card p-4 sm:p-5 shadow-sm">
+                    <h3 className="text-sm font-semibold text-foreground mb-4">Precios</h3>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {!isWarehouseMode && (
+                        <div>
+                          <label className="block text-sm font-medium mb-2">
+                            Precio de venta <span className="text-destructive">*</span>
+                          </label>
+                          <Input
+                            type="number"
+                            name="price"
+                            value={formData.price}
+                            onChange={handleInputChange}
+                            min="0"
+                            step="0.01"
+                            required={canManagePricesEffective}
+                            disabled={!canManagePricesEffective}
+                            className="h-10"
+                          />
+                          {!canManagePricesEffective && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              No tienes permisos para establecer precios.
+                            </p>
+                          )}
+                        </div>
+                      )}
 
-                  {/* Campos de precios: solo editables con MANAGE_PRICES */}
-                  {!isWarehouseMode && (
-                    <div>
-                      <label className="block text-sm font-medium mb-2">
-                        Precio de venta <span className="text-destructive">*</span>
-                      </label>
-                      <>
+                      <div>
+                        <label className="block text-sm font-medium mb-2">
+                          Precio base
+                        </label>
                         <Input
                           type="number"
-                          name="price"
-                          value={formData.price}
+                          name="basePrice"
+                          value={formData.basePrice}
                           onChange={handleInputChange}
                           min="0"
                           step="0.01"
-                          required={canManagePricesEffective}
-                          disabled={!canManagePricesEffective}
+                          disabled={isWarehouseMode ? !isAdmin : !canManagePricesEffective}
                           className="h-10"
                         />
-                        {!canManagePricesEffective && (
+                      </div>
+
+                      {canViewProductCostEffective && (
+                        <div>
+                          <label className="block text-sm font-medium mb-2">
+                            Costo de compra
+                          </label>
+                          <Input
+                            type="number"
+                            name="buyCost"
+                            value={formData.buyCost}
+                            onChange={handleInputChange}
+                            min="0"
+                            step="0.01"
+                            disabled={isWarehouseMode ? !isAdmin : !canManagePricesEffective}
+                            className="h-10"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
+                  <section className="rounded-lg border bg-card p-4 sm:p-5 shadow-sm">
+                    <h3 className="text-sm font-semibold text-foreground mb-4">Inventario</h3>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">
+                          Stock <span className="text-destructive">*</span>
+                        </label>
+                        <Input
+                          type="number"
+                          name="stock"
+                          value={formData.stock}
+                          onChange={handleInputChange}
+                          min={isEditing && originalStock !== null ? originalStock : 0}
+                          placeholder="0"
+                          required
+                          disabled={isWarehouseMode ? isEditing : (isEditing ? !canManageInventory : !canCreateProducts)}
+                          className="h-10"
+                        />
+                        {isEditing && originalStock !== null && (
                           <p className="text-xs text-muted-foreground mt-1">
-                            No tienes permisos para establecer precios.
+                            Solo se permite aumentar el stock. Para reducirlo, use la sección de Inventario.
                           </p>
                         )}
-                      </>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2">
+                          Alerta de Stock
+                        </label>
+                        <Input
+                          type="number"
+                          name="stockThreshold"
+                          value={formData.stockThreshold}
+                          onChange={handleInputChange}
+                          min="1"
+                          placeholder="1"
+                          required
+                          disabled={isWarehouseMode ? (!canManageWarehouseProducts && isEditing) : !canCreateProducts}
+                          className="h-10"
+                        />
+                      </div>
                     </div>
-                  )}
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Precio base
-                    </label>
-                    <Input
-                      type="number"
-                      name="basePrice"
-                      value={formData.basePrice}
-                      onChange={handleInputChange}
-                      min="0"
-                      step="0.01"
-                      disabled={isWarehouseMode ? !isAdmin : !canManagePricesEffective}
-                      className="h-10"
-                    />
-                  </div>
-
-                  {/* Costo: solo si puede verlo y además tiene MANAGE_PRICES */}
-                  {canViewProductCostEffective && (
-                    <div>
-                      <label className="block text-sm font-medium mb-2">
-                        Costo de compra
-                      </label>
-                      <Input
-                        type="number"
-                        name="buyCost"
-                        value={formData.buyCost}
-                        onChange={handleInputChange}
-                        min="0"
-                        step="0.01"
-                        disabled={isWarehouseMode ? !isAdmin : !canManagePricesEffective}
-                        className="h-10"
-                      />
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Stock <span className="text-destructive">*</span>
-                    </label>
-                    <Input
-                      type="number"
-                      name="stock"
-                      value={formData.stock}
-                      onChange={handleInputChange}
-                      min={isEditing && originalStock !== null ? originalStock : 0}
-                      placeholder="0"
-                      required
-                      disabled={isWarehouseMode ? isEditing : (isEditing ? !canManageInventory : !canCreateProducts)}
-                      className="h-10"
-                    />
-                    {isEditing && originalStock !== null && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Solo se permite aumentar el stock. Para reducirlo, use la sección de Inventario.
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Alerta de Stock
-                    </label>
-                    <Input
-                      type="number"
-                      name="stockThreshold"
-                      value={formData.stockThreshold}
-                      onChange={handleInputChange}
-                      min="1"
-                      placeholder="1"
-                      required
-                      disabled={isWarehouseMode ? (!canManageWarehouseProducts && isEditing) : !canCreateProducts}
-                      className="h-10"
-                    />
-                  </div>
+                  </section>
                 </div>
 
-                <div className="flex flex-col sm:flex-row justify-end gap-3 pt-6 border-t mt-6">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsModalOpen(false)}
-                    className="w-full sm:w-auto h-10"
-                  >
-                    Cancelar
-                  </Button>
+              </div>
+
+              <div className="flex flex-col sm:flex-row justify-between gap-3 px-8 sm:px-10 py-5 border-t bg-background">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsModalOpen(false)}
+                  className="w-full sm:w-auto h-10"
+                >
+                  Cancelar
+                </Button>
+                <div className="flex flex-col sm:flex-row gap-3">
                   <Button
                     type="submit"
                     disabled={isSavingProduct}
@@ -1413,8 +1425,8 @@ export default function ProductsPage() {
                       : (isEditing ? 'Guardar Cambios' : 'Crear Producto')}
                   </Button>
                 </div>
-              </form>
-            </div>
+              </div>
+            </form>
           </div>
         </DialogContent>
       </Dialog>
@@ -1422,18 +1434,18 @@ export default function ProductsPage() {
       <Dialog open={detailModalOpen} onOpenChange={(open) => {
         if (!open) closeProductDetail();
       }}>
-        <DialogContent className="sm:max-w-[800px] max-h-[90vh] p-0 overflow-hidden">
+        <DialogContent className="sm:max-w-[820px] max-h-[90vh] p-0 overflow-hidden">
           <div className="flex flex-col max-h-[90vh]">
-            <DialogHeader className="p-4 sm:p-6 pb-2 sm:pb-2 flex-shrink-0">
+            <DialogHeader className="px-6 pt-6 pb-4 flex-shrink-0 border-b bg-muted/40">
               <DialogTitle className="text-lg sm:text-xl">Detalle del producto</DialogTitle>
-              <DialogDescription className="text-sm">
+              <DialogDescription className="text-sm mt-1">
                 {isWarehouseMode
                   ? 'Revisa la información del producto en el almacén y realiza ajustes si es necesario.'
                   : 'Revisa la información del producto en la tienda y realiza ajustes si es necesario.'}
               </DialogDescription>
             </DialogHeader>
 
-            <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-4 sm:pb-6">
+            <div className="flex-1 overflow-y-auto px-6 pb-6 pt-5">
               {detailLoading ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -1656,11 +1668,13 @@ export default function ProductsPage() {
               ) : null}
             </div>
 
-            <DialogFooter className="px-4 sm:px-6 py-4 border-t flex flex-col sm:flex-row gap-2 sm:justify-end">
-              <Button variant="outline" onClick={closeProductDetail} disabled={isUpdatingDetail || isDeletingStoreProduct || isDeletingCatalogProduct} className="w-full sm:w-auto h-10">
-                Cerrar
-              </Button>
-            </DialogFooter>
+            <div className="flex-shrink-0 px-8 sm:px-10 py-5 border-t bg-background">
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={closeProductDetail} disabled={isUpdatingDetail || isDeletingStoreProduct || isDeletingCatalogProduct} className="w-full sm:w-auto h-10">
+                  Cerrar
+                </Button>
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
