@@ -830,7 +830,7 @@ export default function MovimientosStockPage() {
   return (
     <div className="p-4 md:p-6 space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
           <ArrowLeftRight className="h-6 w-6 text-primary" />
           <div>
@@ -841,7 +841,7 @@ export default function MovimientosStockPage() {
           </div>
         </div>
         {canCreate && (
-          <Button onClick={openCreate} size="sm">
+          <Button onClick={openCreate} size="sm" className="w-full sm:w-auto">
             <Plus className="h-4 w-4 mr-1" />
             Nueva transferencia
           </Button>
@@ -865,19 +865,17 @@ export default function MovimientosStockPage() {
 
             {/* Filters */}
             <div className="space-y-3">
-              <div className="grid grid-cols-1 lg:grid-cols-6 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
                 {/* Usuario creador */}
-                <div className="relative lg:col-span-1">
+                <div className="relative sm:col-span-1">
                   <div className="space-y-1">
-                    <div className="relative invisible">
-                      <span className="text-xs font-medium text-muted-foreground">Usuario creador</span>
-                    </div>
+                    <span className="text-xs font-medium text-muted-foreground sm:text-xs">Usuario creador</span>
                     <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
                       <Input
                         type="search"
-                        placeholder="Buscar usuario creador..."
-                        className="pl-9"
+                        placeholder="Buscar usuario..."
+                        className="pl-8 sm:pl-9 text-xs sm:text-sm h-8 sm:h-9"
                         value={userQuery}
                         onBlur={() => setTimeout(() => setShowUserSuggestions(false), 150)}
                         onChange={(e) => {
@@ -906,7 +904,7 @@ export default function MovimientosStockPage() {
                           className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                           title="Limpiar búsqueda"
                         >
-                          <X className="h-4 w-4" />
+                          <X className="h-3 w-3 sm:h-4 sm:w-4" />
                         </button>
                       )}
                       {showUserSuggestions && userQuery.trim().length > 0 && (
@@ -923,7 +921,7 @@ export default function MovimientosStockPage() {
                                   setUserQuery(user.name);
                                   setShowUserSuggestions(false);
                                 }}
-                                className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
+                                className="block w-full px-3 py-2 text-left text-xs sm:text-sm hover:bg-muted"
                               >
                                 {user.name}
                               </button>
@@ -938,13 +936,12 @@ export default function MovimientosStockPage() {
                 {/* Código */}
                 <div className="relative">
                   <div className="space-y-1">
-                    <div className="relative invisible">
-                      <span className="text-xs font-medium text-muted-foreground">Código</span>
-                    </div>
+                    <span className="text-xs font-medium text-muted-foreground sm:text-xs">Código</span>
                     <div className="relative">
                       <Input
                         type="search"
                         placeholder="Buscar código..."
+                        className="text-xs sm:text-sm h-8 sm:h-9"
                         value={codeQuery}
                         onChange={(e) => {
                           const nextValue = e.target.value;
@@ -968,7 +965,7 @@ export default function MovimientosStockPage() {
                           className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                           title="Limpiar búsqueda"
                         >
-                          <X className="h-4 w-4" />
+                          <X className="h-3 w-3 sm:h-4 sm:w-4" />
                         </button>
                       )}
                     </div>
@@ -977,12 +974,12 @@ export default function MovimientosStockPage() {
 
                 {/* Tienda destino */}
                 <div className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">Tienda destino</span>
+                  <span className="text-xs font-medium text-muted-foreground sm:text-xs">Tienda destino</span>
                   <Select
                     value={destinationStoreFilter}
                     onValueChange={(value) => setDestinationStoreFilter(value)}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="text-xs sm:text-sm h-8 sm:h-9">
                       <SelectValue placeholder="Todas" />
                     </SelectTrigger>
                     <SelectContent className="max-h-72 overflow-y-auto">
@@ -998,9 +995,9 @@ export default function MovimientosStockPage() {
 
                 {/* Estado */}
                 <div className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">Estado</span>
+                  <span className="text-xs font-medium text-muted-foreground sm:text-xs">Estado</span>
                   <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as StockTransferStatus | "all")}>
-                    <SelectTrigger>
+                    <SelectTrigger className="text-xs sm:text-sm h-8 sm:h-9">
                       <SelectValue placeholder="Estado" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1017,9 +1014,10 @@ export default function MovimientosStockPage() {
 
                 {/* Desde */}
                 <div className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">Desde</span>
+                  <span className="text-xs font-medium text-muted-foreground sm:text-xs">Desde</span>
                   <Input
                     type="date"
+                    className="text-xs sm:text-sm h-8 sm:h-9"
                     value={fromDate}
                     onClick={(e) => e.currentTarget.showPicker?.()}
                     onChange={(e) => setFromDate(e.target.value)}
@@ -1028,9 +1026,10 @@ export default function MovimientosStockPage() {
 
                 {/* Hasta */}
                 <div className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">Hasta</span>
+                  <span className="text-xs font-medium text-muted-foreground sm:text-xs">Hasta</span>
                   <Input
                     type="date"
+                    className="text-xs sm:text-sm h-8 sm:h-9"
                     value={toDate}
                     onClick={(e) => e.currentTarget.showPicker?.()}
                     onChange={(e) => setToDate(e.target.value)}
@@ -1061,12 +1060,12 @@ export default function MovimientosStockPage() {
                 <TableHeader>
                   <TableRow className="h-9">
                     <TableHead className="text-xs font-medium pl-4">Código</TableHead>
-                    <TableHead className="text-xs font-medium">Origen</TableHead>
-                    <TableHead className="text-xs font-medium">Destino</TableHead>
-                    <TableHead className="text-xs font-medium">Creador</TableHead>
+                    <TableHead className="text-xs font-medium hidden sm:table-cell">Origen</TableHead>
+                    <TableHead className="text-xs font-medium hidden sm:table-cell">Destino</TableHead>
+                    <TableHead className="text-xs font-medium hidden sm:table-cell">Creador</TableHead>
                     <TableHead className="text-center text-xs font-medium">Productos</TableHead>
                     <TableHead className="text-center text-xs font-medium">Estado</TableHead>
-                    <TableHead className="text-right text-xs font-medium pr-4">Fecha</TableHead>
+                    <TableHead className="text-right text-xs font-medium pr-4 hidden sm:table-cell">Fecha</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1079,19 +1078,19 @@ export default function MovimientosStockPage() {
                       <TableCell className="font-mono text-xs font-semibold pl-4">
                         {t.code}
                       </TableCell>
-                      <TableCell className="text-sm max-w-[160px]">
+                      <TableCell className="text-sm max-w-[160px] hidden sm:table-cell">
                         <span className="text-xs text-muted-foreground mr-1">
                           [{establishmentTypeLabel(t.origin.type)}]
                         </span>
                         <span className="truncate">{t.origin.name}</span>
                       </TableCell>
-                      <TableCell className="text-sm max-w-[160px]">
+                      <TableCell className="text-sm max-w-[160px] hidden sm:table-cell">
                         <span className="text-xs text-muted-foreground mr-1">
                           [{establishmentTypeLabel(t.destination.type)}]
                         </span>
                         <span className="truncate">{t.destination.name}</span>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
+                      <TableCell className="text-sm text-muted-foreground hidden sm:table-cell">
                         {t.createdBy.name}
                       </TableCell>
                       <TableCell className="text-center text-sm text-muted-foreground">
@@ -1101,23 +1100,25 @@ export default function MovimientosStockPage() {
                         <div className="inline-flex flex-col items-center gap-1">
                           <span
                             className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                              statusConfig[t.status]?.className || "bg-gray-100 text-gray-800"
+                              t.status === "COMPLETED"
+                                ? "bg-green-100 text-green-800"
+                                : t.status === "ANNULLATED"
+                                ? "bg-red-100 text-red-800"
+                                : t.status === "PENDING"
+                                ? "bg-blue-100 text-blue-800"
+                                : t.status === "PARTIAL" || t.status === "PARTIALLY_RECEIVED"
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-gray-100 text-gray-800"
                             }`}
                           >
                             {statusConfig[t.status]?.label || t.status}
                           </span>
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${
-                              t.transferType === "REQUEST"
-                                ? "bg-purple-100 text-purple-800"
-                                : "bg-green-100 text-green-800"
-                            }`}
-                          >
+                          <span className="text-xs text-muted-foreground">
                             {t.transferType === "REQUEST" ? "Solicitud" : "Envío"}
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-right text-xs text-muted-foreground pr-4">
+                      <TableCell className="text-right text-xs text-muted-foreground pr-4 hidden sm:table-cell">
                         {formatDate(t.createdAt)}
                       </TableCell>
                     </TableRow>
@@ -1191,10 +1192,10 @@ export default function MovimientosStockPage() {
                       <TableHeader>
                         <TableRow className="h-9">
                           <TableHead className="text-xs font-medium pl-4">Código</TableHead>
-                          <TableHead className="text-xs font-medium">Origen</TableHead>
-                          <TableHead className="text-xs font-medium">Destino</TableHead>
+                          <TableHead className="text-xs font-medium hidden sm:table-cell">Origen</TableHead>
+                          <TableHead className="text-xs font-medium hidden sm:table-cell">Destino</TableHead>
                           <TableHead className="text-center text-xs font-medium">Estado</TableHead>
-                          <TableHead className="text-right text-xs font-medium">Acción</TableHead>
+                          <TableHead className="text-right text-xs font-medium pr-4">Acción</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1203,13 +1204,13 @@ export default function MovimientosStockPage() {
                             <TableCell className="font-mono text-xs font-semibold pl-4">
                               {t.code}
                             </TableCell>
-                            <TableCell className="text-sm max-w-[160px]">
+                            <TableCell className="text-sm max-w-[160px] hidden sm:table-cell">
                               <span className="text-xs text-muted-foreground mr-1">
                                 [{establishmentTypeLabel(t.origin.type)}]
                               </span>
                               <span className="truncate">{t.origin.name}</span>
                             </TableCell>
-                            <TableCell className="text-sm max-w-[160px]">
+                            <TableCell className="text-sm max-w-[160px] hidden sm:table-cell">
                               <span className="text-xs text-muted-foreground mr-1">
                                 [{establishmentTypeLabel(t.destination.type)}]
                               </span>
@@ -1284,7 +1285,7 @@ export default function MovimientosStockPage() {
           MODAL: DETALLE
       ═══════════════════════════════════ */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto sm:max-w-md w-[95%] mx-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ArrowLeftRight className="h-4 w-4" />
@@ -1551,7 +1552,7 @@ export default function MovimientosStockPage() {
           MODAL: CREAR
       ═══════════════════════════════════ */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto sm:max-w-md w-[95%] mx-auto">
           <DialogHeader>
             <DialogTitle>Nueva transferencia de stock</DialogTitle>
           </DialogHeader>
@@ -1755,7 +1756,7 @@ export default function MovimientosStockPage() {
           MODAL: RECEPCIONAR
       ═══════════════════════════════════ */}
       <Dialog open={receiveOpen} onOpenChange={setReceiveOpen}>
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto sm:max-w-xl w-full mx-auto">
           <DialogHeader>
             <DialogTitle>Recepcionar transferencia</DialogTitle>
           </DialogHeader>
@@ -1827,7 +1828,7 @@ export default function MovimientosStockPage() {
           MODAL: ANULAR
       ═══════════════════════════════════ */}
       <Dialog open={annulOpen} onOpenChange={setAnnulOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md sm:max-w-md w-full mx-auto">
           <DialogHeader>
             <DialogTitle>Anular transferencia</DialogTitle>
           </DialogHeader>
@@ -1870,7 +1871,7 @@ export default function MovimientosStockPage() {
           MODAL: EDITAR (solo ISSUED)
       ═══════════════════════════════════ */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto sm:max-w-md w-[95%] mx-auto">
           <DialogHeader>
             <DialogTitle>Editar transferencia</DialogTitle>
           </DialogHeader>
