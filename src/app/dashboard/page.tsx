@@ -11,6 +11,9 @@ import { useAnalytics } from "@/hooks/useAnalytics";
 import type { AnalyticsQueryParams, PaymentType } from "@/types/analytics.types";
 import type { DashboardQueryParams } from "@/types/dashboard.types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AccessDeniedView } from '@/components/auth/access-denied-view';
+import { ProtectedButton } from '@/components/auth/protected-button';
+import { PermissionGuard } from '@/components/auth/permission-guard';
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -333,7 +336,7 @@ function EndpointErrorAlerts({
 export default function DashboardPage() {
   const { currentStore, hasPermission } = useAuth();
   const dashboard = useDashboard();
-  const analytics = useAnalytics();
+  const analytics = hasPermission('VIEW_ANALYTICS') ? useAnalytics() : null;
   const {
     summary,
     charts,
@@ -366,7 +369,31 @@ export default function DashboardPage() {
     userRankingsError,
     fetchNetProfit,
     fetchAnalytics,
-  } = analytics;
+  } = analytics || {
+    overview: null,
+    incomeTimeseries: null,
+    income: null,
+    netProfit: null,
+    expenses: null,
+    paymentMethodsSummary: null,
+    userRankings: null,
+    overviewLoading: false,
+    incomeTimeseriesLoading: false,
+    incomeLoading: false,
+    netProfitLoading: false,
+    expensesLoading: false,
+    paymentMethodsLoading: false,
+    userRankingsLoading: false,
+    loading: false,
+    overviewError: null,
+    incomeError: null,
+    netProfitError: null,
+    expensesError: null,
+    paymentMethodsError: null,
+    userRankingsError: null,
+    fetchNetProfit: () => Promise.resolve(),
+    fetchAnalytics: () => Promise.resolve(),
+  };
 
   const [activeTab, setActiveTab] = useState<TabValue>("dashboard");
   const [from, setFrom] = useState("");
@@ -422,11 +449,15 @@ export default function DashboardPage() {
     if (!currentStore?.id) return;
     try {
       const params: DashboardQueryParams = { ...commonParams, storeId: currentStore.id };
+      console.log('DEBUG: Loading dashboard with params:', params);
       await fetchDashboard(params);
-    } catch {
+      console.log('DEBUG: Dashboard loaded successfully, summary:', summary, 'charts:', charts);
+    } catch (error) {
+      console.error('Error loading dashboard:', error);
+      console.error('Dashboard params were:', { ...commonParams, storeId: currentStore.id });
       toast.error("No se pudo cargar Panel de control.");
     }
-  }, [currentStore?.id, fetchDashboard, commonParams]);
+  }, [currentStore?.id, fetchDashboard, commonParams, summary, charts]);
 
   const loadAnalytics = useCallback(async () => {
     if (!hasPermission('VIEW_ANALYTICS')) return;
@@ -441,8 +472,10 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!from || !to || !currentStore?.id) return;
     void loadDashboard();
-    void loadAnalytics();
-  }, [from, to, currentStore?.id, loadDashboard, loadAnalytics]);
+    if (hasPermission('VIEW_ANALYTICS')) {
+      void loadAnalytics();
+    }
+  }, [from, to, currentStore?.id]);
 
   useEffect(() => {
     if (!timelineParams) return;
@@ -572,6 +605,11 @@ export default function DashboardPage() {
         series: userRankings.charts.productsRanking.series,
       }
     : null;
+
+  // Verificar permisos de acceso al dashboard
+  if (!hasPermission('VIEW_DASHBOARD')) {
+    return <AccessDeniedView />;
+  }
 
   const allLoading = dashboardLoading || analyticsLoading;
 

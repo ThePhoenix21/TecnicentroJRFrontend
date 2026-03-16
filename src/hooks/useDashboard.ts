@@ -3,9 +3,11 @@
 import { useCallback, useMemo, useState } from "react";
 import { getDashboardCharts, getDashboardSummary } from "@/api/dashboard.api";
 import { normalizeApiError, type ApiRequestError } from "@/api/common";
+import { useAuth } from "@/contexts/auth-context";
 import type { DashboardChartsResponse, DashboardQueryParams, DashboardSummaryResponse } from "@/types/dashboard.types";
 
 export function useDashboard() {
+  const { logout } = useAuth();
   const [summary, setSummary] = useState<DashboardSummaryResponse | null>(null);
   const [charts, setCharts] = useState<DashboardChartsResponse | null>(null);
 
@@ -66,6 +68,14 @@ export function useDashboard() {
         const normalized = normalizeApiError(error);
         setSummaryError(normalized);
         setChartsError(normalized);
+        if (normalized.status === 429) {
+          setSummary(null);
+          setCharts(null);
+          // No hacer logout por 429, solo mostrar error
+          console.warn('Rate limit exceeded for dashboard. Please wait before retrying.');
+        } else if (normalized.status === 401) {
+          logout();
+        }
         throw normalized;
       } finally {
         setSummaryLoading(false);
