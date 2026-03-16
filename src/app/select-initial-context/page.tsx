@@ -71,7 +71,8 @@ export default function SelectInitialContextPage() {
     setIsNetworkError(false);
     setIsSubmitting(true);
     try {
-      await selectStore(store);
+      await selectStore(store, { reload: false });
+      router.replace('/dashboard');
       return;
     } catch (err: any) {
       const status = err?.response?.status;
@@ -104,7 +105,8 @@ export default function SelectInitialContextPage() {
     setIsNetworkError(false);
     setIsSubmitting(true);
     try {
-      await selectWarehouse(warehouse);
+      await selectWarehouse(warehouse, { reload: false });
+      router.replace('/dashboard');
       return;
     } catch (err: any) {
       const status = err?.response?.status;

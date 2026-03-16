@@ -71,8 +71,8 @@ interface AuthContextType {
   canIssuePdf: boolean;
   login: (email: string, password: string, context?: LoginContextPayload) => Promise<User | null>;
   logout: (redirect?: boolean) => void;
-  selectStore: (store: AuthStore) => Promise<void>;
-  selectWarehouse: (warehouse: AuthStore) => Promise<void>;
+  selectStore: (store: AuthStore, options?: { reload?: boolean }) => Promise<void>;
+  selectWarehouse: (warehouse: AuthStore, options?: { reload?: boolean }) => Promise<void>;
   refreshStores: () => Promise<void>;
   isAuthenticated: boolean;
   isAdmin: boolean;
@@ -244,7 +244,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadRealStores]);
 
   // Función para seleccionar tienda (selección local; no cambia JWT)
-  const selectStore = useCallback(async (store: AuthStore) => {
+  const selectStore = useCallback(async (store: AuthStore, options?: { reload?: boolean }) => {
     setUser((prev) => {
       if (!prev) return prev;
       const merged = {
@@ -266,14 +266,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setCurrentStore(store);
     setCurrentWarehouse(null);
 
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && options?.reload !== false) {
       // Recargar la página actual para actualizar datos sin cambiar de sección
       window.location.reload();
     }
   }, [logout]);
 
   // Función para seleccionar almacén (selección local; no cambia JWT)
-  const selectWarehouse = useCallback(async (warehouse: AuthStore) => {
+  const selectWarehouse = useCallback(async (warehouse: AuthStore, options?: { reload?: boolean }) => {
     setUser((prev) => {
       if (!prev) return prev;
       const merged = {
@@ -295,7 +295,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setCurrentWarehouse(warehouse);
     setCurrentStore(null);
 
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && options?.reload !== false) {
       // Recargar la página actual para actualizar datos sin cambiar de sección
       window.location.reload();
     }
