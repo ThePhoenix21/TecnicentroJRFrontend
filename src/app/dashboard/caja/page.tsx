@@ -78,6 +78,9 @@ export default function CajaPage() {
   
   // Permiso para impresión
   const canPrintCashClosure = isAdmin || hasPermission?.("PRINT_CASH_CLOSURE");
+  
+  // Permiso para ver sesiones abiertas
+  const canViewOpenSessions = isAdmin || hasPermission?.("VIEW_ALL_CASH_OPEN");
 
   const [currentSession, setCurrentSession] = useState<CashSession | null>(null);
   const [balance, setBalance] = useState<CashBalance | null>(null);
@@ -874,7 +877,7 @@ export default function CajaPage() {
         <TabsList>
           <TabsTrigger value="open">Caja abierta</TabsTrigger>
           {canViewHistory && <TabsTrigger value="history">Historial de cajas</TabsTrigger>}
-          <TabsTrigger value="open-sessions">Sesiones abiertas</TabsTrigger>
+          {canViewOpenSessions && <TabsTrigger value="open-sessions">Sesiones abiertas</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="open">

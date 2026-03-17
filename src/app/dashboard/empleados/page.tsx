@@ -1841,8 +1841,7 @@ export default function EmpleadosPage() {
           <div className="flex-shrink-0 border-t bg-background">
             <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between px-6 py-4">
               <ProtectedButton
-                permissions={['RECREATE_EMPLOYEE', 'MANAGE_EMPLOYEES']}
-                requireAll
+                permissions="RECREATE_EMPLOYEE"
                 variant="destructive"
                 onClick={openRecreate}
                 disabled={detailLoading || editSubmitting}
@@ -1854,7 +1853,7 @@ export default function EmpleadosPage() {
 
               <DialogFooter className="gap-2 sm:gap-2">
                 <ProtectedButton
-                  permissions="MANAGE_EMPLOYEES"
+                  permissions="CONVERT_EMPLOYEE_TO_USER"
                   variant="outline"
                   onClick={openConvert}
                   disabled={detailLoading || editSubmitting || !!detail?.userId}

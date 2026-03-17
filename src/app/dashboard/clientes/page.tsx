@@ -100,6 +100,7 @@ function ClientesContent() {
       )
     );
     setIsEditModalOpen(false);
+    setIsDetailsOpen(false); // Cerrar también el modal de detalles
     setEditingClient(null);
   };
 

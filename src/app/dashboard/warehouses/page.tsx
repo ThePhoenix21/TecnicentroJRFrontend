@@ -437,14 +437,16 @@ export default function WarehousesPage() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                <Button
-                  onClick={openCreate}
-                  className="w-full sm:w-auto bg-primary hover:bg-primary/90 transition-colors"
-                  size="sm"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Nuevo almacén
-                </Button>
+                {hasPermission('MANAGE_WAREHOUSES') && (
+                  <Button
+                    onClick={openCreate}
+                    className="w-full sm:w-auto bg-primary hover:bg-primary/90 transition-colors"
+                    size="sm"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Nuevo almacén
+                  </Button>
+                )}
               </div>
             </div>
 
