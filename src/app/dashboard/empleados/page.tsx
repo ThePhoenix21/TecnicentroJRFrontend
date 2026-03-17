@@ -802,6 +802,7 @@ export default function EmpleadosPage() {
       );
       toast.success("Usuario creado desde empleado");
       closeConvert();
+      closeDetail();
       await loadEmployees();
       if (selectedEmployeeId) {
         const refreshed = await employedService.getEmployedById(selectedEmployeeId);
