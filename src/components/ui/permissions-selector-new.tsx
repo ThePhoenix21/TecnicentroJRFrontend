@@ -17,7 +17,7 @@ const formatPermissionLabel = (permission: string): string => {
   if (permission === "DETAIL_ORDERS") return "Ver detalle de ventas";
   if (permission === "VIEW_STORES") return "Ver tiendas";
   if (permission === "MANAGE_STORES") return "Gestionar tiendas";
-  if (permission === "CHANGE_STORE_LOGO") return "Cambiar logo de tienda";
+  if (permission === "CHANGE_STORE_LOGO") return "Cambiar logo de empresa";
   if (permission === "VIEW_ALL_CASH_HISTORY") return "Ver todo el historial de caja";
   if (permission === "VIEW_OWN_CASH_HISTORY") return "Ver mi historial de caja";
   if (permission === "PRINT_CASH_CLOSURE") return "Imprimir cierre de caja";
@@ -56,6 +56,7 @@ const formatPermissionLabel = (permission: string): string => {
   if (permission === "VIEW_INVENTORY") return "Ver inventario";
   if (permission === "MANAGE_INVENTORY") return "Gestionar inventario";
   if (permission === "START_PHYSICAL_INVENTORY") return "Iniciar inventario físico";
+  if (permission === "ADJUST_CLOSE_INVENTORY") return "Ajustar y cerrar inventario";
   if (permission === "VIEW_CLIENTS") return "Ver clientes";
   if (permission === "MANAGE_CLIENTS") return "Gestionar clientes";
   if (permission === "VIEW_ANALYTICS") return "Ver analíticas";
@@ -63,6 +64,12 @@ const formatPermissionLabel = (permission: string): string => {
   if (permission === "VIEW_ALL_CASH_OPEN") return "Ver todas las cajas abiertas";
   if (permission === "VIEW_ALL_SERVICES") return "Ver todos los servicios";
   if (permission === "RECREATE_EMPLOYEE") return "Recrear empleado";
+  if (permission === "VIEW_STOCK_TRANSFERS") return "Ver transferencias de stock";
+  if (permission === "CREATE_STOCK_TRANSFER") return "Crear transferencia de stock";
+  if (permission === "CONFIRM_STOCK_TRANSFER") return "Confirmar transferencia de stock";
+  if (permission === "CANCEL_STOCK_TRANSFER") return "Cancelar transferencia de stock";
+  if (permission === "EDIT_STOCK_TRANSFER") return "Editar transferencia de stock";
+  if (permission === "RECEIVE_STOCK_TRANSFER") return "Recibir transferencia de stock";
 
   const tokens = permission
     .toLowerCase()
@@ -110,13 +117,21 @@ const formatPermissionLabel = (permission: string): string => {
     create: "Crear",
     add: "Agregar",
     update: "Editar",
-    edit: "Editar",
     delete: "Eliminar",
     remove: "Eliminar",
     manage: "Gestionar",
     export: "Exportar",
     print: "Imprimir",
     approve: "Aprobar",
+    stocks: "Stock",
+    stock: "Stock",
+    transfers: "Transferencias",
+    transfer: "Transferencia",
+    confirm: "Confirmar",
+    cancel: "Cancelar",
+    edit: "Editar",
+    receive: "Recibir",
+    adjust: "Ajustar",
     close: "Cerrar",
   };
 

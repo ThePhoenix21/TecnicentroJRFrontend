@@ -45,8 +45,9 @@ export function ActiveSessionView({
   onBack,
   canManageSession = false,
 }: ActiveSessionViewProps) {
-  const { isAdmin, canIssuePdf } = useAuth();
+  const { isAdmin, canIssuePdf, hasPermission } = useAuth();
   const canManage = isAdmin || canManageSession;
+  const canAdjustCloseInventory = isAdmin || hasPermission?.("ADJUST_CLOSE_INVENTORY");
   const { toast } = useToast();
   
   // Calcular si la sesión está abierta basado en finalizedAt (si es null, está abierta)
@@ -557,15 +558,17 @@ export function ActiveSessionView({
             >
               Cerrar sin cuadrar
             </Button>
-            <Button
-              onClick={async () => {
-                setShowCloseConfirm(false);
-                await reconcileAndCloseSession();
-              }}
-              disabled={isClosing || isReconciling}
-            >
-              Cuadrar y cerrar
-            </Button>
+            {canAdjustCloseInventory && (
+              <Button
+                onClick={async () => {
+                  setShowCloseConfirm(false);
+                  await reconcileAndCloseSession();
+                }}
+                disabled={isClosing || isReconciling}
+              >
+                Cuadrar y cerrar
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
