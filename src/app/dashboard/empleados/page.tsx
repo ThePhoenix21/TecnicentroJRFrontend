@@ -1751,18 +1751,16 @@ export default function EmpleadosPage() {
                   <Input value={new Date(detail.audit?.updatedAt ?? detail.updatedAt).toLocaleString()} disabled />
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Fecha de eliminación</label>
-                  {(() => {
-                    const deletedAt = detail.audit?.deletedAt ?? detail.deletedAt;
-                    return (
-                      <Input
-                        value={deletedAt ? new Date(deletedAt).toLocaleString() : "-"}
-                        disabled
-                      />
-                    );
-                  })()}
-                </div>
+                {(() => {
+                  const deletedAt = detail.audit?.deletedAt ?? detail.deletedAt;
+                  if (!deletedAt) return null;
+                  return (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Fecha de eliminación</label>
+                      <Input value={new Date(deletedAt).toLocaleString()} disabled />
+                    </div>
+                  );
+                })()}
 
                 <div className="space-y-2 sm:col-span-2">
                   <label className="text-sm font-medium">Documentos ({detail.documents?.length ?? detail.documentUrls?.length ?? 0})</label>
@@ -2206,7 +2204,13 @@ export default function EmpleadosPage() {
                     {e.firstName} {e.lastName}
                   </div>
                   <div className="text-sm text-muted-foreground">Documento: {e.document}</div>
-                  <div className="text-sm">Estado: {e.status}</div>
+                  <div className="text-sm">Estado: {statusLabel[e.status] ?? e.status}</div>
+                  <div className="text-sm">
+                    Fecha de eliminación: {(() => {
+                      const deletedAt = e.audit?.deletedAt ?? e.deletedAt;
+                      return deletedAt ? new Date(deletedAt).toLocaleString() : '-';
+                    })()}
+                  </div>
                   <div className="text-sm">Cargo: {e.position}</div>
                   <div className="text-sm">Teléfono: {e.phone ?? "-"}</div>
                   <div className="text-sm">Email: {e.email ?? "-"}</div>

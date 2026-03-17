@@ -49,6 +49,8 @@ interface UserTableProps {
   onSearchChange?: (search: string) => void;
 }
 
+type DeleteUserMode = "USER_ONLY" | "SUSPEND_EMPLOYEE" | "DELETE_EMPLOYEE";
+
 export function UserTable({
   searchTerm = '',
   establishmentId = '',
@@ -63,6 +65,10 @@ export function UserTable({
   const [currentPage, setCurrentPage] = useState(1);
   const [showDeletedUsers, setShowDeletedUsers] = useState(false); // Por defecto ocultar eliminados
   const [recoveryModalOpen, setRecoveryModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletingUser, setDeletingUser] = useState<User | null>(null);
+  const [deleteMode, setDeleteMode] = useState<DeleteUserMode>("SUSPEND_EMPLOYEE");
+  const [isDeleting, setIsDeleting] = useState(false);
   const itemsPerPage = 10;
 
   const handleEditClick = (user: User) => {
@@ -168,6 +174,10 @@ export function UserTable({
         label: "Inactivo", 
         variant: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
       },
+      SUSPENDED: {
+        label: "Suspendido",
+        variant: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+      },
       DELETED: {
         label: "Eliminado",
         variant: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
@@ -181,28 +191,54 @@ export function UserTable({
   };
 
 
-  const handleDelete = async (userId: string) => {
+  const openDeleteModal = (user: User) => {
     if (!canDeleteUsers()) {
       toast.error('No tienes permisos para eliminar usuarios (DELETE_USERS requerido)');
       return;
     }
 
-    if (!confirm("¿Estás seguro de que deseas eliminar este usuario?\n\nEsta acción realizará un soft delete y el usuario pasará a estado 'ELIMINADO'.")) {
+    setDeletingUser(user);
+    setDeleteMode("SUSPEND_EMPLOYEE");
+    setDeleteModalOpen(true);
+  };
+
+  const closeDeleteModal = () => {
+    if (isDeleting) return;
+    setDeleteModalOpen(false);
+    setDeletingUser(null);
+    setDeleteMode("SUSPEND_EMPLOYEE");
+  };
+
+  const handleDelete = async () => {
+    if (!deletingUser) {
       return;
     }
 
+    const deleteEmployed = deleteMode === "USER_ONLY"
+      ? undefined
+      : deleteMode === "DELETE_EMPLOYEE";
+
     try {
-      // Llamar al endpoint de soft delete del backend
-      await userService.deleteUser(userId);
+      setIsDeleting(true);
+      await userService.deleteUser(deletingUser.id, deleteEmployed);
       
-      // Actualizar la lista de usuarios
       await fetchUsers();
 
-      toast.success("¡Usuario eliminado correctamente!");
+      const successMessage =
+        deleteMode === "USER_ONLY"
+          ? "Se eliminó el usuario del sistema."
+          : deleteMode === "SUSPEND_EMPLOYEE"
+            ? "Se eliminó el usuario y se suspendió el empleado asociado."
+            : "Se eliminó el usuario y también se marcó el empleado como inactivo/eliminado.";
+
+      toast.success(successMessage);
+      closeDeleteModal();
     } catch (err) {
       console.error("Error al eliminar usuario:", err);
       const errorMessage = err instanceof Error ? err.message : "Error al eliminar el usuario";
       toast.error(`Error al eliminar el usuario: ${errorMessage}`);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -438,9 +474,9 @@ export function UserTable({
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => handleDelete(user.id)}
+                      onClick={() => openDeleteModal(user)}
                       className="h-8 w-8 text-destructive hover:text-destructive/90 md:opacity-0 md:group-hover:opacity-100"
-                      title="Desactivar usuario"
+                      title="Eliminar usuario"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -567,6 +603,75 @@ export function UserTable({
           </DialogHeader>
           <DialogFooter>
             <Button onClick={() => setRecoveryModalOpen(false)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteModalOpen} onOpenChange={(open) => (open ? setDeleteModalOpen(true) : closeDeleteModal())}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Eliminar usuario</DialogTitle>
+            <DialogDescription>
+              Elige qué hacer con el empleado asociado durante la eliminación del usuario.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Usuario: <span className="font-medium text-foreground">{deletingUser?.name ?? "-"}</span>
+            </p>
+
+            <label className="flex items-start gap-3 rounded-md border p-3 cursor-pointer">
+              <input
+                type="radio"
+                name="delete-user-mode"
+                className="mt-1"
+                checked={deleteMode === "USER_ONLY"}
+                onChange={() => setDeleteMode("USER_ONLY")}
+                disabled={isDeleting}
+              />
+              <div>
+                <p className="text-sm font-medium">Solo eliminar usuario</p>
+                <p className="text-xs text-muted-foreground">DELETE /api/users/{'{userId}'} → Usuario: DELETED</p>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-3 rounded-md border p-3 cursor-pointer">
+              <input
+                type="radio"
+                name="delete-user-mode"
+                className="mt-1"
+                checked={deleteMode === "SUSPEND_EMPLOYEE"}
+                onChange={() => setDeleteMode("SUSPEND_EMPLOYEE")}
+                disabled={isDeleting}
+              />
+              <div>
+                <p className="text-sm font-medium">Eliminar usuario y suspender empleado</p>
+                <p className="text-xs text-muted-foreground">DELETE /api/users/{'{userId}'}?deleteEmployed=false → Usuario: DELETED, Empleado: SUSPENDED</p>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-3 rounded-md border p-3 cursor-pointer">
+              <input
+                type="radio"
+                name="delete-user-mode"
+                className="mt-1"
+                checked={deleteMode === "DELETE_EMPLOYEE"}
+                onChange={() => setDeleteMode("DELETE_EMPLOYEE")}
+                disabled={isDeleting}
+              />
+              <div>
+                <p className="text-sm font-medium">Eliminar usuario y eliminar empleado</p>
+                <p className="text-xs text-muted-foreground">DELETE /api/users/{'{userId}'}?deleteEmployed=true → Usuario: DELETED, Empleado: INACTIVE + deletedAt</p>
+              </div>
+            </label>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDeleteModal} disabled={isDeleting}>Cancelar</Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting || !deletingUser}>
+              {isDeleting ? "Eliminando..." : "Confirmar eliminación"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

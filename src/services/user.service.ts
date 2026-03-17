@@ -172,9 +172,14 @@ class UserService {
   }
 
   // Eliminar usuario (soft delete) - requiere ADMIN
-  async deleteUser(id: string): Promise<UserResponse> {
+  // deleteEmployed:
+  // - undefined: solo elimina usuario
+  // - false: elimina usuario y suspende empleado
+  // - true: elimina usuario y marca empleado como inactivo + deletedAt
+  async deleteUser(id: string, deleteEmployed?: boolean): Promise<UserResponse> {
     try {
-      const response = await api.delete<UserResponse>(`${this.baseUrl}/${id}`);
+      const query = typeof deleteEmployed === 'boolean' ? `?deleteEmployed=${deleteEmployed}` : '';
+      const response = await api.delete<UserResponse>(`${this.baseUrl}/${id}${query}`);
       return response.data;
     } catch (error) {
       this.handleError(error);
