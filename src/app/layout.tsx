@@ -21,8 +21,8 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: 'Tecnicentro JR - Gestión',
-  description: 'Sistema de gestión para Tecnicentro JR',
+  title: 'Ignis System',
+  description: 'Sistema de gestión de Ignis System',
   generator: 'Next.js',
   manifest: '/manifest.json',
   appleWebApp: {

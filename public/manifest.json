@@ -1,23 +1,16 @@
 {
-  "name": "Tecnicentro JR",
-  "short_name": "Tecnicentro",
-  "description": "Sistema de gestión para Tecnicentro JR",
+  "name": "Ignis System",
+  "short_name": "Ignis",
+  "description": "Sistema de gestión para Ignis System",
   "start_url": "/login",
   "display": "standalone",
   "background_color": "#000000",
   "icons": [
     {
-      "src": "/icons/icon-192x192.png",
-      "sizes": "192x192",
+      "src": "/icons/logo_ignis.png",
+      "sizes": "416x439",
       "type": "image/png",
       "purpose": "any maskable"
-    },
-    
-    
-    {
-      "src": "/icons/icon-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png"
     }
   ]
 }

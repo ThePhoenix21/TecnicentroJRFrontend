@@ -112,8 +112,15 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 to-background p-4">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
+          <div className="mb-6 flex justify-center">
+            <img
+              src="/icons/logo_ignis.png"
+              alt="Ignis System Logo"
+              className="h-48 w-auto"
+            />
+          </div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            Phoenix - System
+            Ignis System
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Inicia sesión para acceder al panel de control
