@@ -29,6 +29,8 @@ import ReceiptThermalPDF from './ReceiptThermalPDF';
 import { clientService } from '@/services/client.service';
 import { cashSessionService } from "@/services/cash-session.service";
 import { orderService } from "@/services/order.service";
+import { storeService } from "@/services/store.service";
+import type { Store } from "@/types/store";
 import { formatCurrency } from "@/lib/utils";
 
 // Definir el tipo para los props del PDFDownloadLink
@@ -166,7 +168,7 @@ export function SaleForm({
   products,
   services,
 }: SaleFormProps) {
-  const { currentStore, tenantFeatures, tenantFeaturesLoaded, tenantDefaultService, tenantDefaultServiceLoaded, canIssuePdf, hasPermission, tenantName } = useAuth();
+  const { user, currentStore, tenantFeatures, tenantFeaturesLoaded, tenantDefaultService, tenantDefaultServiceLoaded, canIssuePdf, hasPermission, tenantName } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState<CartItem[]>([]);
@@ -185,6 +187,7 @@ export function SaleForm({
   const [orders, setOrders] = useState<Order[]>([]);
   const [currentCashSession, setCurrentCashSession] = useState<string | null>(null);
   const [isLoadingCashSession, setIsLoadingCashSession] = useState(false);
+  const [currentStoreDetails, setCurrentStoreDetails] = useState<Store | null>(null);
 
   const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
   const hasSalesOfProducts = normalizedTenantFeatures.includes('SALESOFPRODUCTS');
@@ -254,9 +257,6 @@ export function SaleForm({
     paymentTotal: 0,
     pendingItem: null,
   });
-
-  // Obtener información del usuario autenticado
-  const { user } = useAuth();
 
   const [newItem, setNewItem] = useState<NewItemForm>({
     id: "",
@@ -529,6 +529,29 @@ export function SaleForm({
       setShowUploadError(false);
     }
   }, [isOpen, resetSaleState]);
+
+  useEffect(() => {
+    if (!currentStore?.id) {
+      setCurrentStoreDetails(null);
+      return;
+    }
+
+    let active = true;
+    const loadStoreDetails = async () => {
+      try {
+        const store = await storeService.getStoreById(currentStore.id);
+        if (active) setCurrentStoreDetails(store);
+      } catch (error) {
+        console.error("Error al cargar datos de la tienda actual:", error);
+        if (active) setCurrentStoreDetails(null);
+      }
+    };
+
+    void loadStoreDetails();
+    return () => {
+      active = false;
+    };
+  }, [currentStore?.id]);
 
   const filteredItems = (): (Product | Service)[] => {
     if (!searchTerm.trim()) return [];
@@ -1742,8 +1765,8 @@ export function SaleForm({
 
   const businessInfo: BusinessInfo = {
     name: orderResponse?.businessName || tenantName || "Negocio",
-    address: orderResponse?.address || "",
-    phone: orderResponse?.phone || "",
+    address: orderResponse?.address || currentStoreDetails?.address || "",
+    phone: orderResponse?.phone || currentStoreDetails?.phone || "",
     email: orderResponse?.email || "",
     ruc: orderResponse?.ruc || "",
     cuit: "",

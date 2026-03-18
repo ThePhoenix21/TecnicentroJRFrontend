@@ -86,6 +86,7 @@ export default function CajaPage() {
   const [balance, setBalance] = useState<CashBalance | null>(null);
   const [loading, setLoading] = useState(true);
   const [openingAmount, setOpeningAmount] = useState('0');
+  const [showOpenCashModal, setShowOpenCashModal] = useState(false);
   const [isOpening, setIsOpening] = useState(false);
   const [openCashConflictModal, setOpenCashConflictModal] = useState<{
     open: boolean;
@@ -558,21 +559,24 @@ export default function CajaPage() {
       toast.error('No tienes permisos para abrir la caja (MANAGE_CASH requerido)');
       return;
     }
-    if (!currentStore || !openingAmount) {
-      toast.error('Por favor ingrese un monto de apertura');
+    if (!currentStore) {
+      toast.error('No se pudo detectar la tienda actual');
       return;
     }
 
     try {
       setIsOpening(true);
+      const resolvedOpeningAmount = openingAmount?.trim() ? parseFloat(openingAmount) : 0;
+
       await cashSessionService.createCashSession({
         storeId: currentStore.id,
-        openingAmount: parseFloat(openingAmount)
+        openingAmount: Number.isNaN(resolvedOpeningAmount) ? 0 : resolvedOpeningAmount
       });
       
       toast.success('Caja abierta exitosamente');
       await loadCurrentSession();
       setOpeningAmount('0');
+      setShowOpenCashModal(false);
     } catch (error: any) {
       const status = error?.response?.status;
       const responseData = error?.response?.data;
@@ -1204,41 +1208,85 @@ export default function CajaPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Formulario para abrir caja */}
+      {/* Apertura de caja */}
       {!currentSession && canManageCash && canViewCash && (
         <Card>
           <CardHeader>
-            <CardTitle>Abrir Caja</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Inicia una nueva sesión de caja para comenzar a registrar operaciones
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-              <div className="flex-1">
-                <label className="text-sm font-medium">Monto Inicial</label>
-                <Input
-                  type="number"
-                  placeholder="0.00"
-                  value={openingAmount}
-                  onChange={(e) => setOpeningAmount(e.target.value)}
-                  min="0"
-                  step="0.01"
-                  className="w-full"
-                />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-1">
+                <CardTitle>Abrir Caja</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Inicia una nueva sesión de caja para comenzar a registrar operaciones.
+                </p>
               </div>
               <Button
-                onClick={handleOpenCashSession}
-                disabled={isOpening || !openingAmount}
-                className="w-full sm:w-auto"
+                onClick={() => setShowOpenCashModal(true)}
+                disabled={isOpening}
+                className="w-full py-8 text-lg sm:w-auto sm:py-4 sm:text-base"
               >
-                <DollarSign className="h-4 w-4 mr-2" />
+                <DollarSign className="h-5 w-5 mr-2" />
                 {isOpening ? 'Abriendo...' : 'Abrir Caja'}
               </Button>
             </div>
-          </CardContent>
+          </CardHeader>
         </Card>
       )}
+
+      <Dialog
+        open={showOpenCashModal}
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowOpenCashModal(false);
+            setOpeningAmount('0');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5" />
+              Abrir Caja
+            </DialogTitle>
+            <DialogDescription>
+              Ingresa el monto de apertura. Si lo dejas vacío, se abrirá con 0.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div>
+              <label className="text-sm font-medium">Monto Inicial</label>
+              <Input
+                type="number"
+                placeholder="0.00"
+                value={openingAmount}
+                onChange={(e) => setOpeningAmount(e.target.value)}
+                min="0"
+                step="0.01"
+                className="w-full"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setShowOpenCashModal(false);
+                setOpeningAmount('0');
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleOpenCashSession}
+              disabled={isOpening}
+            >
+              <DollarSign className="h-4 w-4 mr-2" />
+              {isOpening ? 'Abriendo...' : 'Confirmar Apertura'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Formulario de movimiento manual */}
       {showMovementForm && currentSession && canManageCash && (
@@ -1321,19 +1369,27 @@ export default function CajaPage() {
         </Card>
       )}
 
-      {/* Formulario de cierre de caja */}
-      {showCloseForm && currentSession && canManageCash && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-destructive">
-              <Power className="h-5 w-5" />
-              Cerrar Caja
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Para cerrar la caja, verifica tu identidad con tus credenciales
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-4">
+      {/* Modal de cierre de caja */}
+      {currentSession && canManageCash && (
+        <Dialog
+          open={showCloseForm}
+          onOpenChange={(open) => {
+            if (!open) {
+              setShowCloseForm(false);
+              setCloseData({ email: '', password: '', declaredAmount: '' });
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-[520px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-destructive">
+                <Power className="h-5 w-5" />
+                Cerrar Caja
+              </DialogTitle>
+              <DialogDescription>
+                Para cerrar la caja, verifica tu identidad con tus credenciales
+              </DialogDescription>
+            </DialogHeader>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <label className="text-sm font-medium">Email</label>
@@ -1341,7 +1397,7 @@ export default function CajaPage() {
                   type="email"
                   placeholder="tu@email.com"
                   value={closeData.email}
-                  onChange={(e) => setCloseData({...closeData, email: e.target.value})}
+                  onChange={(e) => setCloseData({ ...closeData, email: e.target.value })}
                 />
               </div>
               <div>
@@ -1350,7 +1406,7 @@ export default function CajaPage() {
                   type="password"
                   placeholder="••••••••"
                   value={closeData.password}
-                  onChange={(e) => setCloseData({...closeData, password: e.target.value})}
+                  onChange={(e) => setCloseData({ ...closeData, password: e.target.value })}
                 />
               </div>
               <div>
@@ -1359,22 +1415,15 @@ export default function CajaPage() {
                   type="number"
                   placeholder="0.00"
                   value={closeData.declaredAmount}
-                  onChange={(e) => setCloseData({...closeData, declaredAmount: e.target.value})}
+                  onChange={(e) => setCloseData({ ...closeData, declaredAmount: e.target.value })}
                   min="0"
                   step="0.01"
                 />
               </div>
             </div>
-            <div className="flex gap-2">
+            <DialogFooter>
               <Button
-                variant="destructive"
-                onClick={handleCloseCashSession}
-                disabled={isClosing || !closeData.email || !closeData.password || !closeData.declaredAmount}
-              >
-                <Power className="h-4 w-4 mr-2" />
-                {isClosing ? 'Cerrando...' : 'Confirmar Cierre'}
-              </Button>
-              <Button
+                type="button"
                 variant="outline"
                 onClick={() => {
                   setShowCloseForm(false);
@@ -1383,9 +1432,18 @@ export default function CajaPage() {
               >
                 Cancelar
               </Button>
-            </div>
-          </CardContent>
-        </Card>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleCloseCashSession}
+                disabled={isClosing || !closeData.email || !closeData.password || !closeData.declaredAmount}
+              >
+                <Power className="h-4 w-4 mr-2" />
+                {isClosing ? 'Cerrando...' : 'Confirmar Cierre'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Movimientos de Caja (nuevo listado) */}

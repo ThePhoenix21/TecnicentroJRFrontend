@@ -137,7 +137,7 @@ const ReceiptClosingPDF: React.FC<ReceiptClosingPDFProps> = ({ data, showOrders 
             {!!tenantName && (
               <Text style={[styles.textBold, { marginBottom: 4 }, { fontSize: 14 }]}>{tenantName}</Text>
             )}
-            <Text style={styles.textBold}>tienda: {store.name}</Text>
+            <Text style={styles.textBold}>TIENDA: {store.name}</Text>
             <Text>{store.address}</Text>
             <Text>Tel: {store.phone}</Text>
           </View>
