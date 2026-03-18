@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Building, Store, ArrowRight, LogOut } from 'lucide-react';
 
 export default function StoreSelectionPage() {
-  const { user, selectStore, logout, loading, isAuthenticated } = useAuth();
+  const { user, selectStore, logout, loading, isAuthenticated, tenantName } = useAuth();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -116,7 +116,7 @@ export default function StoreSelectionPage() {
             <div className="flex items-center">
               <Building className="h-8 w-8 text-primary" />
               <span className="ml-2 text-xl font-semibold text-gray-900">
-                Tecnicentro Jr
+                {tenantName || 'Sistema de Gestión'}
               </span>
             </div>
             <Button variant="ghost" onClick={handleLogout}>

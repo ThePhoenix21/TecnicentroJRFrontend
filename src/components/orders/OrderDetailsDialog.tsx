@@ -128,7 +128,7 @@ interface PaymentEntry {
 }
 
 const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenChange, order, onOrderUpdate }) => {
-  const { user, currentStore, canIssuePdf, tenantFeatures, hasPermission, isAdmin: isAdminFromContext } = useAuth();
+  const { user, currentStore, canIssuePdf, tenantFeatures, hasPermission, isAdmin: isAdminFromContext, tenantName } = useAuth();
   const { canManageOrders: canManageOrdersFn, canDetailOrders: canDetailOrdersFn } = usePermissions();
   const canManageOrders = canManageOrdersFn();
   const canDetailOrders = canDetailOrdersFn();
@@ -160,12 +160,12 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
   const hasNamedServices = normalizedTenantFeatures.includes('NAMEDSERVICES');
   const hasClientsFeature = normalizedTenantFeatures.includes('CLIENTS');
 
-  // Información del negocio (hardcodeada ya que useBusinessInfo no existe)
+  // Información del negocio desde el contexto de autenticación
   const businessInfo = {
-    name: "TECNICENTRO JR",
-    address: "Jr Chanchamayo 650, puesto 1 y 2",
-    phone: "+51 993 485 170",
-    email: "tecnicentrojrcajamarca@gmail.com",
+    name: tenantName || "Negocio",
+    address: orderDetails?.store?.address || "",
+    phone: orderDetails?.store?.phone || "",
+    email: "",
     footerText: "Gracias por su compra. Vuelva pronto.",
   };
 

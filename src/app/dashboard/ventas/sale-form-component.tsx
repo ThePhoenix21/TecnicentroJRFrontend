@@ -166,7 +166,7 @@ export function SaleForm({
   products,
   services,
 }: SaleFormProps) {
-  const { currentStore, tenantFeatures, tenantFeaturesLoaded, tenantDefaultService, tenantDefaultServiceLoaded, canIssuePdf, hasPermission } = useAuth();
+  const { currentStore, tenantFeatures, tenantFeaturesLoaded, tenantDefaultService, tenantDefaultServiceLoaded, canIssuePdf, hasPermission, tenantName } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState<CartItem[]>([]);
@@ -1741,11 +1741,11 @@ export function SaleForm({
   }
 
   const businessInfo: BusinessInfo = {
-    name: orderResponse?.businessName || "TECNICENTRO JR",
-    address: orderResponse?.address || "Jr Chanchamayo 650, puesto 1 y 2",
-    phone: orderResponse?.phone || "+51 993 485 170",
-    email: "tecnicentrojrcajamarca@gmail.com",
-    ruc: "20123456789",
+    name: orderResponse?.businessName || tenantName || "Negocio",
+    address: orderResponse?.address || "",
+    phone: orderResponse?.phone || "",
+    email: orderResponse?.email || "",
+    ruc: orderResponse?.ruc || "",
     cuit: "",
     footerText: "Gracias por su compra. Vuelva pronto.",
     logo: ""
