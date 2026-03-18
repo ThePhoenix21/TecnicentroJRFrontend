@@ -157,7 +157,7 @@ export default function VentasPage() {
 
   const canManageOrders = isAdmin || hasPermission?.("MANAGE_ORDERS");
 
-  const tableColSpan = 6 + (isAdmin ? 1 : 0) + (hasProductsFeature ? 1 : 0);
+  const tableColSpan = 7 + (isAdmin ? 1 : 0) + (hasProductsFeature ? 1 : 0);
 
   const applyClientFilter = useCallback((name: string) => {
     const next = name.trim();
@@ -1182,7 +1182,7 @@ export default function VentasPage() {
                         <TableRow>
                           <TableCell colSpan={tableColSpan} className="py-12">
                             <div className="flex flex-col items-center justify-center text-center">
-                              <ShoppingCart className="h-12 w-12 text-muted-foreground/50 mb-4" />
+                              <ShoppingCart className="h-12 w-12 text-muted-foreground/50 mb-4" />                              
                               <h3 className="text-lg font-medium text-muted-foreground">
                                 No se encontraron ventas
                               </h3>
