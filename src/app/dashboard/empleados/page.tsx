@@ -1135,7 +1135,7 @@ export default function EmpleadosPage() {
               {/* Selector obligatorio de establecimiento */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">
-                  Establecimiento <span className="text-red-500">*</span>
+                  Establecimiento <span className="text-destructive">*</span>
                 </label>
                 <Select
                   value={selectedEstablishment?.id || ""}
@@ -1375,8 +1375,8 @@ export default function EmpleadosPage() {
             </div>
           ) : employees.length === 0 ? (
             <div className="text-center py-8">
-              <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500">
+              <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">
                 {firstNameFilter ||
                 lastNameFilter ||
                 positionIdFilter !== "all" ||
@@ -1449,10 +1449,10 @@ export default function EmpleadosPage() {
                               className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium whitespace-nowrap
                                 ${
                                   e.status === "ACTIVE"
-                                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
+                                    ? "bg-success/15 text-success"
                                     : e.status === "SUSPENDED"
-                                    ? "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200"
-                                    : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                                    ? "bg-warning/20 text-foreground"
+                                    : "bg-muted text-muted-foreground"
                                 }
                               `}
                             >
@@ -1463,8 +1463,8 @@ export default function EmpleadosPage() {
                             <div className="flex flex-col">
                               <span className="truncate max-w-[200px]" title={(assigned.store || assigned.warehouse) ?? "-"}>
                                 <div className="flex items-center gap-1">
-                                  {assigned.store && <Building className="h-4 w-4 text-blue-500 flex-shrink-0" />}
-                                  {assigned.warehouse && <Warehouse className="h-4 w-4 text-green-500 flex-shrink-0" />}
+                                  {assigned.store && <Building className="h-4 w-4 text-info flex-shrink-0" />}
+                                  {assigned.warehouse && <Warehouse className="h-4 w-4 text-success flex-shrink-0" />}
                                   <span className="truncate">{(assigned.store || assigned.warehouse) ?? "-"}</span>
                                 </div>
                               </span>
@@ -1485,7 +1485,7 @@ export default function EmpleadosPage() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => openDeleteConfirmation(e.id)}
-                                className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
                               >
                                 <Trash2 className="h-3 w-3" />
                               </ProtectedButton>
@@ -1781,7 +1781,7 @@ export default function EmpleadosPage() {
                                   href={doc.links.view}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-blue-600 hover:underline text-xs"
+                                  className="text-info hover:underline text-xs"
                                 >
                                   Ver
                                 </a>
@@ -1791,7 +1791,7 @@ export default function EmpleadosPage() {
                                   href={doc.links.download}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-blue-600 hover:underline text-xs"
+                                  className="text-info hover:underline text-xs"
                                 >
                                   Descargar
                                 </a>
@@ -1804,7 +1804,7 @@ export default function EmpleadosPage() {
                       <div className="space-y-1">
                         {detail.documentUrls.map((url, idx) => (
                           <div key={idx} className="text-xs break-all">
-                            <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                            <a href={url} target="_blank" rel="noopener noreferrer" className="text-info hover:underline">
                               Documento {idx + 1}
                             </a>
                           </div>
@@ -2130,9 +2130,9 @@ export default function EmpleadosPage() {
 
           {recreateStep === "result" && (
             <div className="space-y-5">
-              <div className="rounded-2xl border border-emerald-200/60 bg-emerald-50/80 p-5 dark:border-emerald-900/40 dark:bg-emerald-950/30">
+              <div className="rounded-2xl border border-success/20 bg-success/10 p-5">
                 <div className="flex items-start gap-3">
-                  <div className="rounded-full bg-white/70 p-2 text-emerald-600 shadow-sm dark:bg-emerald-900/50">
+                  <div className="rounded-full bg-background/70 p-2 text-success shadow-sm">
                     <CheckCircle2 className="h-5 w-5" />
                   </div>
                   <div>
@@ -2237,12 +2237,12 @@ export default function EmpleadosPage() {
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="rounded-md border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/30">
+            <div className="rounded-md border border-destructive/20 bg-destructive/10 p-4">
               <div className="flex items-start gap-3">
-                <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-medium text-red-900 dark:text-red-100">¿Estás seguro de eliminar este empleado?</p>
-                  <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                  <p className="font-medium text-destructive">¿Estás seguro de eliminar este empleado?</p>
+                  <p className="text-sm text-destructive mt-1">
                     Esta acción no se puede deshacer. El empleado será marcado como eliminado y ya no podrá acceder al sistema.
                   </p>
                 </div>
@@ -2393,9 +2393,9 @@ export default function EmpleadosPage() {
 
           {createStep === "result" && (
             <div className="space-y-5">
-              <div className="rounded-2xl border border-blue-200/60 bg-blue-50/80 p-5 dark:border-blue-900/40 dark:bg-blue-950/30">
+              <div className="rounded-2xl border border-info/20 bg-info/10 p-5">
                 <div className="flex items-start gap-3">
-                  <div className="rounded-full bg-white/70 p-2 text-blue-600 shadow-sm dark:bg-blue-900/50">
+                  <div className="rounded-full bg-background/70 p-2 text-info shadow-sm">
                     <CheckCircle2 className="h-5 w-5" />
                   </div>
                   <div>
@@ -2420,7 +2420,7 @@ export default function EmpleadosPage() {
                 </dl>
 
                 {(createWarningMessage || createFailedDocuments.length > 0) && (
-                  <div className="mt-5 rounded-xl border border-amber-300/70 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-200">
+                  <div className="mt-5 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-foreground">
                     <div className="flex items-start gap-2">
                       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                       <div className="space-y-2">
@@ -2458,7 +2458,7 @@ export default function EmpleadosPage() {
                               href={doc.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-blue-600 hover:underline text-xs"
+                              className="text-info hover:underline text-xs"
                             >
                               Ver
                             </a>

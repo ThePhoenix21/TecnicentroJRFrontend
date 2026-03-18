@@ -326,8 +326,8 @@ export default function TiendasPage() {
             </div>
           ) : filteredStores.length === 0 ? (
             <div className="text-center py-8">
-              <Building className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500">
+              <Building className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">
                 {searchTerm ? "No se encontraron tiendas que coincidan con la búsqueda" : "No hay tiendas registradas"}
               </p>
               {!searchTerm && canManage && (
@@ -359,34 +359,34 @@ export default function TiendasPage() {
                         <TableCell className="hidden md:table-cell px-2 py-1">
                           {store.address ? (
                             <div className="flex items-center gap-1">
-                              <MapPin className="h-4 w-4 text-gray-400" />
+                              <MapPin className="h-4 w-4 text-muted-foreground" />
                               <span className="text-sm">{store.address}</span>
                             </div>
                           ) : (
-                            <span className="text-gray-400 text-sm">Sin dirección</span>
+                            <span className="text-muted-foreground text-sm">Sin dirección</span>
                           )}
                         </TableCell>
                         <TableCell className="hidden md:table-cell px-2 py-1">
                           {store.phone ? (
                             <div className="flex items-center gap-1">
-                              <Phone className="h-4 w-4 text-gray-400" />
+                              <Phone className="h-4 w-4 text-muted-foreground" />
                               <span className="text-sm">{store.phone}</span>
                             </div>
                           ) : (
-                            <span className="text-gray-400 text-sm">Sin teléfono</span>
+                            <span className="text-muted-foreground text-sm">Sin teléfono</span>
                           )}
                         </TableCell>
                         <TableCell className="hidden md:table-cell px-2 py-1">
                           {store.createdBy ? (
                             <div className="flex items-center gap-1">
-                              <Mail className="h-4 w-4 text-gray-400" />
+                              <Mail className="h-4 w-4 text-muted-foreground" />
                               <div>
                                 <div className="font-medium text-sm">{store.createdBy.name}</div>
-                                <div className="text-xs text-gray-500">{store.createdBy.email}</div>
+                                <div className="text-xs text-muted-foreground">{store.createdBy.email}</div>
                               </div>
                             </div>
                           ) : (
-                            <span className="text-gray-400 text-sm">Desconocido</span>
+                            <span className="text-muted-foreground text-sm">Desconocido</span>
                           )}
                         </TableCell>
                         <TableCell className="hidden md:table-cell px-2 py-1 text-sm">
@@ -407,7 +407,7 @@ export default function TiendasPage() {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleDeleteStore(store)}
-                                className="flex items-center justify-center h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                                className="flex items-center justify-center h-8 w-8 p-0 text-destructive hover:text-destructive"
                               >
                                 <Trash2 className="h-3 w-3" />
                               </Button>

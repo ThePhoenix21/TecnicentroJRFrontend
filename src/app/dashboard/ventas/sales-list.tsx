@@ -123,15 +123,15 @@ export function SalesList({ sales, onNewSale, onViewSale }: SalesListProps) {
   const getStatusBadge = (status?: string) => {
     switch (status) {
       case 'COMPLETED':
-        return { text: 'Completado', className: 'bg-green-100 text-green-800' };
+        return { text: 'Completado', className: 'bg-success/15 text-success' };
       case 'PAID':
-        return { text: 'Pagado', className: 'bg-sky-100 text-sky-800' };
+        return { text: 'Pagado', className: 'bg-info/15 text-info' };
       case 'PENDING':
-        return { text: 'Pendiente', className: 'bg-yellow-100 text-yellow-800' };
+        return { text: 'Pendiente', className: 'bg-warning/20 text-foreground' };
       case 'CANCELLED':
-        return { text: 'Cancelado', className: 'bg-red-100 text-red-800' };
+        return { text: 'Cancelado', className: 'bg-destructive/15 text-destructive' };
       default:
-        return { text: 'Pendiente', className: 'bg-gray-100 text-gray-800' };
+        return { text: 'Pendiente', className: 'bg-muted text-muted-foreground' };
     }
   };
 

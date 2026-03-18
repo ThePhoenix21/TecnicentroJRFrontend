@@ -484,8 +484,8 @@ export default function WarehousesPage() {
             </div>
           ) : filteredWarehouses.length === 0 ? (
             <div className="text-center py-8">
-              <WarehouseIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500">
+              <WarehouseIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">
                 {searchTerm ? 'No se encontraron almacenes' : 'No hay almacenes registrados'}
               </p>
             </div>
@@ -528,7 +528,7 @@ export default function WarehousesPage() {
                               handleDeleteWarehouseFromList(w.id);
                             }}
                             disabled={deleteSubmitting}
-                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
                             title="Eliminar almacén"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -604,7 +604,7 @@ export default function WarehousesPage() {
                               disabled={!isEditing}
                               className={`h-10 ${
                                 isEditing
-                                  ? 'bg-emerald-50 border-emerald-300 focus-visible:ring-emerald-400'
+                                  ? 'bg-success/10 border-success/30 focus-visible:ring-success/40'
                                   : undefined
                               }`}
                             />
@@ -618,7 +618,7 @@ export default function WarehousesPage() {
                               disabled={!isEditing}
                               className={`h-10 ${
                                 isEditing
-                                  ? 'bg-emerald-50 border-emerald-300 focus-visible:ring-emerald-400'
+                                  ? 'bg-success/10 border-success/30 focus-visible:ring-success/40'
                                   : undefined
                               }`}
                             />
@@ -632,7 +632,7 @@ export default function WarehousesPage() {
                               disabled={!isEditing}
                               className={`h-10 ${
                                 isEditing
-                                  ? 'bg-emerald-50 border-emerald-300 focus-visible:ring-emerald-400'
+                                  ? 'bg-success/10 border-success/30 focus-visible:ring-success/40'
                                   : undefined
                               }`}
                             />
@@ -644,7 +644,7 @@ export default function WarehousesPage() {
                             <Button
                               onClick={handleSaveEdit}
                               disabled={editSubmitting || deleteSubmitting}
-                              className="bg-emerald-600 text-white hover:bg-emerald-700 h-10"
+                              className="bg-success text-white hover:bg-success/90 h-10"
                             >
                               <Save className="h-4 w-4 mr-2" />
                               {editSubmitting ? 'Guardando...' : 'Guardar'}
@@ -675,8 +675,8 @@ export default function WarehousesPage() {
                                     <span
                                       className={`text-xs px-2 py-1 rounded-full ${
                                         we.employed.status === "ACTIVE"
-                                          ? "bg-green-100 text-green-800"
-                                          : "bg-gray-100 text-gray-800"
+                                          ? "bg-success/15 text-success"
+                                          : "bg-muted text-muted-foreground"
                                       }`}
                                     >
                                       {we.employed.status === "ACTIVE" ? "Activo" : "Inactivo"}
@@ -844,8 +844,8 @@ export default function WarehousesPage() {
                                       <TableCell className="text-right">
                                         <span className={`text-sm px-2 py-1 rounded-full ${
                                           product.stock > 0 
-                                            ? 'bg-green-100 text-green-800' 
-                                            : 'bg-red-100 text-red-800'
+                                            ? 'bg-success/15 text-success' 
+                                            : 'bg-destructive/15 text-destructive'
                                         }`}>
                                           {product.stock} unidades
                                         </span>
@@ -879,7 +879,7 @@ export default function WarehousesPage() {
                       variant="destructive"
                       onClick={handleDeleteWarehouse}
                       disabled={deleteSubmitting}
-                      className="bg-red-600 hover:bg-red-700"
+                      className="bg-destructive hover:bg-destructive/90"
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
                       {deleteSubmitting ? 'Eliminando...' : 'Eliminar almacén'}

@@ -660,8 +660,8 @@ export default function ProveedoresPage() {
             </div>
           ) : providers.length === 0 ? (
             <div className="text-center py-8">
-              <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500">
+              <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">
                 {providerFilter || rucFilter || fromDate || toDate
                   ? "No se encontraron proveedores"
                   : "No hay proveedores registrados"}
@@ -760,7 +760,7 @@ export default function ProveedoresPage() {
                           disabled={!isEditing}
                           className={
                             isEditing
-                              ? "bg-emerald-50 border-emerald-300 focus-visible:ring-emerald-400"
+                              ? "bg-success/10 border-success/30 focus-visible:ring-success/40"
                               : undefined
                           }
                         />
@@ -777,7 +777,7 @@ export default function ProveedoresPage() {
                           disabled={!isEditing}
                           className={
                             isEditing
-                              ? "bg-emerald-50 border-emerald-300 focus-visible:ring-emerald-400"
+                              ? "bg-success/10 border-success/30 focus-visible:ring-success/40"
                               : undefined
                           }
                         />
@@ -790,7 +790,7 @@ export default function ProveedoresPage() {
                           disabled={!isEditing}
                           className={
                             isEditing
-                              ? "bg-emerald-50 border-emerald-300 focus-visible:ring-emerald-400"
+                              ? "bg-success/10 border-success/30 focus-visible:ring-success/40"
                               : undefined
                           }
                         />
@@ -803,7 +803,7 @@ export default function ProveedoresPage() {
                           disabled={!isEditing}
                           className={
                             isEditing
-                              ? "bg-emerald-50 border-emerald-300 focus-visible:ring-emerald-400"
+                              ? "bg-success/10 border-success/30 focus-visible:ring-success/40"
                               : undefined
                           }
                         />
@@ -865,7 +865,7 @@ export default function ProveedoresPage() {
                                   size="sm"
                                   onClick={handleSaveProducts}
                                   disabled={productsSubmitting}
-                                  className="bg-emerald-600 text-white hover:bg-emerald-700"
+                                  className="bg-success text-white hover:bg-success/90"
                                 >
                                   {productsSubmitting ? "Guardando..." : "Guardar cambios"}
                                 </Button>
@@ -990,7 +990,7 @@ export default function ProveedoresPage() {
                   )}
 
                   {isEditing && canManageSuppliers() && (
-                    <Button onClick={handleSaveEdit} disabled={editSubmitting} className="bg-emerald-600 text-white hover:bg-emerald-700">
+                    <Button onClick={handleSaveEdit} disabled={editSubmitting} className="bg-success text-white hover:bg-success/90">
                       <Save className="h-4 w-4 mr-2" />
                       Guardar
                     </Button>

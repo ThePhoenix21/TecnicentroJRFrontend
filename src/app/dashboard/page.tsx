@@ -92,7 +92,7 @@ function toStringSafe(value: unknown, fallback = "-"): string {
 
 function deltaClass(value: number | null | undefined): string {
   if (value === null || value === undefined) return "text-muted-foreground";
-  return value >= 0 ? "text-emerald-600" : "text-red-600";
+  return value >= 0 ? "text-success" : "text-destructive";
 }
 
 function deltaBadgeVariant(value: number | null | undefined): "secondary" | "destructive" {
@@ -178,7 +178,7 @@ function DynamicLineChart({ chart }: { chart: GenericChart }) {
                     </div>
                     <div className="h-2 rounded-full bg-muted">
                       <div
-                        className={keyIndex % 2 === 0 ? "h-2 rounded-full bg-primary" : "h-2 rounded-full bg-cyan-600"}
+                        className={keyIndex % 2 === 0 ? "h-2 rounded-full bg-primary" : "h-2 rounded-full bg-info"}
                         style={{ width: `${width}%` }}
                       />
                     </div>
@@ -272,7 +272,7 @@ function DynamicBarChart({ chart }: { chart: GenericChart }) {
               <span className="font-medium">{yKey === 'totalAmount' ? formatCurrency(value) : value.toLocaleString("es-PE")}</span>
             </div>
             <div className="h-3 rounded-full bg-muted">
-              <div className="h-3 rounded-full bg-emerald-600" style={{ width: `${width}%` }} />
+              <div className="h-3 rounded-full bg-success" style={{ width: `${width}%` }} />
             </div>
           </div>
         );
@@ -969,16 +969,16 @@ export default function DashboardPage() {
                                 <div className="hidden sm:flex">
                                   <Badge
                                     variant={item.type === "INCOME" ? "secondary" : "destructive"}
-                                    className={item.type === "INCOME" ? "bg-green-500 text-white hover:bg-green-600" : ""}
+                                    className={item.type === "INCOME" ? "bg-success text-white hover:bg-success/90" : ""}
                                   >
                                     {item.type === "INCOME" ? "Ingreso" : "Egreso"}
                                   </Badge>
                                 </div>
                                 <div className="sm:hidden flex items-center justify-center">
                                   {item.type === "INCOME" ? (
-                                    <TrendingUp className="h-4 w-4 text-green-600" />
+                                    <TrendingUp className="h-4 w-4 text-success" />
                                   ) : (
-                                    <TrendingDown className="h-4 w-4 text-red-600" />
+                                    <TrendingDown className="h-4 w-4 text-destructive" />
                                   )}
                                 </div>
                               </div>

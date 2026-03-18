@@ -59,15 +59,15 @@ import { userService, type UserLookupItem } from "@/services/user.service";
 const PAGE_SIZE = 12;
 
 const statusConfig: Record<StockTransferStatus, { label: string; className: string }> = {
-  ISSUED: { label: "Emitida", className: "bg-slate-100 text-slate-800" },
-  PENDING: { label: "En tránsito", className: "bg-blue-100 text-blue-800" },
-  PARTIAL: { label: "Recepción parcial", className: "bg-yellow-100 text-yellow-800" },
+  ISSUED: { label: "Emitida", className: "bg-muted text-muted-foreground" },
+  PENDING: { label: "En tránsito", className: "bg-info/15 text-info" },
+  PARTIAL: { label: "Recepción parcial", className: "bg-warning/20 text-foreground" },
   PARTIALLY_RECEIVED: {
     label: "Parcialmente recibida",
-    className: "bg-orange-100 text-orange-800",
+    className: "bg-warning/25 text-foreground",
   },
-  COMPLETED: { label: "Completada", className: "bg-green-100 text-green-800" },
-  ANNULLATED: { label: "Anulada", className: "bg-red-100 text-red-800" },
+  COMPLETED: { label: "Completada", className: "bg-success/15 text-success" },
+  ANNULLATED: { label: "Anulada", className: "bg-destructive/15 text-destructive" },
 };
 
 const formatDate = (dateStr: string | null) => {
@@ -1101,14 +1101,14 @@ export default function MovimientosStockPage() {
                           <span
                             className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                               t.status === "COMPLETED"
-                                ? "bg-green-100 text-green-800"
+                                ? "bg-success/15 text-success"
                                 : t.status === "ANNULLATED"
-                                ? "bg-red-100 text-red-800"
+                                ? "bg-destructive/15 text-destructive"
                                 : t.status === "PENDING"
-                                ? "bg-blue-100 text-blue-800"
+                                ? "bg-info/15 text-info"
                                 : t.status === "PARTIAL" || t.status === "PARTIALLY_RECEIVED"
-                                ? "bg-amber-100 text-amber-800"
-                                : "bg-gray-100 text-gray-800"
+                                ? "bg-warning/20 text-foreground"
+                                : "bg-muted text-muted-foreground"
                             }`}
                           >
                             {statusConfig[t.status]?.label || t.status}
@@ -1220,7 +1220,7 @@ export default function MovimientosStockPage() {
                               <div className="inline-flex flex-col items-center gap-1">
                                 <span
                                   className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                    statusConfig[t.status]?.className || "bg-gray-100 text-gray-800"
+                                    statusConfig[t.status]?.className || "bg-muted text-muted-foreground"
                                   }`}
                                 >
                                   {statusConfig[t.status]?.label || t.status}
@@ -1229,7 +1229,7 @@ export default function MovimientosStockPage() {
                                   className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${
                                     t.transferType === "REQUEST"
                                       ? "bg-purple-100 text-purple-800"
-                                      : "bg-green-100 text-green-800"
+                                      : "bg-success/15 text-success"
                                   }`}
                                 >
                                   {t.transferType === "REQUEST" ? "Solicitud" : "Envío"}
@@ -1304,7 +1304,7 @@ export default function MovimientosStockPage() {
                 <span className="font-mono text-lg font-bold">{detail.code}</span>
                 <span
                   className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium ${
-                    statusConfig[detail.status]?.className || "bg-gray-100 text-gray-800"
+                    statusConfig[detail.status]?.className || "bg-muted text-muted-foreground"
                   }`}
                 >
                   {statusConfig[detail.status]?.label || detail.status}
@@ -1312,8 +1312,8 @@ export default function MovimientosStockPage() {
                 <span
                   className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium ${
                     detail.transferType === "REQUEST"
-                      ? "bg-purple-100 text-purple-800"
-                      : "bg-green-100 text-green-800"
+                      ? "bg-primary/15 text-primary"
+                      : "bg-success/15 text-success"
                   }`}
                 >
                   {detail.transferType === "REQUEST" ? "Solicitud" : "Envío"}
@@ -1391,10 +1391,10 @@ export default function MovimientosStockPage() {
               {/* Cancel reason */}
               {detail.cancelReason && (
                 <div>
-                  <p className="text-xs font-medium text-red-500 uppercase tracking-wide mb-1">
+                  <p className="text-xs font-medium text-destructive uppercase tracking-wide mb-1">
                     Motivo de anulación
                   </p>
-                  <p className="text-sm bg-red-50 text-red-700 rounded p-2">
+                  <p className="text-sm bg-destructive/10 text-destructive rounded p-2">
                     {detail.cancelReason}
                   </p>
                 </div>
@@ -1711,7 +1711,7 @@ export default function MovimientosStockPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 text-red-500 hover:text-red-700"
+                        className="h-8 w-8 text-destructive hover:text-destructive/80"
                         onClick={() =>
                           setCreateItems((prev) => prev.filter((_, i) => i !== idx))
                         }
@@ -1961,7 +1961,7 @@ export default function MovimientosStockPage() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 text-red-500 hover:text-red-700"
+                    className="h-8 w-8 text-destructive hover:text-destructive/80"
                     onClick={() => setEditItems((prev) => prev.filter((_, i) => i !== idx))}
                     disabled={editItems.length === 1}
                   >

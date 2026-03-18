@@ -281,13 +281,13 @@ export default function InventoryReportsPage() {
       </Card>
 
       {summaryError && (
-        <Card className="border-yellow-300 bg-yellow-50">
+        <Card className="border-warning/30 bg-warning/10">
           <CardContent className="flex items-start gap-3 py-4">
-            <AlertCircle className="h-5 w-5 text-yellow-700 mt-0.5" />
+            <AlertCircle className="h-5 w-5 text-warning mt-0.5" />
             <div>
-              <p className="text-sm text-yellow-800">{summaryError}</p>
+              <p className="text-sm text-foreground">{summaryError}</p>
               {!summary && (
-                <p className="text-xs text-yellow-700 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   Aún puedes consultar la lista de productos y sus existencias individuales.
                 </p>
               )}
@@ -301,10 +301,10 @@ export default function InventoryReportsPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Entradas</CardTitle>
-            <ArrowDownLeft className="h-4 w-4 text-green-500" />
+            <ArrowDownLeft className="h-4 w-4 text-success" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">+{totals.incoming}</div>
+            <div className="text-2xl font-bold text-success">+{totals.incoming}</div>
             <p className="text-xs text-muted-foreground">Ingreso de productos</p>
           </CardContent>
         </Card>
@@ -312,10 +312,10 @@ export default function InventoryReportsPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Salidas / Mermas</CardTitle>
-            <ArrowUpRight className="h-4 w-4 text-red-500" />
+            <ArrowUpRight className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">-{totals.outgoing}</div>
+            <div className="text-2xl font-bold text-destructive">-{totals.outgoing}</div>
             <p className="text-xs text-muted-foreground">Salidas manuales</p>
           </CardContent>
         </Card>
@@ -324,10 +324,10 @@ export default function InventoryReportsPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Ventas</CardTitle>
-              <ShoppingCart className="h-4 w-4 text-blue-500" />
+              <ShoppingCart className="h-4 w-4 text-info" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600">-{totals.sales}</div>
+              <div className="text-2xl font-bold text-info">-{totals.sales}</div>
               <p className="text-xs text-muted-foreground">Salidas de producto por ventas</p>
             </CardContent>
           </Card>
@@ -336,10 +336,10 @@ export default function InventoryReportsPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Ajustes</CardTitle>
-            <TrendingUp className="h-4 w-4 text-yellow-500" />
+            <TrendingUp className="h-4 w-4 text-warning" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{totals.adjustmentsNet > 0 ? '+' : ''}{totals.adjustmentsNet}</div>
+            <div className="text-2xl font-bold text-warning">{totals.adjustmentsNet > 0 ? '+' : ''}{totals.adjustmentsNet}</div>
             <p className="text-xs text-muted-foreground">Correcciones de inventario</p>
           </CardContent>
         </Card>
@@ -362,7 +362,7 @@ export default function InventoryReportsPage() {
       <Card className="col-span-4">
         <CardHeader>
           <div className="flex items-center gap-2">
-            <List className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500" />
+            <List className="h-4 w-4 sm:h-5 sm:w-5 text-info" />
             <CardTitle className="text-lg sm:text-xl">Listado de Productos</CardTitle>
           </div>
           <CardDescription className="text-xs sm:text-sm">
@@ -469,7 +469,7 @@ export default function InventoryReportsPage() {
                     </div>
                     <div className="flex items-center gap-2 sm:gap-4">
                       <div className="text-right">
-                        <span className={`text-lg sm:text-2xl font-bold ${product.stock === 0 ? 'text-red-600' : product.stock < 10 ? 'text-yellow-600' : 'text-green-600'}`}>
+                        <span className={`text-lg sm:text-2xl font-bold ${product.stock === 0 ? 'text-destructive' : product.stock < 10 ? 'text-warning' : 'text-success'}`}>
                           {product.stock || 0}
                         </span>
                         <p className="text-xs text-muted-foreground">Stock Actual</p>

@@ -270,26 +270,26 @@ export default function ServiciosPage() {
   };
 
   const getStatusBadge = (status?: ServiceStatus, pendingPayment?: boolean) => {
-    if (!status) return "bg-gray-100 text-gray-800";
+    if (!status) return "bg-muted text-muted-foreground";
 
     switch (status) {
       case ServiceStatus.PENDING:
-        return "bg-yellow-100 text-yellow-800";
+        return "bg-warning/20 text-foreground";
       case ServiceStatus.IN_PROGRESS:
-      return "bg-orange-300 text-orange-900 font-bold";
+      return "bg-warning/40 text-foreground font-bold";
 
       case ServiceStatus.COMPLETED:
-      return pendingPayment ? "bg-orange-500 text-white font-bold" : "bg-green-600 text-white font-bold";
+      return pendingPayment ? "bg-warning text-foreground font-bold" : "bg-success text-white font-bold";
       case ServiceStatus.CANCELLED:
-        return "bg-gray-100 text-gray-800";
+        return "bg-muted text-muted-foreground";
       case ServiceStatus.DELIVERED:
         return "bg-purple-100 text-purple-800";
       case ServiceStatus.PAID:
-        return "bg-cyan-100 text-cyan-800";
+        return "bg-info/15 text-info";
       case ServiceStatus.ANNULLATED:
-        return "bg-red-100 text-red-800";
+        return "bg-destructive/15 text-destructive";
       default:
-        return "bg-gray-100 text-gray-800";
+        return "bg-muted text-muted-foreground";
     }
   };
 
@@ -503,7 +503,7 @@ export default function ServiciosPage() {
             </div>
 
             <div className="min-w-[170px]">
-              <Label htmlFor="status-filter" className="text-sm font-medium text-gray-700 mb-1 block">
+              <Label htmlFor="status-filter" className="text-sm font-medium text-muted-foreground mb-1 block">
                 Estado
               </Label>
               <Select
@@ -526,7 +526,7 @@ export default function ServiciosPage() {
             </div>
 
             <div className="min-w-[150px]">
-              <Label htmlFor="from-date" className="text-sm font-medium text-gray-700 mb-1 block">
+              <Label htmlFor="from-date" className="text-sm font-medium text-muted-foreground mb-1 block">
                 Desde
               </Label>
               <Input
@@ -541,7 +541,7 @@ export default function ServiciosPage() {
             </div>
 
             <div className="min-w-[150px]">
-              <Label htmlFor="to-date" className="text-sm font-medium text-gray-700 mb-1 block">
+              <Label htmlFor="to-date" className="text-sm font-medium text-muted-foreground mb-1 block">
                 Hasta
               </Label>
               <Input
@@ -656,19 +656,19 @@ export default function ServiciosPage() {
                           const getStatusIcon = (status?: ServiceStatus, hasPendingPayment?: boolean) => {
                             switch (status) {
                               case ServiceStatus.PENDING:
-                                return { icon: '⏳', color: 'text-yellow-600' };
+                                return { icon: '⏳', color: 'text-warning' };
                               case ServiceStatus.IN_PROGRESS:
-                                return { icon: '🔄', color: 'text-orange-600' };
+                                return { icon: '🔄', color: 'text-warning' };
                               case ServiceStatus.COMPLETED:
-                                return hasPendingPayment ? { icon: '💰', color: 'text-orange-600' } : { icon: '✅', color: 'text-green-600' };
+                                return hasPendingPayment ? { icon: '💰', color: 'text-warning' } : { icon: '✅', color: 'text-success' };
                               case ServiceStatus.DELIVERED:
                                 return { icon: '📦', color: 'text-purple-600' };
                               case ServiceStatus.PAID:
-                                return { icon: '💳', color: 'text-cyan-600' };
+                                return { icon: '💳', color: 'text-info' };
                               case ServiceStatus.ANNULLATED:
-                                return { icon: '❌', color: 'text-red-600' };
+                                return { icon: '❌', color: 'text-destructive' };
                               default:
-                                return { icon: '❓', color: 'text-gray-600' };
+                                return { icon: '❓', color: 'text-muted-foreground' };
                             }
                           };
 

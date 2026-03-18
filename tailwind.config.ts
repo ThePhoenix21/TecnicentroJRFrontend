@@ -18,35 +18,18 @@ const config: Config = {
     },
     extend: {
       colors: {
-        // Google Material Design Colors
-        primary: {
-          DEFAULT: '#1a73e8',
-          light: '#e8f0fe',
-          dark: '#1557b0',
-        },
-        background: {
-          DEFAULT: '#ffffff',
-          paper: '#f8f9fa',
-        },
-        text: {
-          primary: '#202124',
-          secondary: '#5f6368',
-          disabled: '#9aa0a6',
-        },
-        border: 'hsl(var(--border))',
-        input: 'hsl(var(--input))',
-        ring: 'hsl(var(--ring))',
-        error: {
-          DEFAULT: '#d93025',
-          light: '#fce8e6',
-        },
+        // Colores semánticos de estado (fijos, no varían con el tema)
         success: {
-          DEFAULT: '#188038',
-          light: '#e6f4ea',
+          DEFAULT: '#2ECC71',
+          light: '#d4f5e2',
         },
         warning: {
-          DEFAULT: '#e37400',
-          light: '#fef7e0',
+          DEFAULT: '#FFEA00',
+          light: '#fffbcc',
+        },
+        info: {
+          DEFAULT: '#3A86FF',
+          light: '#ddeeff',
         },
       },
       borderRadius: {

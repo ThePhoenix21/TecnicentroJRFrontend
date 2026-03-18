@@ -1528,9 +1528,9 @@ export function SaleForm({
           {errors.documentNumber ? (
             <p className="text-sm text-destructive">{errors.documentNumber}</p>
           ) : customerData.documentNumber.length > 0 && customerData.documentNumber.length < 8 ? (
-            <p className="text-sm text-amber-500 mt-1.5">Ingrese 8 dígitos</p>
+            <p className="text-sm text-warning mt-1.5">Ingrese 8 dígitos</p>
           ) : isDniValid ? (
-            <p className="text-sm text-green-600 mt-1.5">✓ DNI válido</p>
+            <p className="text-sm text-success mt-1.5">✓ DNI válido</p>
           ) : null}
         </div>
 
@@ -1909,7 +1909,7 @@ export function SaleForm({
                           });
                         }
                       }}
-                      className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                      className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-info hover:bg-info/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-info/50"
                     >
                       <Printer className="h-4 w-4 mr-2" />
                       Imprimir
@@ -1969,7 +1969,7 @@ export function SaleForm({
                     name="type"
                     value={newItem.type}
                     onChange={handleNewItemChange}
-                    className={`w-full p-2 bg-muted border rounded ${isTypeLocked ? 'text-gray-500' : ''}`}
+                    className={`w-full p-2 bg-muted border rounded ${isTypeLocked ? 'text-muted-foreground' : ''}`}
                     disabled={!(canSellProducts && canSellServices) || isTypeLocked}
                     required
                   >
@@ -2013,7 +2013,7 @@ export function SaleForm({
                       }
                     />
                     {isDropdownOpen && newItem.type === "product" && (
-                      <div className="absolute z-10 w-full mt-1 bg-card text-card-foreground border rounded-md shadow-lg max-h-60 overflow-auto dark:bg-gray-800 dark:border-gray-700">
+                      <div className="absolute z-10 w-full mt-1 bg-card text-card-foreground border rounded-md shadow-lg max-h-60 overflow-auto">
                         {filteredItems().map((item) => {
                           const isProduct = "stock" in item;
                           const stock = isProduct ? (item as any).stock : 0;
@@ -2022,21 +2022,21 @@ export function SaleForm({
                           return (
                             <div
                               key={item.id}
-                              className={`px-4 py-2 hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors duration-200 dark:hover:bg-gray-700 ${
-                                isProduct && !hasStock ? 'border-l-4 border-red-500 bg-red-50' : ''
+                              className={`px-4 py-2 hover:bg-accent hover:text-accent-foreground cursor-pointer transition-colors duration-200 ${
+                                isProduct && !hasStock ? 'border-l-4 border-destructive bg-destructive/10' : ''
                               }`}
                               onClick={() => handleItemSelect(item)}
                             >
                               <div className="font-medium flex items-center justify-between">
                                 <span>{item.name}</span>
                                 {isProduct && !hasStock && (
-                                  <span className="text-xs text-red-600 font-semibold">SIN STOCK</span>
+                                  <span className="text-xs text-destructive font-semibold">SIN STOCK</span>
                                 )}
                               </div>
                               <div className="text-sm text-muted-foreground flex items-center justify-between">
                                 <span>{formatCurrency(item.price)}</span>
                                 {isProduct && (
-                                  <span className={`text-xs ${hasStock ? 'text-green-600' : 'text-red-600'}`}>
+                                  <span className={`text-xs ${hasStock ? 'text-success' : 'text-destructive'}`}>
                                     Stock: {stock}
                                   </span>
                                 )}
@@ -2045,7 +2045,7 @@ export function SaleForm({
                           );
                         })}
                         {filteredItems().length === 0 && (
-                          <div className="p-2 text-gray-500">
+                          <div className="p-2 text-muted-foreground">
                             No se encontraron productos
                           </div>
                         )}
@@ -2192,18 +2192,18 @@ export function SaleForm({
                           >
                             <input {...getInputProps()} />
                             <div className="flex flex-col items-center justify-center space-y-2">
-                              <Plus className="h-8 w-8 text-gray-400" />
+                              <Plus className="h-8 w-8 text-muted-foreground" />
                               {isDragActive ? (
-                                <p className="text-sm text-gray-600">
+                                <p className="text-sm text-muted-foreground">
                                   Suelta las imágenes aquí...
                                 </p>
                               ) : (
                                 <>
-                                  <p className="text-sm text-gray-600">
+                                  <p className="text-sm text-muted-foreground">
                                     Arrastra y suelta imágenes aquí, o haz clic
                                     para seleccionar
                                   </p>
-                                  <p className="text-xs text-gray-500">
+                                  <p className="text-xs text-muted-foreground">
                                     Formatos soportados: .jpeg, .jpg, .png, .webp
                                   </p>
                                 </>
@@ -2262,7 +2262,7 @@ export function SaleForm({
                                       e.stopPropagation();
                                       removeImage(index);
                                     }}
-                                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                    className="absolute -top-2 -right-2 bg-destructive text-white rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                                   >
                                     <X className="h-3 w-3" />
                                   </button>
@@ -2290,7 +2290,7 @@ export function SaleForm({
               <h3 className="text-base md:text-lg font-medium mb-3 md:mb-4">Detalle de la Venta</h3>
 
               {selectedItems.length === 0 ? (
-                <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
+                <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
                   <ShoppingCart className="h-12 w-12 mb-2" />
                   <p>El carrito está vacío</p>
                   <p className="text-sm">Agrega productos o servicios</p>
@@ -2334,7 +2334,7 @@ export function SaleForm({
                         >
                           <div>
                             <div className="font-medium">{item.name}</div>
-                            <div className="text-sm text-gray-500">
+                            <div className="text-sm text-muted-foreground">
                               {item.type === "product" ? (
                                 <>
                                   <input
@@ -2388,7 +2388,7 @@ export function SaleForm({
                               )}
                             </div>
                             {item.notes && (
-                              <div className="text-xs text-gray-500 mt-1">{item.notes}</div>
+                              <div className="text-xs text-muted-foreground mt-1">{item.notes}</div>
                             )}
                           </div>
 
@@ -2443,7 +2443,7 @@ export function SaleForm({
                               size="sm"
                               onClick={() => removeItem(item.id)}
                             >
-                              <Trash2 className="h-4 w-4 text-red-500" />
+                              <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
                           </div>
                         </div>
@@ -2625,17 +2625,17 @@ export function SaleForm({
                     <div className="mb-4">
                       {isLoadingCashSession ? (
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+                          <div className="w-2 h-2 bg-warning rounded-full animate-pulse"></div>
                           Verificando sesión de caja abierta...
                         </div>
                       ) : currentCashSession ? (
-                        <div className="flex items-center gap-2 text-sm text-green-600">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <div className="flex items-center gap-2 text-sm text-success">
+                          <div className="w-2 h-2 bg-success rounded-full"></div>
                           Sesión de caja abierta
                         </div>
                       ) : (
-                        <div className="flex items-center gap-2 text-sm text-red-600">
-                          <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                        <div className="flex items-center gap-2 text-sm text-destructive">
+                          <div className="w-2 h-2 bg-destructive rounded-full"></div>
                           No hay sesión de caja abierta
                         </div>
                       )}
@@ -2722,7 +2722,7 @@ export function SaleForm({
               <button
                 type="button"
                 onClick={addOrderPaymentMethod}
-                className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors self-start sm:self-auto"
+                className="flex items-center gap-1 px-2 py-1 text-xs bg-info text-white rounded hover:bg-info/90 transition-colors self-start sm:self-auto"
               >
                 <Plus className="w-3 h-3" />
                 Agregar método
@@ -2775,7 +2775,7 @@ export function SaleForm({
                       <button
                         type="button"
                         onClick={() => removeOrderPaymentMethod(paymentMethod.id)}
-                        className="p-2 text-red-500 hover:bg-red-50 rounded transition-colors"
+                        className="p-2 text-destructive hover:bg-destructive/10 rounded transition-colors"
                       >
                         <Minus className="w-4 h-4" />
                       </button>

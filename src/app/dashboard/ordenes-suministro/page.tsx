@@ -62,31 +62,31 @@ const PAGE_SIZE = 12;
 const statusLabels: Record<SupplyOrderStatus, { label: string; className: string }> = {
   ISSUED: {
     label: "Emitido",
-    className: "bg-slate-100 text-slate-800",
+    className: "bg-muted text-muted-foreground",
   },
   PENDING: {
     label: "Pendiente",
-    className: "bg-amber-100 text-amber-800",
+    className: "bg-warning/20 text-foreground",
   },
   PARTIAL: {
     label: "Parcial",
-    className: "bg-blue-100 text-blue-800",
+    className: "bg-info/15 text-info",
   },
   PARTIALLY_RECEIVED: {
     label: "Parcialmente recibido",
-    className: "bg-emerald-100 text-emerald-800",
+    className: "bg-success/15 text-success",
   },
   RECEIVED: {
     label: "Recibido",
-    className: "bg-emerald-100 text-emerald-800",
+    className: "bg-success/15 text-success",
   },
   CANCELLED: {
     label: "Cancelado",
-    className: "bg-red-100 text-red-800",
+    className: "bg-destructive/15 text-destructive",
   },
   ANNULLATED: {
     label: "Anulada",
-    className: "bg-red-100 text-red-800",
+    className: "bg-destructive/15 text-destructive",
   },
 };
 

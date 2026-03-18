@@ -40,6 +40,12 @@ export default function RootLayout({
       <head>
         <link rel="manifest" href="/manifest.json" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
+        {/* Script inline para aplicar el tema antes de la hidratación (evita flash) */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem('app-theme');if(t&&t!=='theme-phoenix'){document.documentElement.classList.add(t);}}catch(e){}`,
+          }}
+        />
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         <Providers>

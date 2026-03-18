@@ -54,15 +54,15 @@ const priorityLabel: Record<TicketPriority, string> = {
 };
 
 const getStatusClasses = (status: TicketStatus) => {
-  if (status === 'OPEN' || status === 'IN_PROGRESS' || status === 'COMPLETED') return 'bg-emerald-100 text-emerald-800';
-  if (status === 'REFUSED' || status === 'CANCELLED') return 'bg-slate-100 text-slate-800';
-  return 'bg-rose-100 text-rose-800';
+  if (status === 'OPEN' || status === 'IN_PROGRESS' || status === 'COMPLETED') return 'bg-success/15 text-success';
+  if (status === 'REFUSED' || status === 'CANCELLED') return 'bg-muted text-muted-foreground';
+  return 'bg-destructive/15 text-destructive';
 };
 
 const getPriorityClasses = (priority: TicketPriority) => {
-  if (priority === 'HIGH') return 'bg-amber-100 text-amber-800';
-  if (priority === 'LOW') return 'bg-slate-100 text-slate-800';
-  return 'bg-blue-100 text-blue-800';
+  if (priority === 'HIGH') return 'bg-destructive/15 text-destructive';
+  if (priority === 'LOW') return 'bg-muted text-muted-foreground';
+  return 'bg-info/15 text-info';
 };
 
 export default function SupportPage() {
@@ -339,8 +339,8 @@ export default function SupportPage() {
             </div>
           ) : filteredTickets.length === 0 ? (
             <div className="text-center py-8">
-              <LifeBuoy className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500">
+              <LifeBuoy className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">
                 {searchTerm ? 'No se encontraron tickets' : 'No tienes tickets registrados'}
               </p>
             </div>

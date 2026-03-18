@@ -170,7 +170,7 @@ export function StoreForm({ isOpen, onClose, onStoreSaved, editingStore }: Store
               placeholder="Ej: Tienda Principal"
               className={errors.name ? "border-red-500" : ""}
             />
-            {errors.name && <p className="text-sm text-red-500">{errors.name}</p>}
+            {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
           </div>
 
           <div className="space-y-2">
@@ -208,8 +208,8 @@ export function StoreForm({ isOpen, onClose, onStoreSaved, editingStore }: Store
 
               {/* Mostrar error de autenticación si existe */}
               {authError && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-                  <p className="text-sm text-red-600 font-medium">{authError}</p>
+                <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+                  <p className="text-sm text-destructive font-medium">{authError}</p>
                 </div>
               )}
 
@@ -226,7 +226,7 @@ export function StoreForm({ isOpen, onClose, onStoreSaved, editingStore }: Store
                   placeholder="admin@ejemplo.com"
                   className={errors.adminEmail ? "border-red-500" : ""}
                 />
-                {errors.adminEmail && <p className="text-sm text-red-500">{errors.adminEmail}</p>}
+                {errors.adminEmail && <p className="text-sm text-destructive">{errors.adminEmail}</p>}
               </div>
 
               <div className="space-y-2">
@@ -242,7 +242,7 @@ export function StoreForm({ isOpen, onClose, onStoreSaved, editingStore }: Store
                   placeholder="Contraseña"
                   className={errors.adminPassword ? "border-red-500" : ""}
                 />
-                {errors.adminPassword && <p className="text-sm text-red-500">{errors.adminPassword}</p>}
+                {errors.adminPassword && <p className="text-sm text-destructive">{errors.adminPassword}</p>}
               </div>
             </div>
           )}

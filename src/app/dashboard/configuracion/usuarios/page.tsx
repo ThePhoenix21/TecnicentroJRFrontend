@@ -165,9 +165,9 @@ export default function UsersPage() {
                         <SelectItem key={`${establishment.type}-${establishment.id}`} value={establishment.id}>
                           <div className="flex items-center gap-2">
                             {establishment.type === 'store' ? (
-                              <Building className="h-4 w-4 text-blue-500" />
+                              <Building className="h-4 w-4 text-info" />
                             ) : (
-                              <Warehouse className="h-4 w-4 text-green-500" />
+                              <Warehouse className="h-4 w-4 text-success" />
                             )}
                             <span>{establishment.name}</span>
                           </div>

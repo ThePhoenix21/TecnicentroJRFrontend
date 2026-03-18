@@ -9,7 +9,7 @@ import {
   Users,
   FileText,
   LogOut,
-  Sun,
+  Palette,
   ShoppingCart,
   Building,
   DollarSign,
@@ -22,6 +22,7 @@ import {
   ArrowLeftRight,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ThemeSelector } from "@/components/ui/theme-selector";
 import { useAuth } from '@/contexts/auth-context';
 import { usePermissions } from '@/hooks/usePermissions';
 import { AuthStore } from '@/contexts/auth-context';
@@ -339,10 +340,13 @@ export function AppSidebar() {
           {/* Selector de tema */}
           <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-muted/50">
             <div className="flex items-center text-sm font-medium text-foreground/80">
-              <Sun className="h-4 w-4 mr-2 text-amber-500" />
-              <span>Tema</span>
+              <Palette className="h-4 w-4 mr-2 text-primary" />
+              <span>Apariencia</span>
             </div>
-            <ThemeToggle />
+            <div className="flex items-center gap-0.5">
+              <ThemeSelector />
+              <ThemeToggle />
+            </div>
           </div>
 
           {/* Botón de cerrar sesión */}

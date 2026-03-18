@@ -1183,13 +1183,13 @@ export default function ProductsPage() {
                   <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm">
                     <span className={`font-medium ${
                       storeProduct.stock <= 0
-                        ? 'text-red-600'
-                        : 'text-green-600'
+                        ? 'text-destructive'
+                        : 'text-success'
                     }`}>
                       {storeProduct.stock} unidades
                     </span>
                     {storeProduct.stock <= 0 && (
-                      <span className="text-red-600 text-xs">
+                      <span className="text-destructive text-xs">
                         ⚠️ Stock bajo
                       </span>
                     )}

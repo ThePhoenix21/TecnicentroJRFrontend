@@ -939,7 +939,7 @@ export default function CajaPage() {
                 )}
               </div>
               {currentSession?.status === 'OPEN' && (
-                <CheckCircle className="h-5 w-5 text-green-500" />
+                <CheckCircle className="h-5 w-5 text-success" />
               )}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
@@ -964,10 +964,10 @@ export default function CajaPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Ingresos</CardTitle>
-            <TrendingUp className="h-4 w-4 text-green-500" />
+            <TrendingUp className="h-4 w-4 text-success" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
+            <div className="text-2xl font-bold text-success">
               {formatCurrency(balance?.balance?.totalIngresos || 0)}
             </div>
             <p className="text-xs text-muted-foreground">
@@ -979,10 +979,10 @@ export default function CajaPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Egresos</CardTitle>
-            <TrendingDown className="h-4 w-4 text-red-500" />
+            <TrendingDown className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">
+            <div className="text-2xl font-bold text-destructive">
               {formatCurrency(balance?.balance?.totalSalidas || 0)}
             </div>
             <p className="text-xs text-muted-foreground">Salidas de caja</p>
@@ -1007,21 +1007,21 @@ export default function CajaPage() {
                   {formatCurrency(balance.balance.balanceActual || 0)}
                 </p>                
               </div>
-              <div className="text-center p-4 bg-green-50 rounded-lg">
+              <div className="text-center p-4 bg-success/10 rounded-lg">
                 <p className="text-sm text-muted-foreground">Ingresos</p>
-                <p className="text-2xl font-bold text-green-600">
+                <p className="text-2xl font-bold text-success">
                   {formatCurrency(balance.balance.totalIngresos || 0)}
                 </p>                
               </div>
-              <div className="text-center p-4 bg-red-50 rounded-lg">
+              <div className="text-center p-4 bg-destructive/10 rounded-lg">
                 <p className="text-sm text-muted-foreground">Egresos</p>
-                <p className="text-2xl font-bold text-red-600">
+                <p className="text-2xl font-bold text-destructive">
                   {formatCurrency(balance.balance.totalSalidas || 0)}
                 </p>                
               </div>
-              <div className="text-center p-4 bg-blue-50 rounded-lg">
+              <div className="text-center p-4 bg-info/10 rounded-lg">
                 <p className="text-sm text-muted-foreground">Inicial</p>
-                <p className="text-2xl font-bold text-blue-600">
+                <p className="text-2xl font-bold text-info">
                   {formatCurrency(balance.balance.openingAmount || 0)}
                 </p>                
               </div>
@@ -1325,7 +1325,7 @@ export default function CajaPage() {
       {showCloseForm && currentSession && canManageCash && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-red-600">
+            <CardTitle className="flex items-center gap-2 text-destructive">
               <Power className="h-5 w-5" />
               Cerrar Caja
             </CardTitle>
@@ -1562,8 +1562,8 @@ export default function CajaPage() {
                       <div className="flex items-center gap-3 flex-1">
                         <div className={`p-3 rounded-full flex items-center justify-center w-14 h-14 flex-shrink-0 ${
                           movement.type === 'INCOME' 
-                            ? 'bg-green-100 text-green-600' 
-                            : 'bg-red-100 text-red-600'
+                            ? 'bg-success/15 text-success' 
+                            : 'bg-destructive/15 text-destructive'
                         }`}>
                           {movement.type === 'INCOME' ? (
                             <TrendingUp className="h-6 w-6" />
@@ -1587,7 +1587,7 @@ export default function CajaPage() {
                       </div>
                       <div className="text-right">
                         <p
-                          className={`font-bold ${movement.type === 'INCOME' ? 'text-green-600' : 'text-red-600'}`}
+                          className={`font-bold ${movement.type === 'INCOME' ? 'text-success' : 'text-destructive'}`}
                         >
                           {movement.type === 'INCOME' ? '+' : '-'} {formatCurrency(parseFloat(movement.amount || '0'))}
                         </p>
@@ -1796,8 +1796,8 @@ export default function CajaPage() {
                             <div className="flex items-center gap-3 flex-1">
                               <div className={`p-3 rounded-full flex items-center justify-center w-14 h-14 flex-shrink-0 ${
                                 movement.type === 'INCOME' 
-                                  ? 'bg-green-100 text-green-600' 
-                                  : 'bg-red-100 text-red-600'
+                                  ? 'bg-success/15 text-success' 
+                                  : 'bg-destructive/15 text-destructive'
                               }`}>
                                 {movement.type === 'INCOME' ? (
                                   <TrendingUp className="h-6 w-6" />
@@ -1821,7 +1821,7 @@ export default function CajaPage() {
                             </div>
                             <div className="text-right">
                               <p
-                                className={`font-bold ${movement.type === 'INCOME' ? 'text-green-600' : 'text-red-600'}`}
+                                className={`font-bold ${movement.type === 'INCOME' ? 'text-success' : 'text-destructive'}`}
                               >
                                 {movement.type === 'INCOME' ? '+' : '-'} {formatCurrency(parseFloat(movement.amount || '0'))}
                               </p>
@@ -1983,7 +1983,7 @@ export default function CajaPage() {
                   <Button
                     variant="default"
                     onClick={handleBackToOpenSessions}
-                    className="w-full md:w-auto bg-amber-500 text-black hover:bg-amber-600"
+                    className="w-full md:w-auto bg-warning text-foreground hover:bg-warning/90"
                   >
                     <ArrowLeft className="h-4 w-4 mr-2" />
                     Volver a sesiones abiertas
@@ -2038,10 +2038,10 @@ export default function CajaPage() {
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Total Ingresos</CardTitle>
-                    <TrendingUp className="h-4 w-4 text-green-500" />
+                    <TrendingUp className="h-4 w-4 text-success" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-green-600">
+                    <div className="text-2xl font-bold text-success">
                       {formatCurrency(selectedOpenSessionBalance?.balance?.totalIngresos || 0)}
                     </div>
                   </CardContent>
@@ -2050,10 +2050,10 @@ export default function CajaPage() {
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Total Egresos</CardTitle>
-                    <TrendingDown className="h-4 w-4 text-red-500" />
+                    <TrendingDown className="h-4 w-4 text-destructive" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-red-600">
+                    <div className="text-2xl font-bold text-destructive">
                       {formatCurrency(selectedOpenSessionBalance?.balance?.totalSalidas || 0)}
                     </div>
                   </CardContent>
@@ -2076,21 +2076,21 @@ export default function CajaPage() {
                           {formatCurrency(selectedOpenSessionBalance.balance.balanceActual || 0)}
                         </p>
                       </div>
-                      <div className="text-center p-4 bg-green-50 rounded-lg">
+                      <div className="text-center p-4 bg-success/10 rounded-lg">
                         <p className="text-sm text-muted-foreground">Ingresos</p>
-                        <p className="text-2xl font-bold text-green-600">
+                        <p className="text-2xl font-bold text-success">
                           {formatCurrency(selectedOpenSessionBalance.balance.totalIngresos || 0)}
                         </p>
                       </div>
-                      <div className="text-center p-4 bg-red-50 rounded-lg">
+                      <div className="text-center p-4 bg-destructive/10 rounded-lg">
                         <p className="text-sm text-muted-foreground">Egresos</p>
-                        <p className="text-2xl font-bold text-red-600">
+                        <p className="text-2xl font-bold text-destructive">
                           {formatCurrency(selectedOpenSessionBalance.balance.totalSalidas || 0)}
                         </p>
                       </div>
-                      <div className="text-center p-4 bg-blue-50 rounded-lg">
+                      <div className="text-center p-4 bg-info/10 rounded-lg">
                         <p className="text-sm text-muted-foreground">Inicial</p>
-                        <p className="text-2xl font-bold text-blue-600">
+                        <p className="text-2xl font-bold text-info">
                           {formatCurrency(selectedOpenSessionBalance.balance.openingAmount || 0)}
                         </p>
                       </div>
@@ -2205,8 +2205,8 @@ export default function CajaPage() {
                             <div className="flex items-center gap-3 flex-1">
                               <div className={`p-3 rounded-full flex items-center justify-center w-14 h-14 flex-shrink-0 ${
                                 movement.type === 'INCOME'
-                                  ? 'bg-green-100 text-green-600'
-                                  : 'bg-red-100 text-red-600'
+                                  ? 'bg-success/15 text-success'
+                                  : 'bg-destructive/15 text-destructive'
                               }`}>
                                 {movement.type === 'INCOME' ? (
                                   <TrendingUp className="h-6 w-6" />
@@ -2229,7 +2229,7 @@ export default function CajaPage() {
                               </div>
                             </div>
                             <div className="text-right">
-                              <p className={`font-bold ${movement.type === 'INCOME' ? 'text-green-600' : 'text-red-600'}`}>
+                              <p className={`font-bold ${movement.type === 'INCOME' ? 'text-success' : 'text-destructive'}`}>
                                 {movement.type === 'INCOME' ? '+' : '-'} {formatCurrency(parseFloat(movement.amount || '0'))}
                               </p>
                             </div>
@@ -2328,7 +2328,7 @@ export default function CajaPage() {
         >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle className="text-red-600">Advertencia: cierre forzado de caja</DialogTitle>
+              <DialogTitle className="text-destructive">Advertencia: cierre forzado de caja</DialogTitle>
               <DialogDescription>
                 Si cierras la caja por este método, el usuario que la abrió no podrá declarar su monto de cierre.
                 Esta sesión se cerrará con monto declarado en <strong>0</strong>.

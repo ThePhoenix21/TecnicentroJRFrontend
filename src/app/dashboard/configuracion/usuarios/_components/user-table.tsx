@@ -147,18 +147,18 @@ export function UserTable({
       ADMIN: {
         label: "Administrador",
         variant:
-          "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+          "bg-primary text-primary-foreground",
       },
       USER: {
         label: "Usuario",
         variant:
-          "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
+          "bg-muted text-muted-foreground",
       },
     };
 
     const { label, variant } = roleMap[role as keyof typeof roleMap] || {
       label: role,
-      variant: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
+      variant: "bg-muted text-muted-foreground",
     };
 
     return <Badge className={variant}>{label}</Badge>;
@@ -168,19 +168,19 @@ export function UserTable({
     const statusMap = {
       ACTIVE: {
         label: "Activo",
-        variant: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+        variant: "bg-success/15 text-success",
       },
       INACTIVE: {
         label: "Inactivo", 
-        variant: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+        variant: "bg-warning/20 text-foreground",
       },
       SUSPENDED: {
         label: "Suspendido",
-        variant: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
+        variant: "bg-warning/20 text-foreground",
       },
       DELETED: {
         label: "Eliminado",
-        variant: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+        variant: "bg-destructive/15 text-destructive",
       },
     };
 
@@ -267,11 +267,11 @@ export function UserTable({
   // Error state
   if (error) {
     return (
-      <div className="rounded-md border border-red-200 bg-red-50 p-4 dark:border-red-900 dark:bg-red-900/20">
+      <div className="rounded-md border border-destructive/20 bg-destructive/10 p-4">
         <div className="flex">
           <div className="flex-shrink-0">
             <svg
-              className="h-5 w-5 text-red-400"
+              className="h-5 w-5 text-destructive/60"
               viewBox="0 0 20 20"
               fill="currentColor"
             >
@@ -283,17 +283,17 @@ export function UserTable({
             </svg>
           </div>
           <div className="ml-3">
-            <h3 className="text-sm font-medium text-red-800 dark:text-red-200">
+            <h3 className="text-sm font-medium text-destructive">
               Error al cargar los usuarios
             </h3>
-            <div className="mt-2 text-sm text-red-700 dark:text-red-300">
+            <div className="mt-2 text-sm text-destructive">
               <p>{error}</p>
             </div>
             <div className="mt-4">
               <Button
                 variant="outline"
                 onClick={fetchUsers}
-                className="border-red-200 bg-white text-red-800 hover:bg-red-50 dark:border-red-800 dark:bg-red-900/30 dark:text-red-200 dark:hover:bg-red-900/40"
+                className="border-destructive/20 bg-background text-destructive hover:bg-destructive/10"
               >
                 Reintentar
               </Button>
@@ -407,7 +407,7 @@ export function UserTable({
                     {/* Mostrar tiendas */}
                     {user.stores && user.stores.slice(0, 2).map((store) => (
                       <div key={`store-${store.id}`} className="flex items-center gap-1">
-                        <Building className="h-4 w-4 text-blue-500" />
+                        <Building className="h-4 w-4 text-info" />
                         <span className="truncate max-w-[150px]" title={store.name}>
                           {store.name}
                         </span>
@@ -416,7 +416,7 @@ export function UserTable({
                     {/* Mostrar almacenes */}
                     {user.warehouses && user.warehouses.slice(0, 2).map((warehouse) => (
                       <div key={`warehouse-${warehouse.id}`} className="flex items-center gap-1">
-                        <Warehouse className="h-4 w-4 text-green-500" />
+                        <Warehouse className="h-4 w-4 text-success" />
                         <span className="truncate max-w-[150px]" title={warehouse.name}>
                           {warehouse.name}
                         </span>

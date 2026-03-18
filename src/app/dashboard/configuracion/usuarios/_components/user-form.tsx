@@ -767,15 +767,15 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
                           key={requirement.key}
                           className={`flex items-center gap-3 text-sm p-2 rounded-md transition-all duration-200 ${
                             isValid
-                              ? 'bg-green-50/80 text-green-700 border border-green-200/50'
-                              : 'bg-amber-50/80 text-amber-700 border border-amber-200/50'
+                              ? 'bg-success/10 text-success border border-success/20'
+                              : 'bg-warning/10 text-foreground border border-warning/20'
                           }`}
                           title={requirement.description}
                         >
                           <div className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-colors ${
                             isValid
-                              ? 'bg-green-500 text-white'
-                              : 'bg-amber-400 text-white'
+                              ? 'bg-success text-white'
+                              : 'bg-warning text-white'
                           }`}>
                             {isValid ? (
                               <CheckCircle className="h-3 w-3" />

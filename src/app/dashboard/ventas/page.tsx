@@ -971,32 +971,27 @@ export default function VentasPage() {
                           const latestPaymentMethod = paymentMethods[paymentMethods.length - 1];
                           const totalRefundAmount = refundPaymentMethods.reduce((sum, pm) => sum + (Number(pm?.amount) || 0), 0);
                           const hasRegisteredPayments = totalPaidAmount > 0;
-
                           const displayTotal = Number(order.total ?? 0);
 
                           const statusConfig = {
                             COMPLETED: {
                               text: "Completado",
-                              className:
-                                "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+                              className: "bg-success/15 text-success",
                               icon: "✓",
                             },
                             PAID: {
                               text: "Pagado",
-                              className:
-                                "bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-400",
+                              className: "bg-success/15 text-success",
                               icon: "💰",
                             },
                             PENDING: {
                               text: "Pendiente",
-                              className:
-                                "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
+                              className: "bg-warning/20 text-foreground",
                               icon: "⏳",
                             },
                             CANCELLED: {
                               text: "Anulado",
-                              className:
-                                "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+                              className: "bg-destructive/15 text-destructive",
                               icon: "✕",
                             },
                           } as const;
