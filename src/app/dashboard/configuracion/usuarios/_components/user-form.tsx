@@ -33,6 +33,7 @@ import { tenantService } from '@/services/tenant.service';
 import { AssignmentType, type Store, type Warehouse, type UserFormData } from '@/types/user.types';
 import { storeService } from '@/services/store.service';
 import { warehouseService } from '@/services/warehouse.service';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const UserRole = z.enum(['ADMIN', 'USER']);
 type UserRoleType = z.infer<typeof UserRole>;
@@ -520,7 +521,13 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
           onSubmit={form.handleSubmit(onSubmit as any)}
           className="flex-1 overflow-y-auto pr-2"
         >
-          <div className="space-y-6 pb-6">
+          <Tabs defaultValue="info" className="space-y-4 pb-2">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="info">Información</TabsTrigger>
+              <TabsTrigger value="permissions">Permisos de usuario</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="info" className="space-y-6">
             {/* Loading state for stores */}
             {isLoadingStores && (
               <div className="flex items-center justify-center py-8">
@@ -709,19 +716,6 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
               </>
             )}
 
-            {/* Sección de Permisos */}
-            {form.watch('role') === 'USER' && (
-              <PermissionsSelectorForm
-                  name="permissions"
-                  availablePermissions={availablePermissions}
-                  isLoading={isLoadingPermissions}
-                  title="Permisos"
-                  description="Selecciona los permisos que tendrá este usuario"
-                  columns={3}
-                  maxHeight="max-h-64"
-                  className="md:col-span-2 space-y-4 border rounded-lg p-4"
-                />
-            )}
 
             {/* Campos de contraseña solo visibles en creación */}
             {!initialData?.id && (
@@ -800,7 +794,25 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
               </div>
             )}
             </div>
-          </div>
+          </TabsContent>
+
+          <TabsContent value="permissions" className="pb-2">
+            {form.watch('role') === 'USER' ? (
+              <PermissionsSelectorForm
+                name="permissions"
+                availablePermissions={filteredAvailablePermissions}
+                isLoading={isLoadingPermissions}
+                title="Permisos de usuario"
+                description="Selecciona los permisos que tendrá este usuario"
+                maxHeight="max-h-[480px]"
+              />
+            ) : (
+              <div className="text-sm text-muted-foreground py-10 text-center border rounded-lg">
+                Los permisos solo están disponibles para el rol <span className="font-medium">Usuario</span>.
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
         </form>
 
         <div className="flex-shrink-0 border-t bg-background pt-4 mt-6 flex justify-end space-x-4">

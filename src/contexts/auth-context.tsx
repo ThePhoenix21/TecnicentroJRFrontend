@@ -69,6 +69,8 @@ interface AuthContextType {
   tenantDefaultService: TenantDefaultService;
   tenantDefaultServiceLoaded: boolean;
   canIssuePdf: boolean;
+  tenantLogoUrl?: string;
+  tenantName?: string;
   login: (email: string, password: string, context?: LoginContextPayload) => Promise<User | null>;
   logout: (redirect?: boolean) => void;
   selectStore: (store: AuthStore, options?: { reload?: boolean }) => Promise<void>;
@@ -94,6 +96,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [tenantFeaturesLoaded, setTenantFeaturesLoaded] = useState(false);
   const [tenantDefaultService, setTenantDefaultService] = useState<TenantDefaultService>('REPAIR');
   const [tenantDefaultServiceLoaded, setTenantDefaultServiceLoaded] = useState(false);
+  const [tenantLogoUrl, setTenantLogoUrl] = useState<string | undefined>(undefined);
+  const [tenantName, setTenantName] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const suppressRejectionsRef = useRef(false);
@@ -402,6 +406,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const tokenTenantFeatures = Array.isArray(decoded.tenantFeatures) ? decoded.tenantFeatures : [];
         setTenantFeatures(tokenTenantFeatures);
         setTenantFeaturesLoaded(true);
+        setTenantLogoUrl(decoded.tenantLogoUrl);
+        setTenantName(decoded.tenantName);
 
         // Mantener compatibilidad con defaultService cacheado, pero no bloquear el login.
         try {
@@ -585,6 +591,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const tokenTenantFeatures = Array.isArray(decoded.tenantFeatures) ? decoded.tenantFeatures : [];
         setTenantFeatures(tokenTenantFeatures);
         setTenantFeaturesLoaded(true);
+        setTenantLogoUrl(decoded.tenantLogoUrl);
+        setTenantName(decoded.tenantName);
 
         // Mantener compatibilidad con defaultService cacheado, pero no bloquear la UI.
         try {
@@ -757,6 +765,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     tenantDefaultService,
     tenantDefaultServiceLoaded,
     canIssuePdf,
+    tenantLogoUrl,
+    tenantName,
     login,
     logout,
     selectStore,

@@ -78,7 +78,7 @@ export function UserDialog({
           {children}
         </DialogTrigger>
       )}
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] p-0 overflow-hidden">
+      <DialogContent className="sm:max-w-[680px] lg:max-w-[920px] max-h-[90vh] p-0 overflow-hidden">
         <div className="flex flex-col max-h-[90vh]">
           <DialogHeader className="p-4 sm:p-6 pb-2 sm:pb-2 flex-shrink-0">
             <DialogTitle className="text-lg sm:text-xl">{user ? 'Editar Usuario' : 'Nuevo Usuario'}</DialogTitle>

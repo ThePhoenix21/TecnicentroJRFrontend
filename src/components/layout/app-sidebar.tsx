@@ -201,7 +201,7 @@ const getSidebarItems = (
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { user, logout, currentStore, currentWarehouse, activeLoginMode, selectStore, selectWarehouse, tenantFeatures, tenantFeaturesLoaded } = useAuth();
+  const { user, logout, currentStore, currentWarehouse, activeLoginMode, selectStore, selectWarehouse, tenantFeatures, tenantFeaturesLoaded, tenantLogoUrl, tenantName } = useAuth();
   const { hasPermission: hasPermissionHook } = usePermissions();
   const sidebarItems = getSidebarItems(hasPermissionHook, tenantFeatures, tenantFeaturesLoaded, activeLoginMode);
 
@@ -214,6 +214,21 @@ export function AppSidebar() {
     <>
       {/* Sidebar lateral solo en escritorio/tablet */}
       <aside className="hidden md:block fixed left-0 top-0 h-screen w-64 bg-card/95 backdrop-blur-sm border-r border-border/50 shadow-sm z-40">
+        {/* Logo del tenant - siempre visible en la parte superior */}
+        <div className="fixed left-0 top-0 w-64 h-16 bg-card/95 backdrop-blur-sm border-b border-border/50 flex items-center justify-center z-50">
+          {tenantLogoUrl ? (
+            <img
+              src={tenantLogoUrl}
+              alt={tenantName || 'Tenant Logo'}
+              className="h-10 w-auto max-w-[90%] object-contain"
+            />
+          ) : (
+            <div className="text-sm font-semibold text-foreground/70 text-center px-2">
+              {tenantName || 'Tenant'}
+            </div>
+          )}
+        </div>
+
         <div className="flex h-full flex-col pt-16">
         
         {/* Información del contexto actual */}

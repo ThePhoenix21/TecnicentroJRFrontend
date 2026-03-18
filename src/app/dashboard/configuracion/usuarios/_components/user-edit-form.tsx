@@ -18,6 +18,7 @@ import { storeService } from '@/services/store.service';
 import { warehouseService } from '@/services/warehouse.service';
 import { useAuth } from '@/contexts/auth-context';
 import { tenantService } from '@/services/tenant.service';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // Schema para edición de usuario
 const userEditSchema = z.object({
@@ -416,7 +417,14 @@ export function UserEditForm({ user, stores, warehouses, onSuccess }: UserEditFo
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 sm:space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+        <Tabs defaultValue="info" className="space-y-4">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="info">Información</TabsTrigger>
+            <TabsTrigger value="permissions">Permisos de usuario</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="info">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
           <FormField
             control={form.control}
             name="name"
@@ -639,20 +647,26 @@ export function UserEditForm({ user, stores, warehouses, onSuccess }: UserEditFo
             </>
           )}
           
-          {/* Sección de Permisos */}
-          {user.role === 'USER' && (
-            <PermissionsSelectorForm
+            </div>
+          </TabsContent>
+
+          <TabsContent value="permissions" className="pb-2">
+            {user.role === 'USER' ? (
+              <PermissionsSelectorForm
                 name="permissions"
-                availablePermissions={availablePermissions}
+                availablePermissions={filteredAvailablePermissions}
                 isLoading={isLoadingPermissions}
-                title="Permisos"
+                title="Permisos de usuario"
                 description="Selecciona los permisos que tendrá este usuario"
-                columns={2}
-                maxHeight="max-h-48 sm:max-h-64"
-                className="sm:col-span-2 space-y-3 border rounded-lg p-3 sm:p-4"
+                maxHeight="max-h-[480px]"
               />
-          )}
-        </div>
+            ) : (
+              <div className="text-sm text-muted-foreground py-10 text-center border rounded-lg">
+                Los permisos solo están disponibles para el rol <span className="font-medium">Usuario</span>.
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
 
         <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t">
           <Button
