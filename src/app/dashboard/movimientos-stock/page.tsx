@@ -1600,7 +1600,9 @@ export default function MovimientosStockPage() {
 
             {/* Origin (read-only) */}
             <div className="space-y-1">
-              <label className="text-sm font-medium">Origen</label>
+              <label className="text-sm font-medium">
+                {createTransferType === "REQUEST" ? "Tienda que solicita" : "Origen"}
+              </label>
               <div className="flex items-center gap-2 px-3 py-2 rounded-md border bg-muted/40 text-sm text-muted-foreground">
                 <span className="text-xs">
                   [{activeLoginMode === "STORE" ? "Tienda" : "Almacén"}]
@@ -1609,47 +1611,59 @@ export default function MovimientosStockPage() {
               </div>
             </div>
 
-            {/* Destination type */}
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Tipo de destino</label>
-              <Select
-                value={destType}
-                onValueChange={(v) => handleDestTypeChange(v as "STORE" | "WAREHOUSE")}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="STORE">Tienda</SelectItem>
-                  {hasWarehouse() && (
-                    <SelectItem value="WAREHOUSE">Almacén</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
+            {createTransferType && (
+              <>
+                {/* Destination type */}
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Tipo de destino</label>
+                  <Select
+                    value={destType}
+                    onValueChange={(v) => handleDestTypeChange(v as "STORE" | "WAREHOUSE")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="STORE">Tienda</SelectItem>
+                      {hasWarehouse() && (
+                        <SelectItem value="WAREHOUSE">Almacén</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            {/* Destination selector */}
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Destino</label>
-              <Select value={destId} onValueChange={handleDestIdChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona el destino..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {destType === "STORE"
-                    ? filteredStoresLookup.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.name}
-                        </SelectItem>
-                      ))
-                    : filteredWarehousesLookup.map((w) => (
-                        <SelectItem key={w.id} value={w.id}>
-                          {w.name}
-                        </SelectItem>
-                      ))}
-                </SelectContent>
-              </Select>
-            </div>
+                {/* Destination selector */}
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">
+                    {createTransferType === "REQUEST" ? "Solicitado a" : "Destino"}
+                  </label>
+                  <Select value={destId} onValueChange={handleDestIdChange}>
+                    <SelectTrigger>
+                      <SelectValue
+                        placeholder={
+                          createTransferType === "REQUEST"
+                            ? "Selecciona a quién solicitar..."
+                            : "Selecciona el destino..."
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {destType === "STORE"
+                        ? filteredStoresLookup.map((s) => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {s.name}
+                            </SelectItem>
+                          ))
+                        : filteredWarehousesLookup.map((w) => (
+                            <SelectItem key={w.id} value={w.id}>
+                              {w.name}
+                            </SelectItem>
+                          ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
 
             {/* Notes */}
             <div className="space-y-1">
