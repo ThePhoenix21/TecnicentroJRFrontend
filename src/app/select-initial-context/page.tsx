@@ -154,29 +154,29 @@ export default function SelectInitialContextPage() {
   const shouldScrollItems = items.length > 4;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-lg">
         {/* Header */}
         <div className="text-center mb-8">
           <div className={cn(
             'mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl shadow-elevation-2 transition-all duration-500',
-            isStore ? 'bg-primary text-white rotate-0' : 'bg-amber-500 text-white rotate-[360deg]'
+            isStore ? 'bg-primary text-primary-foreground rotate-0' : 'bg-amber-500 text-amber-50 rotate-[360deg]'
           )}>
             {isStore
               ? <Building2 className="h-8 w-8 transition-transform duration-500" />
               : <Warehouse className="h-8 w-8 transition-transform duration-500" />
             }
           </div>
-          <h1 className="text-2xl font-bold text-text-primary">¿Cómo deseas ingresar?</h1>
-          <p className="mt-1 text-sm text-text-secondary">Selecciona tu contexto para continuar</p>
+          <h1 className="text-2xl font-bold text-foreground">¿Cómo deseas ingresar?</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Selecciona tu contexto para continuar</p>
         </div>
 
         {/* Card */}
-        <div className="rounded-2xl border bg-white shadow-elevation-2 overflow-hidden flex flex-col min-h-[470px] sm:min-h-[520px] max-h-[82vh]">          
+        <div className="rounded-2xl border bg-card shadow-elevation-2 overflow-hidden flex flex-col min-h-[470px] sm:min-h-[520px] max-h-[82vh]">
           {/* Toggle switch */}
           {hasBoth && (
             <div className="px-6 pt-6">
-              <div className="relative flex items-center rounded-full bg-slate-100 p-1">
+              <div className="relative flex items-center rounded-full bg-muted p-1">
                 {/* Sliding pill */}
                 <span
                   className={cn(
@@ -192,7 +192,7 @@ export default function SelectInitialContextPage() {
                   onClick={() => { setError(null); setIsNetworkError(false); setMode('STORE'); }}
                   className={cn(
                     'relative z-10 flex flex-1 items-center justify-center gap-2 rounded-full py-2.5 text-sm font-semibold transition-colors duration-300',
-                    isStore ? 'text-white' : 'text-text-secondary hover:text-text-primary'
+                    isStore ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
                   <Building2 className="h-4 w-4" />
@@ -204,7 +204,7 @@ export default function SelectInitialContextPage() {
                   onClick={() => { setError(null); setIsNetworkError(false); setMode('WAREHOUSE'); }}
                   className={cn(
                     'relative z-10 flex flex-1 items-center justify-center gap-2 rounded-full py-2.5 text-sm font-semibold transition-colors duration-300',
-                    !isStore ? 'text-white' : 'text-text-secondary hover:text-text-primary'
+                    !isStore ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
                   <Warehouse className="h-4 w-4" />
@@ -217,21 +217,21 @@ export default function SelectInitialContextPage() {
           {/* Content */}
           <div className="p-6 space-y-3 flex-1 overflow-hidden">
             {!hasStores && !hasWarehouses && (
-              <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
                 <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
                 No tienes tiendas ni almacenes disponibles. Contacta al administrador.
               </div>
             )}
 
             {error && (
-              <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              <div className="rounded-xl border border-destructive bg-destructive/10 p-4 text-sm text-destructive">
                 {error}
               </div>
             )}
 
             {/* List heading */}
             {(hasStores || hasWarehouses) && mode && (
-              <p className="text-xs font-medium uppercase tracking-wider text-text-secondary">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 {isStore ? `${stores.length} tienda${stores.length !== 1 ? 's' : ''} disponible${stores.length !== 1 ? 's' : ''}` : `${warehouses.length} almacén${warehouses.length !== 1 ? 'es' : ''} disponible${warehouses.length !== 1 ? 's' : ''}`}
               </p>
             )}
@@ -253,8 +253,8 @@ export default function SelectInitialContextPage() {
                   disabled={isSubmitting}
                   onClick={() => isStore ? handleSelectStore(item) : handleSelectWarehouse(item)}
                   className={cn(
-                    'group flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-left transition-all duration-200',
-                    'hover:border-slate-300 hover:shadow-elevation-1 hover:scale-[1.01] active:scale-[0.99]',
+                    'group flex w-full items-center gap-3 rounded-xl border border-border bg-card px-4 py-3.5 text-left transition-all duration-200',
+                    'hover:border-border hover:shadow-elevation-1 hover:scale-[1.01] active:scale-[0.99]',
                     'disabled:opacity-50 disabled:pointer-events-none',
                     'animate-in fade-in slide-in-from-bottom-2'
                   )}
@@ -263,13 +263,13 @@ export default function SelectInitialContextPage() {
                   <div className={cn(
                     'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors duration-200',
                     isStore
-                      ? 'bg-primary-light text-primary group-hover:bg-primary group-hover:text-white'
-                      : 'bg-amber-100 text-amber-600 group-hover:bg-amber-500 group-hover:text-white'
+                      ? 'bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground'
+                      : 'bg-amber-100 text-amber-600 group-hover:bg-amber-500 group-hover:text-amber-50 dark:bg-amber-900/20 dark:text-amber-400 dark:group-hover:bg-amber-600 dark:group-hover:text-amber-50'
                   )}>
                     {isStore ? <Building2 className="h-5 w-5" /> : <Warehouse className="h-5 w-5" />}
                   </div>
-                  <span className="flex-1 truncate text-sm font-medium text-text-primary">{item.name}</span>
-                  <ChevronRight className="h-4 w-4 text-text-disabled transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-text-secondary" />
+                  <span className="flex-1 truncate text-sm font-medium text-foreground">{item.name}</span>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-foreground" />
                 </button>
               ))}
             </div>
@@ -289,12 +289,12 @@ export default function SelectInitialContextPage() {
           </div>
 
           {/* Footer */}
-          <div className="border-t px-6 py-4">
+          <div className="border-t border-border px-6 py-4">
             <button
               type="button"
               disabled={isSubmitting}
               onClick={() => logout()}
-              className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors"
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <LogOut className="h-4 w-4" />
               Cerrar sesión

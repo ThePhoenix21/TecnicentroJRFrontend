@@ -1983,6 +1983,9 @@ export default function EmpleadosPage() {
                 onChange={(e) => setConvertPassword(e.target.value)}
                 disabled={convertSubmitting}
                 placeholder="Ingrese una contraseña segura"
+                autoComplete="new-password"
+                autoCorrect="off"
+                spellCheck={false}
               />
             </div>
 

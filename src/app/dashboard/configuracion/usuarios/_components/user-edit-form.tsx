@@ -16,7 +16,6 @@ import { userService, UpdateUserDto } from '@/services/user.service';
 import { AssignmentType, Warehouse, UserResponse as UserType, Store } from '@/types/user.types';
 import { storeService } from '@/services/store.service';
 import { warehouseService } from '@/services/warehouse.service';
-import { useAuth } from '@/contexts/auth-context';
 import { tenantService } from '@/services/tenant.service';
 import { useTenantFeatures } from '@/hooks/useTenantFeatures';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -138,129 +137,7 @@ export function UserEditForm({ user, stores, warehouses, onSuccess }: UserEditFo
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(true);
   const [storesCount, setStoresCount] = useState<number | null>(null);
 
-  const { tenantFeaturesLoaded } = useAuth();
   const { hasFeature, hasWarehouse } = useTenantFeatures();
-
-  const allowedPermissionsSet = (() => {
-    if (!tenantFeaturesLoaded) return null;
-
-    const allowed = new Set<string>();
-
-    if (hasFeature('DASHBOARD')) {
-      allowed.add('VIEW_DASHBOARD');
-      allowed.add('VIEW_ANALYTICS');
-    }
-
-    if (hasFeature('INVENTORY')) {
-      allowed.add('VIEW_INVENTORY');
-      allowed.add('MANAGE_INVENTORY');
-      allowed.add('START_PHYSICAL_INVENTORY');
-    }
-
-    if (hasFeature('SALES')) {
-      allowed.add('VIEW_ORDERS');
-      allowed.add('MANAGE_ORDERS');
-      allowed.add('VIEW_ALL_ORDERS_HISTORY');
-      allowed.add('VIEW_OWN_ORDERS_HISTORY');
-      allowed.add('DETAIL_ORDERS');
-    }
-
-    if (hasFeature('PRODUCTS')) {
-      allowed.add('VIEW_PRODUCTS');
-      allowed.add('MANAGE_PRODUCTS');
-      allowed.add('MANAGE_PRICES');
-      allowed.add('VIEW_PRODUCT_PRICES');
-      allowed.add('VIEW_PRODUCT_COST');
-      allowed.add('DELETE_PRODUCTS');
-    }
-
-    if (hasFeature('CLIENTS')) {
-      allowed.add('VIEW_CLIENTS');
-      allowed.add('MANAGE_CLIENTS');
-    }
-
-    if (hasFeature('USERS')) {
-      allowed.add('VIEW_USERS');
-      allowed.add('MANAGE_USERS');
-      allowed.add('DELETE_USERS');
-    }
-
-    if (hasFeature('STORES')) {
-      allowed.add('VIEW_STORES');
-      allowed.add('MANAGE_STORES');
-      allowed.add('CHANGE_STORE_LOGO');
-    }
-
-    if (hasFeature('SERVICES')) {
-      allowed.add('VIEW_SERVICES');
-      allowed.add('VIEW_ALL_SERVICES');
-      allowed.add('MANAGE_SERVICES');
-      allowed.add('DETAIL_SERVICES');
-    }
-
-    if (hasFeature('SALES')) {
-      allowed.add('VIEW_ORDERS');
-      allowed.add('MANAGE_ORDERS');
-    }
-
-    if (hasFeature('SALESOFPRODUCTS') && hasFeature('PRODUCTS')) {
-      allowed.add('VIEW_ORDERS');
-      allowed.add('MANAGE_ORDERS');
-    }
-
-    if (hasFeature('SALESOFSERVICES') && hasFeature('SERVICES')) {
-      allowed.add('VIEW_ORDERS');
-      allowed.add('MANAGE_ORDERS');
-    }
-
-    if (hasFeature('CASH')) {
-      allowed.add('VIEW_CASH');
-      allowed.add('MANAGE_CASH');
-      allowed.add('VIEW_ALL_CASH_HISTORY');
-      allowed.add('VIEW_OWN_CASH_HISTORY');
-      allowed.add('PRINT_CASH_CLOSURE');
-      allowed.add('VIEW_ALL_CASH_OPEN');
-    }
-
-    if (hasFeature('EMPLOYEES')) {
-      allowed.add('VIEW_EMPLOYEES');
-      allowed.add('MANAGE_EMPLOYEES');
-      allowed.add('CONVERT_EMPLOYEE_TO_USER');
-      allowed.add('RECREATE_EMPLOYEE');
-    }
-
-    if (hasFeature('WAREHOUSES')) {
-      allowed.add('VIEW_WAREHOUSES');
-      allowed.add('MANAGE_WAREHOUSES');
-    }
-
-    if (hasFeature('SUPPLIERS')) {
-      allowed.add('VIEW_SUPPLIERS');
-      allowed.add('MANAGE_SUPPLIERS');
-      allowed.add('DELETE_SUPPLIERS');
-    }
-
-    if (hasFeature('SUPPLY_ORDERS')) {
-      allowed.add('VIEW_SUPPLY_ORDERS');
-      allowed.add('CREATE_SUPPLY_ORDER');
-      allowed.add('EDIT_EMITTED_SUPPLY_ORDER');
-      allowed.add('APPROVE_SUPPLY_ORDER');
-      allowed.add('RECEIVE_SUPPLY_ORDER');
-      allowed.add('CANCEL_SUPPLY_ORDER');
-    }
-
-    if (hasFeature('SUPPORT')) {
-      allowed.add('VIEW_SUPPORT');
-      allowed.add('MANAGE_SUPPORT');
-    }
-
-    return allowed;
-  })();
-
-  const filteredAvailablePermissions = (allowedPermissionsSet
-    ? availablePermissions.filter((p) => allowedPermissionsSet.has(p))
-    : availablePermissions
-  ).slice();
 
   // Cargar permisos al montar
   useEffect(() => {
@@ -369,16 +246,6 @@ export function UserEditForm({ user, stores, warehouses, onSuccess }: UserEditFo
       }
     }
   }, [storesCount, stores, form, user.role]);
-
-  useEffect(() => {
-    if (!allowedPermissionsSet) return;
-
-    const current = form.getValues('permissions') || [];
-    
-    // NO filtrar los permisos existentes del usuario
-    // Solo mostrar advertencia si hay permisos no permitidos
-    const nonAllowedPermissions = current.filter((p: string) => !allowedPermissionsSet.has(p));
-  }, [allowedPermissionsSet, form]);
 
   const onSubmit = async (data: any) => {
     try {
@@ -659,7 +526,7 @@ export function UserEditForm({ user, stores, warehouses, onSuccess }: UserEditFo
             {user.role === 'USER' ? (
               <PermissionsSelectorForm
                 name="permissions"
-                availablePermissions={filteredAvailablePermissions}
+                availablePermissions={availablePermissions}
                 isLoading={isLoadingPermissions}
                 title="Permisos de usuario"
                 description="Selecciona los permisos que tendrá este usuario"
