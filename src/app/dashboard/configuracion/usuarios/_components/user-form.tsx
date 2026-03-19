@@ -390,8 +390,13 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
         const storesData = await storeService.getAllStores();
         setStores(storesData);
 
-        // Cargar almacenes
-        const warehousesData = await warehouseService.getWarehousesSimple();
+        // Solo cargar almacenes si está en modo WAREHOUSE
+        let warehousesData: any[] = [];
+        if (form.watch('assignmentType') === 'warehouse') {
+          warehousesData = await warehouseService.getWarehousesSimple();
+        }
+
+        // Transformar datos de almacenes al formato esperado
         const formattedWarehouses = (warehousesData || []).map((w: any) => ({
           id: w.id,
           name: w.name,
@@ -401,14 +406,16 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
           updatedAt: w.updatedAt || '',
           createdById: w.createdById || null
         }));
+
         setWarehouses(formattedWarehouses);
 
         // Cargar permisos
         const permissions = await authService.getPermissions();
         setAvailablePermissions(permissions);
 
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error loading data:', error);
+        toast.error(error?.response?.data?.message || error?.message || 'Error al cargar datos');
       } finally {
         setIsLoadingStores(false);
         setIsLoadingWarehouses(false);
@@ -416,7 +423,7 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
       }
     };
     loadData();
-  }, []);
+  }, [form.watch('assignmentType')]);
 
   const shouldShowStoreSelect = (storesList: Store[]) => {
     return storesList.length > 0;
@@ -651,7 +658,10 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
                           </FormControl>
                           <SelectContent>
                             <SelectItem value="store">🏪 Tienda</SelectItem>
-                            <SelectItem value="warehouse">🏭 Almacén</SelectItem>
+                            {/* Solo mostrar opción de almacén si tiene el feature WAREHOUSE */}
+                            {hasFeature('WAREHOUSE') && (
+                              <SelectItem value="warehouse">🏭 Almacén</SelectItem>
+                            )}
                           </SelectContent>
                         </Select>
                         <FormMessage />

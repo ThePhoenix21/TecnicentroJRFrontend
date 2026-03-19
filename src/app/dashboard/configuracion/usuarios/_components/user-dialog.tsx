@@ -13,6 +13,7 @@ import { UserForm } from './user-form';
 import { UserEditForm } from './user-edit-form';
 import { storeService } from '@/services/store.service';
 import { warehouseService } from '@/services/warehouse.service';
+import { useAuth } from '@/contexts/auth-context';
 import { type Store, type Warehouse, type UserResponse as User } from '@/types/user.types';
 
 interface UserDialogProps {
@@ -33,6 +34,7 @@ export function UserDialog({
   const [stores, setStores] = useState<Store[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const { activeLoginMode } = useAuth();
 
   const handleFormSuccess = () => {
     onSuccess?.();
@@ -44,10 +46,13 @@ export function UserDialog({
     const loadData = async () => {
       try {
         setIsLoading(true);
-        const [storesData, warehousesData] = await Promise.all([
-          storeService.getAllStores(),
-          warehouseService.getWarehousesSimple()
-        ]);
+        const storesData = await storeService.getAllStores();
+        
+        // Solo cargar almacenes si está en modo WAREHOUSE o tiene el feature
+        let warehousesData: any[] = [];
+        if (activeLoginMode === 'WAREHOUSE') {
+          warehousesData = await warehouseService.getWarehousesSimple();
+        }
 
         // Transformar datos de almacenes al formato esperado
         const formattedWarehouses = (warehousesData || []).map((w: any) => ({
@@ -69,7 +74,7 @@ export function UserDialog({
       }
     };
     loadData();
-  }, []);
+  }, [activeLoginMode]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

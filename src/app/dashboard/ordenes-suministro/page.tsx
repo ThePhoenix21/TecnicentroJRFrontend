@@ -436,7 +436,11 @@ export default function OrdenesSuministroPage() {
       const tasks = await Promise.allSettled([
         providersLookup.length ? Promise.resolve(providersLookup) : providerService.getProvidersLookup(),
         storesLookup.length ? Promise.resolve(storesLookup) : storeService.getStoresLookup(),
-        warehousesLookup.length ? Promise.resolve(warehousesLookup) : warehouseService.getWarehousesSimple(),
+        // Solo cargar warehouses si está en modo WAREHOUSE
+        ...(activeLoginMode === 'WAREHOUSE' 
+          ? [warehousesLookup.length ? Promise.resolve(warehousesLookup) : warehouseService.getWarehousesSimple()]
+          : [Promise.resolve([])] // Array vacío si no es modo WAREHOUSE
+        ),
         providerService.getProductsLookup(),
       ]);
 
@@ -450,8 +454,11 @@ export default function OrdenesSuministroPage() {
         setStoresLookup(Array.isArray(storesResult.value) ? storesResult.value : []);
       }
 
-      if (warehousesResult.status === "fulfilled") {
+      // Solo procesar warehouses si está en modo WAREHOUSE
+      if (activeLoginMode === 'WAREHOUSE' && warehousesResult.status === "fulfilled") {
         setWarehousesLookup(Array.isArray(warehousesResult.value) ? warehousesResult.value : []);
+      } else {
+        setWarehousesLookup([]);
       }
 
       if (productsResult.status === "fulfilled") {

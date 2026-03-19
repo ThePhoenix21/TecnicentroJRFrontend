@@ -459,12 +459,17 @@ export default function MovimientosStockPage() {
     setProductsLookup([]);
     setProductSuggestions([]);
     try {
-      const [stores, warehouses] = await Promise.all([
-        storeService.getStoresLookup(),
-        warehouseService.getWarehousesLookup(),
-      ]);
+      // Cargar tiendas siempre
+      const stores = await storeService.getStoresLookup();
       setStoresLookup(stores);
+      
+      // Solo cargar warehouses si está en modo WAREHOUSE
+      let warehouses: any[] = [];
+      if (activeLoginMode === 'WAREHOUSE') {
+        warehouses = await warehouseService.getWarehousesLookup();
+      }
       setWarehousesLookup(Array.isArray(warehouses) ? warehouses : []);
+      
     } catch (error: any) {
       toast.error("No se pudieron cargar los datos de destino");
     }

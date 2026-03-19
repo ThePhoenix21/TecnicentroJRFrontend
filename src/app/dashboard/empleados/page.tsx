@@ -96,7 +96,10 @@ export default function EmpleadosPage() {
   const { canViewEmployees, hasAllPermissions } = usePermissions();
   const canRecreateEmployee = hasAllPermissions(['RECREATE_EMPLOYEE', 'MANAGE_EMPLOYEES']);
 
-  const { currentStore, currentWarehouse, activeLoginMode } = useAuth();
+  const { currentStore, currentWarehouse, activeLoginMode, tenantFeatures, tenantFeaturesLoaded } = useAuth();
+  
+  const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
+  const hasFeature = (feature: string) => !tenantFeaturesLoaded || normalizedTenantFeatures.includes(feature);
   
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<EmployedListItem[]>([]);
@@ -243,6 +246,21 @@ export default function EmpleadosPage() {
         warehouseId: selectedEstablishment.type === 'warehouse' ? selectedEstablishment.id : undefined,
       };
 
+      // Cargar datos condicionalmente según el modo de login
+      const [statuses, stores, names, positions, roles] = await Promise.all([
+        employedService.getStatusLookup(),
+        storeService.getStoresLookup(),
+        employedService.getEmployedLookup(),
+        employeePositionService.getPositionsLookup(),
+        establishmentRoleService.getRolesLookup(),
+      ]);
+
+      // Solo cargar warehouses si está en modo WAREHOUSE
+      let warehouses: any[] = [];
+      if (activeLoginMode === 'WAREHOUSE') {
+        warehouses = await warehouseService.getWarehousesLookup();
+      }
+
       const data = await employedService.getEmployedList({
         status: statusFilter === "all" ? undefined : statusFilter,
         firstName: firstNameFilter.trim() || undefined,
@@ -254,6 +272,14 @@ export default function EmpleadosPage() {
         toDate: dateRange?.toDate,
       });
       setEmployees(Array.isArray(data) ? data : []);
+
+      // Actualizar estados
+      setStatusOptions(Array.isArray(statuses) ? uniqueBy(statuses, (item) => item) : []);
+      setStoreOptions(Array.isArray(stores) ? stores : []);
+      setWarehouseOptions(Array.isArray(warehouses) ? warehouses : []);
+      setNameLookup(Array.isArray(names) ? uniqueBy(names, (item) => `${item.firstName?.trim().toLowerCase() ?? ""}|${item.lastName?.trim().toLowerCase() ?? ""}`) : []);
+      setEmployeePositionOptions(Array.isArray(positions) ? positions : []);
+      setEstablishmentRoleOptions(Array.isArray(roles) ? roles : []);
     } catch (error: any) {
       console.error(error);
       toast.error(error?.message || "Error al cargar empleados");
@@ -270,19 +296,26 @@ export default function EmpleadosPage() {
     fromDate,
     toDate,
     selectedEstablishment,
+    activeLoginMode,
   ]);
 
   useEffect(() => {
     const loadLookups = async () => {
       try {
-        const [statuses, stores, warehouses, names, positions, roles] = await Promise.all([
+        const [statuses, stores, names, positions, roles] = await Promise.all([
           employedService.getStatusLookup(),
           storeService.getStoresLookup(),
-          warehouseService.getWarehousesLookup(),
           employedService.getEmployedLookup(),
           employeePositionService.getPositionsLookup(),
           establishmentRoleService.getRolesLookup(),
         ]);
+
+        // Solo cargar warehouses si está en modo WAREHOUSE
+        let warehouses: any[] = [];
+        if (activeLoginMode === 'WAREHOUSE') {
+          warehouses = await warehouseService.getWarehousesLookup();
+        }
+
         const safeStatuses = Array.isArray(statuses)
           ? uniqueBy(statuses, (item) => item)
           : [];
@@ -312,7 +345,7 @@ export default function EmpleadosPage() {
     };
 
     loadLookups();
-  }, []);
+  }, [activeLoginMode]);
 
   // Cargar establecimientos al montar componente
   useEffect(() => {
@@ -482,6 +515,12 @@ export default function EmpleadosPage() {
   };
 
   const ensureWarehousesLoaded = async () => {
+    // Solo cargar warehouses si está en modo WAREHOUSE
+    if (activeLoginMode !== 'WAREHOUSE') {
+      setWarehouseOptions([]);
+      return;
+    }
+
     if (warehouseOptions.length > 0 || warehousesLoading) return;
 
     try {
@@ -492,7 +531,6 @@ export default function EmpleadosPage() {
     } catch (error: any) {
       console.error(error);
       toast.error(error?.message || "No se pudieron cargar los almacenes");
-      setWarehouseOptions([]);
     } finally {
       setWarehousesLoading(false);
     }
@@ -1657,12 +1695,18 @@ export default function EmpleadosPage() {
                     }}
                     disabled={!isEditing || editSubmitting}
                   >
-                    <SelectTrigger>
-                      <SelectValue />
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Tipo de asignación" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="STORE">🏪 Tienda</SelectItem>
-                      <SelectItem value="WAREHOUSE">🏭 Almacén</SelectItem>
+                      {/* Solo mostrar opción de tienda si tiene el feature STORE */}
+                      {hasFeature('STORE') && (
+                        <SelectItem value="STORE">🏪 Tienda</SelectItem>
+                      )}
+                      {/* Solo mostrar opción de almacén si tiene el feature WAREHOUSE */}
+                      {hasFeature('WAREHOUSE') && (
+                        <SelectItem value="WAREHOUSE">🏭 Almacén</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>

@@ -581,8 +581,14 @@ export function UserEditForm({ user, stores, warehouses, onSuccess }: UserEditFo
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="store">🏪 Tienda</SelectItem>
-                          <SelectItem value="warehouse">🏭 Almacén</SelectItem>
+                          {/* Solo mostrar opción de tienda si tiene el feature STORE */}
+                          {hasFeature('STORE') && (
+                            <SelectItem value="store">🏪 Tienda</SelectItem>
+                          )}
+                          {/* Solo mostrar opción de almacén si tiene el feature WAREHOUSE */}
+                          {hasFeature('WAREHOUSE') && (
+                            <SelectItem value="warehouse">🏭 Almacén</SelectItem>
+                          )}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -591,7 +597,7 @@ export function UserEditForm({ user, stores, warehouses, onSuccess }: UserEditFo
                 />
               </div>
 
-              {form.watch('assignmentType') === 'store' && shouldShowStoreSelect(stores) && (
+              {form.watch('assignmentType') === 'store' && shouldShowStoreSelect(stores) && hasFeature('STORE') && (
                 <FormField
                   control={form.control}
                   name="storeId"
@@ -618,16 +624,16 @@ export function UserEditForm({ user, stores, warehouses, onSuccess }: UserEditFo
                 />
               )}
 
-              {form.watch('assignmentType') === 'warehouse' && shouldShowWarehouseSelect(warehouses) && (
+              {form.watch('assignmentType') === 'warehouse' && shouldShowWarehouseSelect(warehouses) && hasFeature('WAREHOUSE') && (
                 <FormField
                   control={form.control}
                   name="warehouseId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-sm font-medium">Almacén asignado</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormLabel>Almacén asignado</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
-                          <SelectTrigger className="h-10">
+                          <SelectTrigger>
                             <SelectValue placeholder="Selecciona un almacén" />
                           </SelectTrigger>
                         </FormControl>
