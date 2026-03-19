@@ -118,12 +118,14 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
       return;
     }
 
+    const normalizedQuantity = type === 'OUTGOING' ? -Math.abs(qty) : qty;
+
     setIsSubmitting(true);
     try {
       await inventoryService.createMovimiento({
         storeProductId: selectedProductId,
         type,
-        quantity: qty,
+        quantity: normalizedQuantity,
         description: description || undefined,
       });
 

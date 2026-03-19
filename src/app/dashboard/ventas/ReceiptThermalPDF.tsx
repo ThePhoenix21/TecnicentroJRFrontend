@@ -337,11 +337,12 @@ const ReceiptThermalPDF: React.FC<ReceiptThermalPDFProps> = ({ saleData, busines
           {/* Título del comprobante */}
           {
             (!isCompleted && hasServicios) ? <Text style={styles.title}>ORDEN DE TRABAJO</Text> : <Text style={styles.title}>NOTA DE VENTA</Text>
-          }          
+          }
+          {/*          
           {receiptCode ? (
             <Text style={styles.subtitle}>{receiptCode}</Text>
           ) : null}
-
+          */}   
           <View style={styles.divider} />
 
           {/* Datos del usuario */}
@@ -531,7 +532,7 @@ const ReceiptThermalPDF: React.FC<ReceiptThermalPDFProps> = ({ saleData, busines
             <Text>{businessInfo.footerText}</Text>
             <Text style={{ marginTop: 4 }}>¡Gracias por su compra!</Text>
             <Text style={{ fontSize: 6, marginTop: 2 }}>
-              Comprobante generado el {format(now, "dd/MM/yyyy HH:mm:ss")}
+              Generado el {format(now, "dd/MM/yyyy HH:mm:ss")}
             </Text>
           </View>
         </View>
