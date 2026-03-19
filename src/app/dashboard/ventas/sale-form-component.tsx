@@ -174,6 +174,7 @@ export function SaleForm({
   const [selectedItems, setSelectedItems] = useState<CartItem[]>([]);
   const [editedProductPrices, setEditedProductPrices] = useState<Record<string, string>>({});
   const [isOrderPaymentsModalOpen, setIsOrderPaymentsModalOpen] = useState(false);
+  const [mobileTab, setMobileTab] = useState<'form' | 'cart'>('form');
   const [orderPaymentMethods, setOrderPaymentMethods] = useState<PaymentMethod[]>([
     { id: "1", type: PaymentType.EFECTIVO, amount: 0 },
   ]);
@@ -202,6 +203,7 @@ export function SaleForm({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
   const overlayPointerDownOutsideRef = useRef(false);
+
   const hasAutoPrintedRef = useRef(false);
   const pendingPrintWindowRef = useRef<Window | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
@@ -257,6 +259,25 @@ export function SaleForm({
     paymentTotal: 0,
     pendingItem: null,
   });
+
+  useEffect(() => {
+    const shouldLockScroll =
+      isOpen ||
+      showServiceSheet ||
+      isOrderPaymentsModalOpen ||
+      paymentConfirmation.isOpen;
+
+    if (!shouldLockScroll || typeof document === 'undefined') {
+      return;
+    }
+
+    const { overflow } = document.body.style;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = overflow || '';
+    };
+  }, [isOpen, showServiceSheet, isOrderPaymentsModalOpen, paymentConfirmation.isOpen]);
 
   const [newItem, setNewItem] = useState<NewItemForm>({
     id: "",
@@ -446,6 +467,7 @@ export function SaleForm({
   const resetSaleState = useCallback(() => {
 
     setSelectedItems([]); // Limpiar el carrito
+    setMobileTab('form');
     setCustomerData({
       name: "",
       phone: "",
@@ -1849,7 +1871,7 @@ export function SaleForm({
 
   return (
     <div 
-      className={`fixed inset-0 bg-black/90 flex items-start md:items-center justify-center z-50 p-2 md:p-4 overflow-y-auto ${(!isOpen && !showServiceSheet) ? 'hidden' : ''}`}
+      className={`fixed inset-0 bg-black/90 flex items-start md:items-center justify-center z-50 p-2 md:p-4 overflow-hidden ${(!isOpen && !showServiceSheet) ? 'hidden' : ''}`}
       onPointerDown={(e) => {
         overlayPointerDownOutsideRef.current = e.target === e.currentTarget;
       }}
@@ -1864,7 +1886,7 @@ export function SaleForm({
         overlayPointerDownOutsideRef.current = false;
       }}
     >
-      <div className="bg-background border border-muted rounded-3xl shadow-xl w-full max-w-[95vw] sm:max-w-2xl md:max-w-4xl h-[80vh] max-h-[80vh] flex flex-col">
+      <div className="bg-background border border-muted rounded-3xl shadow-xl w-full max-w-[95vw] sm:max-w-2xl md:max-w-4xl h-[85vh] max-h-[85vh] flex flex-col">
         <div className="flex justify-between items-center p-3 md:p-4 border-b rounded-t-3xl sticky top-0 bg-background z-10">
           <h2 className="text-lg md:text-xl font-semibold">Nueva Venta</h2>
           <div className="flex items-center gap-2">
@@ -1995,10 +2017,40 @@ export function SaleForm({
           </DialogContent>
         </Dialog>
 
-        <div className="flex-1 overflow-y-auto">
-          <div className="h-full flex flex-col lg:flex-row">
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Tabs de navegación - solo pantallas pequeñas */}
+          <div className="flex lg:hidden shrink-0 border-b bg-background">
+            <button
+              type="button"
+              onClick={() => setMobileTab('form')}
+              className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+                mobileTab === 'form'
+                  ? 'border-b-2 border-primary text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Agregar ítem
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileTab('cart')}
+              className={`flex-1 py-2.5 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                mobileTab === 'cart'
+                  ? 'border-b-2 border-primary text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Carrito
+              {selectedItems.length > 0 && (
+                <span className="inline-flex items-center justify-center min-w-[1.1rem] h-4 px-1 rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                  {selectedItems.length}
+                </span>
+              )}
+            </button>
+          </div>
+          <div className="flex-1 flex flex-col lg:flex-row lg:gap-4 overflow-hidden">
             {/* Panel izquierdo - Productos */}
-            <div className="w-full lg:w-1/2 p-3 md:p-4 border-b lg:border-b-0 lg:border-r overflow-auto">
+            <div className={`w-full lg:w-1/2 lg:block border-b lg:border-b-0 lg:border-r overflow-auto p-3 md:p-4 ${mobileTab === 'form' ? 'flex flex-col' : 'hidden lg:block'}`}>
               <form onSubmit={handleAddCustomItem} className="space-y-4 mb-6">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Tipo de ítem</label>
@@ -2323,7 +2375,7 @@ export function SaleForm({
             </div>
 
             {/* Panel derecho - Carrito */}
-            <div className="w-full lg:w-1/2 p-3 md:p-4 flex flex-col">
+            <div className={`w-full lg:w-1/2 p-3 md:p-4 flex-col lg:min-h-0 lg:max-h-full ${mobileTab === 'cart' ? 'flex' : 'hidden lg:flex'}`}>
               <h3 className="text-base md:text-lg font-medium mb-3 md:mb-4">Detalle de la Venta</h3>
 
               {selectedItems.length === 0 ? (
@@ -2333,7 +2385,7 @@ export function SaleForm({
                   <p className="text-sm">Agrega productos o servicios</p>
                 </div>
               ) : (
-                <div className="flex-1 overflow-auto mb-4">
+                <div className="flex-1 overflow-auto mb-4 max-h-[40vh] lg:max-h-none">
                   <div className="space-y-2">
                     {selectedItems.map((item) => {
                       // Para servicios, siempre usar el precio total del servicio
