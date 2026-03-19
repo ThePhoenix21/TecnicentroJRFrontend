@@ -25,6 +25,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { ThemeSelector } from "@/components/ui/theme-selector";
 import { useAuth } from '@/contexts/auth-context';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useTenantFeatures } from '@/hooks/useTenantFeatures';
 import { AuthStore } from '@/contexts/auth-context';
 import type { LoginMode } from '@/services/auth';
 import {
@@ -48,12 +49,12 @@ type SidebarItem = {
   icon: React.ComponentType<any>;
   requiredPermissions?: string[];
   requiredTenantFeatures?: string[];
+  requiredTenantFeaturesAll?: string[];
 };
 
 const getSidebarItems = (
   hasPermission: (permission: string) => boolean,
-  tenantFeatures?: string[],
-  tenantFeaturesLoaded?: boolean,
+  hasFeature: (feature: string) => boolean,
   activeLoginMode?: LoginMode | null
 ) => {
   const baseItems: SidebarItem[] = [
@@ -117,6 +118,7 @@ const getSidebarItems = (
       name: "Movimientos de Stock",
       href: "/dashboard/movimientos-stock",
       icon: ArrowLeftRight,
+      requiredTenantFeatures: ["STOCKTRANSFER"],
       requiredPermissions: ["VIEW_STOCK_TRANSFERS"],
     },
     {
@@ -152,6 +154,7 @@ const getSidebarItems = (
       href: "/dashboard/configuracion/usuarios",
       icon: Users,
       requiredTenantFeatures: ["USERS"],
+      requiredTenantFeaturesAll: ["CONFIG"],
       requiredPermissions: ["VIEW_USERS"],
     },
     {
@@ -163,7 +166,6 @@ const getSidebarItems = (
     },
   ];
 
-  const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
   const warehouseAllowedRoutes = new Set([
     '/dashboard/productos',
     '/dashboard/inventario',
@@ -175,10 +177,12 @@ const getSidebarItems = (
     '/dashboard/configuracion/usuarios',
   ]);
   const hasTenantFeature = (required?: string[]) => {
-    if (!tenantFeaturesLoaded) return true;
     if (!required || required.length === 0) return true;
-    if (normalizedTenantFeatures.length === 0) return false;
-    return required.some((f) => normalizedTenantFeatures.includes(String(f).toUpperCase()));
+    return required.some((f) => hasFeature(f));
+  };
+  const hasAllTenantFeatures = (required?: string[]) => {
+    if (!required || required.length === 0) return true;
+    return required.every((f) => hasFeature(f));
   };
 
   // Filtrado solo por permisos y tenant features
@@ -189,6 +193,7 @@ const getSidebarItems = (
 
     // 1) Tenant features
     if (!hasTenantFeature(item.requiredTenantFeatures)) return false;
+    if (!hasAllTenantFeatures(item.requiredTenantFeaturesAll)) return false;
 
     // 2) Si no se definieron permisos específicos, mostrar el item
     if (!item.requiredPermissions || item.requiredPermissions.length === 0) {
@@ -202,9 +207,10 @@ const getSidebarItems = (
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { user, logout, currentStore, currentWarehouse, activeLoginMode, selectStore, selectWarehouse, tenantFeatures, tenantFeaturesLoaded, tenantLogoUrl, tenantName } = useAuth();
+  const { user, logout, currentStore, currentWarehouse, activeLoginMode, selectStore, selectWarehouse, tenantLogoUrl, tenantName } = useAuth();
   const { hasPermission: hasPermissionHook } = usePermissions();
-  const sidebarItems = getSidebarItems(hasPermissionHook, tenantFeatures, tenantFeaturesLoaded, activeLoginMode);
+  const { hasFeature } = useTenantFeatures();
+  const sidebarItems = getSidebarItems(hasPermissionHook, hasFeature, activeLoginMode);
 
   const canSelectStore = activeLoginMode === 'STORE' && (user?.stores?.length || 0) > 1;
   const canSelectWarehouse = activeLoginMode === 'WAREHOUSE' && (user?.warehouses?.length || 0) > 1;

@@ -4,6 +4,7 @@ import { AppHeader } from "./app-header";
 import { AppSidebar } from "./app-sidebar";
 import { useAuth } from "@/contexts/auth-context";
 import { getFirstAccessibleRouteFromPermissions } from "@/lib/permission-routes";
+import { useTenantFeatures } from "@/hooks/useTenantFeatures";
 
 import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -17,7 +18,8 @@ export function MainLayout({ children }: MainLayoutProps) {
   const [authChecked, setAuthChecked] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, loading, user, activeLoginMode, hasStoreSelected, hasWarehouseSelected, hasPermission, tenantFeatures, tenantFeaturesLoaded } = useAuth();
+  const { isAuthenticated, loading, user, activeLoginMode, hasStoreSelected, hasWarehouseSelected, hasPermission, tenantFeaturesLoaded } = useAuth();
+  const { hasFeature } = useTenantFeatures();
 
   const publicRoutes = ["/login", "/register", "/forgot-password"];
   
@@ -97,29 +99,39 @@ export function MainLayout({ children }: MainLayoutProps) {
 
           const userRole = user.role?.toUpperCase() || 'USER';
 
-          const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
-          const hasTenantFeature = (required?: string[]) => {
-            if (!tenantFeaturesLoaded) return true;
+          const hasAnyTenantFeature = (required?: string[]) => {
             if (!required || required.length === 0) return true;
-            if (normalizedTenantFeatures.length === 0) return false;
-            return required.some((f) => normalizedTenantFeatures.includes(String(f).toUpperCase()));
+            return required.some((f) => hasFeature(f));
           };
 
-          const routeFeatureRequirements: Array<{ prefix: string; requiredTenantFeatures: string[] }> = [
-            { prefix: '/dashboard/tiendas', requiredTenantFeatures: ['STORE', 'STORES'] },
-            { prefix: '/dashboard/caja', requiredTenantFeatures: ['CASH'] },
-            { prefix: '/dashboard/ventas', requiredTenantFeatures: ['SALES'] },
-            { prefix: '/dashboard/servicios', requiredTenantFeatures: ['SERVICES'] },
-            { prefix: '/dashboard/productos', requiredTenantFeatures: ['PRODUCTS'] },
-            { prefix: '/dashboard/inventario', requiredTenantFeatures: ['INVENTORY'] },
-            { prefix: '/dashboard/support', requiredTenantFeatures: ['SUPPORT'] },
-            { prefix: '/dashboard/warehouses', requiredTenantFeatures: ['WAREHOUSES'] },
-            { prefix: '/dashboard/empleados', requiredTenantFeatures: ['EMPLOYEES'] },
-            { prefix: '/dashboard/proveedores', requiredTenantFeatures: ['SUPPLIERS'] },
-            { prefix: '/dashboard/ordenes-suministro', requiredTenantFeatures: ['SUPPLY_ORDERS'] },
-            { prefix: '/dashboard/clientes', requiredTenantFeatures: ['CLIENTS'] },
-            { prefix: '/dashboard/configuracion/usuarios', requiredTenantFeatures: ['USERS'] },
-            { prefix: '/dashboard', requiredTenantFeatures: ['DASHBOARD'] },
+          const hasAllTenantFeatures = (required?: string[]) => {
+            if (!required || required.length === 0) return true;
+            return required.every((f) => hasFeature(f));
+          };
+
+          type RouteFeatureRequirement = {
+            prefix: string;
+            requiredTenantFeaturesAny?: string[];
+            requiredTenantFeaturesAll?: string[];
+          };
+
+          const routeFeatureRequirements: RouteFeatureRequirement[] = [
+            { prefix: '/dashboard/tiendas', requiredTenantFeaturesAny: ['STORE', 'STORES'] },
+            { prefix: '/dashboard/caja', requiredTenantFeaturesAny: ['CASH'] },
+            { prefix: '/dashboard/ventas', requiredTenantFeaturesAny: ['SALES'] },
+            { prefix: '/dashboard/servicios', requiredTenantFeaturesAny: ['SERVICES'] },
+            { prefix: '/dashboard/productos', requiredTenantFeaturesAny: ['PRODUCTS'] },
+            { prefix: '/dashboard/inventario', requiredTenantFeaturesAny: ['INVENTORY'] },
+            { prefix: '/dashboard/movimientos-stock', requiredTenantFeaturesAny: ['STOCKTRANSFER'] },
+            { prefix: '/dashboard/support', requiredTenantFeaturesAny: ['SUPPORT'] },
+            { prefix: '/dashboard/warehouses', requiredTenantFeaturesAny: ['WAREHOUSES'] },
+            { prefix: '/dashboard/empleados', requiredTenantFeaturesAny: ['EMPLOYEES'] },
+            { prefix: '/dashboard/proveedores', requiredTenantFeaturesAny: ['SUPPLIERS'] },
+            { prefix: '/dashboard/ordenes-suministro', requiredTenantFeaturesAny: ['SUPPLY_ORDERS'] },
+            { prefix: '/dashboard/clientes', requiredTenantFeaturesAny: ['CLIENTS'] },
+            { prefix: '/dashboard/configuracion/usuarios', requiredTenantFeaturesAny: ['USERS'], requiredTenantFeaturesAll: ['CONFIG'] },
+            { prefix: '/dashboard/configuracion', requiredTenantFeaturesAny: ['CONFIG'] },
+            { prefix: '/dashboard', requiredTenantFeaturesAny: ['DASHBOARD'] },
           ];
 
           const isRouteAllowedByTenant = (path: string) => {
@@ -132,7 +144,7 @@ export function MainLayout({ children }: MainLayoutProps) {
             ) return true;
             const rule = routeFeatureRequirements.find((r) => path === r.prefix || path.startsWith(`${r.prefix}/`));
             if (!rule) return true;
-            return hasTenantFeature(rule.requiredTenantFeatures);
+            return hasAnyTenantFeature(rule.requiredTenantFeaturesAny) && hasAllTenantFeatures(rule.requiredTenantFeaturesAll);
           };
 
           const warehousePreferredRoutes = [
@@ -260,7 +272,7 @@ export function MainLayout({ children }: MainLayoutProps) {
       console.error('Error al verificar autenticación en MainLayout:', error);
       setAuthChecked(true);
     });
-  }, [pathname, isAuthenticated, isPublicRoute, loading, router, user, activeLoginMode, hasStoreSelected, hasWarehouseSelected, tenantFeaturesLoaded, tenantFeatures, hasPermission]);
+  }, [pathname, isAuthenticated, isPublicRoute, loading, router, user, activeLoginMode, hasStoreSelected, hasWarehouseSelected, tenantFeaturesLoaded, hasFeature, hasPermission]);
 
   // Manejar rutas públicas (login, etc) sin depender de authChecked/loading.
   if (isPublicRoute) {

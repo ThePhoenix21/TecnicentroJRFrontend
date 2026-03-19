@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/auth-context";
+import { useTenantFeatures } from "@/hooks/useTenantFeatures";
 import {
   stockTransferService,
   StockTransferStatus,
@@ -100,6 +101,7 @@ export default function MovimientosStockPage() {
     currentWarehouse,
     activeLoginMode,
   } = useAuth();
+  const { hasWarehouse } = useTenantFeatures();
 
   const canView = isAdmin || hasPermission?.("VIEW_STOCK_TRANSFERS");
   const canCreate = isAdmin || hasPermission?.("CREATE_STOCK_TRANSFER");
@@ -463,9 +465,9 @@ export default function MovimientosStockPage() {
       const stores = await storeService.getStoresLookup();
       setStoresLookup(stores);
       
-      // Solo cargar warehouses si está en modo WAREHOUSE
+      // Solo cargar warehouses si está en modo WAREHOUSE y el tenant tiene la feature WAREHOUSES
       let warehouses: any[] = [];
-      if (activeLoginMode === 'WAREHOUSE') {
+      if (activeLoginMode === 'WAREHOUSE' && hasWarehouse()) {
         warehouses = await warehouseService.getWarehousesLookup();
       }
       setWarehousesLookup(Array.isArray(warehouses) ? warehouses : []);
@@ -492,12 +494,16 @@ export default function MovimientosStockPage() {
         if (!originId) { setProductsLoading(false); return; }
         products = activeLoginMode === "STORE"
           ? await stockTransferService.getStoreProductsSimpleLookup(originId)
-          : await stockTransferService.getWarehouseProductsSimpleLookup(originId);
+          : hasWarehouse()
+            ? await stockTransferService.getWarehouseProductsSimpleLookup(originId)
+            : [];
       } else {
         // Solicitud: cargar productos del destino
         products = destEstType === "STORE"
           ? await stockTransferService.getStoreProductsSimpleLookup(destEstId)
-          : await stockTransferService.getWarehouseProductsSimpleLookup(destEstId);
+          : hasWarehouse()
+            ? await stockTransferService.getWarehouseProductsSimpleLookup(destEstId)
+            : [];
       }
       setProductsLookup(products);
     } catch (error: any) {
@@ -713,10 +719,13 @@ export default function MovimientosStockPage() {
     try {
       const [stores, warehouses, products] = await Promise.all([
         storeService.getStoresLookup(),
-        warehouseService.getWarehousesLookup(),
+        // Solo cargar warehouses si el tenant tiene la feature WAREHOUSES
+        ...(hasWarehouse() ? [warehouseService.getWarehousesLookup()] : [Promise.resolve([])]),
         transferDetail.destination.type === "STORE"
           ? stockTransferService.getStoreProductsSimpleLookup(transferDetail.destination.id)
-          : stockTransferService.getWarehouseProductsSimpleLookup(transferDetail.destination.id),
+          : hasWarehouse()
+            ? stockTransferService.getWarehouseProductsSimpleLookup(transferDetail.destination.id)
+            : Promise.resolve([]),
       ]);
       setStoresLookup(stores);
       setWarehousesLookup(Array.isArray(warehouses) ? warehouses : []);
@@ -745,7 +754,9 @@ export default function MovimientosStockPage() {
       const products =
         editDestType === "STORE"
           ? await stockTransferService.getStoreProductsSimpleLookup(id)
-          : await stockTransferService.getWarehouseProductsSimpleLookup(id);
+          : hasWarehouse()
+            ? await stockTransferService.getWarehouseProductsSimpleLookup(id)
+            : [];
       setEditProductsLookup(products);
     } catch (error: any) {
       toast.error("No se pudieron cargar los productos del destino");
@@ -1610,7 +1621,9 @@ export default function MovimientosStockPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="STORE">Tienda</SelectItem>
-                  <SelectItem value="WAREHOUSE">Almacén</SelectItem>
+                  {hasWarehouse() && (
+                    <SelectItem value="WAREHOUSE">Almacén</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -1894,7 +1907,9 @@ export default function MovimientosStockPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="STORE">Tienda</SelectItem>
-                    <SelectItem value="WAREHOUSE">Almacén</SelectItem>
+                    {hasWarehouse() && (
+                      <SelectItem value="WAREHOUSE">Almacén</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>

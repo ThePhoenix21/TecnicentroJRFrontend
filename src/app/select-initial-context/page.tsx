@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
+import { useTenantFeatures } from '@/hooks/useTenantFeatures';
 import { Button } from '@/components/ui/button';
 import { Building2, Warehouse, LogOut, ChevronRight, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -12,6 +13,7 @@ type InitialContextMode = 'STORE' | 'WAREHOUSE';
 export default function SelectInitialContextPage() {
   const router = useRouter();
   const { user, isAuthenticated, loading, activeLoginMode, hasStoreSelected, hasWarehouseSelected, selectStore, selectWarehouse, logout } = useAuth();
+  const { hasWarehouse: hasWarehouseFeature } = useTenantFeatures();
   const [mode, setMode] = useState<InitialContextMode | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +23,7 @@ export default function SelectInitialContextPage() {
   const warehouses = useMemo(() => user?.warehouses || [], [user?.warehouses]);
 
   const hasStores = stores.length > 0;
-  const hasWarehouses = warehouses.length > 0;
+  const hasWarehouses = warehouses.length > 0 && hasWarehouseFeature();
   const hasBoth = hasStores && hasWarehouses;
 
   useEffect(() => {
@@ -41,22 +43,35 @@ export default function SelectInitialContextPage() {
       router.replace('/dashboard');
       return;
     }
-  }, [loading, isAuthenticated, activeLoginMode, hasStoreSelected, hasWarehouseSelected, router]);
+
+    // Si el tenant no tiene la feature WAREHOUSES pero el modo activo es WAREHOUSE, redirigir al dashboard
+    if (activeLoginMode === 'WAREHOUSE' && !hasWarehouseFeature()) {
+      router.replace('/dashboard');
+      return;
+    }
+  }, [loading, isAuthenticated, activeLoginMode, hasStoreSelected, hasWarehouseSelected, hasWarehouseFeature, router]);
 
   useEffect(() => {
     if (loading) return;
     if (!isAuthenticated) return;
     if (activeLoginMode) return;
 
+    // Si el feature WAREHOUSES está desactivado y hay solo 1 tienda, auto-seleccionarla
+    if (!hasWarehouseFeature() && stores.length === 1 && !hasStoreSelected) {
+      selectStore(stores[0], { reload: false })
+        .then(() => router.replace('/dashboard'))
+        .catch(() => setMode('STORE'));
+      return;
+    }
+
     if (!hasBoth) {
       if (hasStores) setMode('STORE');
       else if (hasWarehouses) setMode('WAREHOUSE');
       else setMode(null);
     } else {
-      // Si tiene ambos, mostrar tiendas primero
       setMode('STORE');
     }
-  }, [loading, isAuthenticated, activeLoginMode, hasBoth, hasStores, hasWarehouses]);
+  }, [loading, isAuthenticated, activeLoginMode, hasBoth, hasStores, hasWarehouses, hasWarehouseFeature, stores, hasStoreSelected, selectStore, router]);
 
   if (loading) {
     return (

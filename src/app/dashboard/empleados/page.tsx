@@ -14,6 +14,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { formatCurrency } from "@/lib/utils";
 import { uniqueBy } from "@/utils/array";
 import { usePermissions } from '@/hooks/usePermissions';
+import { useTenantFeatures } from '@/hooks/useTenantFeatures';
 import { AccessDeniedView } from '@/components/auth/access-denied-view';
 import { ProtectedButton } from '@/components/auth/protected-button';
 import { PermissionGuard } from '@/components/auth/permission-guard';
@@ -96,10 +97,8 @@ export default function EmpleadosPage() {
   const { canViewEmployees, hasAllPermissions } = usePermissions();
   const canRecreateEmployee = hasAllPermissions(['RECREATE_EMPLOYEE', 'MANAGE_EMPLOYEES']);
 
-  const { currentStore, currentWarehouse, activeLoginMode, tenantFeatures, tenantFeaturesLoaded } = useAuth();
-  
-  const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
-  const hasFeature = (feature: string) => !tenantFeaturesLoaded || normalizedTenantFeatures.includes(feature);
+  const { currentStore, currentWarehouse, activeLoginMode } = useAuth();
+  const { hasFeature, hasWarehouse } = useTenantFeatures();
   
   const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<EmployedListItem[]>([]);
@@ -255,9 +254,9 @@ export default function EmpleadosPage() {
         establishmentRoleService.getRolesLookup(),
       ]);
 
-      // Solo cargar warehouses si está en modo WAREHOUSE
+      // Solo cargar warehouses si está en modo WAREHOUSE y el tenant tiene la feature WAREHOUSES
       let warehouses: any[] = [];
-      if (activeLoginMode === 'WAREHOUSE') {
+      if (activeLoginMode === 'WAREHOUSE' && hasWarehouse()) {
         warehouses = await warehouseService.getWarehousesLookup();
       }
 
@@ -310,9 +309,9 @@ export default function EmpleadosPage() {
           establishmentRoleService.getRolesLookup(),
         ]);
 
-        // Solo cargar warehouses si está en modo WAREHOUSE
+        // Solo cargar warehouses si está en modo WAREHOUSE y el tenant tiene la feature WAREHOUSES
         let warehouses: any[] = [];
-        if (activeLoginMode === 'WAREHOUSE') {
+        if (activeLoginMode === 'WAREHOUSE' && hasWarehouse()) {
           warehouses = await warehouseService.getWarehousesLookup();
         }
 
@@ -515,8 +514,8 @@ export default function EmpleadosPage() {
   };
 
   const ensureWarehousesLoaded = async () => {
-    // Solo cargar warehouses si está en modo WAREHOUSE
-    if (activeLoginMode !== 'WAREHOUSE') {
+    // Solo cargar warehouses si está en modo WAREHOUSE y el tenant tiene la feature WAREHOUSES
+    if (activeLoginMode !== 'WAREHOUSE' || !hasWarehouse()) {
       setWarehouseOptions([]);
       return;
     }
@@ -1703,8 +1702,8 @@ export default function EmpleadosPage() {
                       {hasFeature('STORE') && (
                         <SelectItem value="STORE">🏪 Tienda</SelectItem>
                       )}
-                      {/* Solo mostrar opción de almacén si tiene el feature WAREHOUSE */}
-                      {hasFeature('WAREHOUSE') && (
+                      {/* Solo mostrar opción de almacén si el tenant tiene la feature WAREHOUSES */}
+                      {hasWarehouse() && (
                         <SelectItem value="WAREHOUSE">🏭 Almacén</SelectItem>
                       )}
                     </SelectContent>
@@ -2117,7 +2116,9 @@ export default function EmpleadosPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="STORE">Tienda</SelectItem>
-                      <SelectItem value="WAREHOUSE">Almacén</SelectItem>
+                      {hasWarehouse() && (
+                        <SelectItem value="WAREHOUSE">Almacén</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>

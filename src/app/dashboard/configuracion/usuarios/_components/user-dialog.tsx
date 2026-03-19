@@ -14,6 +14,7 @@ import { UserEditForm } from './user-edit-form';
 import { storeService } from '@/services/store.service';
 import { warehouseService } from '@/services/warehouse.service';
 import { useAuth } from '@/contexts/auth-context';
+import { useTenantFeatures } from '@/hooks/useTenantFeatures';
 import { type Store, type Warehouse, type UserResponse as User } from '@/types/user.types';
 
 interface UserDialogProps {
@@ -35,6 +36,7 @@ export function UserDialog({
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { activeLoginMode } = useAuth();
+  const { hasWarehouse } = useTenantFeatures();
 
   const handleFormSuccess = () => {
     onSuccess?.();
@@ -48,9 +50,9 @@ export function UserDialog({
         setIsLoading(true);
         const storesData = await storeService.getAllStores();
         
-        // Solo cargar almacenes si está en modo WAREHOUSE o tiene el feature
+        // Solo cargar almacenes si está en modo WAREHOUSE y el tenant tiene la feature WAREHOUSES
         let warehousesData: any[] = [];
-        if (activeLoginMode === 'WAREHOUSE') {
+        if (activeLoginMode === 'WAREHOUSE' && hasWarehouse()) {
           warehousesData = await warehouseService.getWarehousesSimple();
         }
 

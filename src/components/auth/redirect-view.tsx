@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
+import { useTenantFeatures } from '@/hooks/useTenantFeatures';
 import { ArrowLeft, Home, Users, Package, Settings, ShoppingCart, Wrench, FileText, Truck, Store, DollarSign, BarChart3, Headphones, Warehouse } from 'lucide-react';
 
 interface RedirectSection {
@@ -11,11 +12,14 @@ interface RedirectSection {
   path: string;
   icon: React.ReactNode;
   permission: string;
+  requiredTenantFeaturesAny?: string[];
+  requiredTenantFeaturesAll?: string[];
 }
 
 export const RedirectView: React.FC = () => {
   const router = useRouter();
   const { hasPermission, user } = useAuth();
+  const { hasFeature } = useTenantFeatures();
 
   // Debug para ver qué permisos tiene realmente el usuario
   console.log('DEBUG - Usuario actual:', user);
@@ -27,109 +31,140 @@ export const RedirectView: React.FC = () => {
       description: 'Ver resumen y estadísticas',
       path: '/dashboard',
       icon: <Home className="h-5 w-5" />,
-      permission: 'VIEW_DASHBOARD'
+      permission: 'VIEW_DASHBOARD',
+      requiredTenantFeaturesAny: ['DASHBOARD'],
     },
     {
       title: 'Tiendas',
       description: 'Gestión de tiendas',
       path: '/dashboard/tiendas',
       icon: <Store className="h-5 w-5" />,
-      permission: 'VIEW_STORES'
+      permission: 'VIEW_STORES',
+      requiredTenantFeaturesAny: ['STORE', 'STORES'],
     },
     {
       title: 'Caja',
       description: 'Control de caja y movimientos',
       path: '/dashboard/caja',
       icon: <DollarSign className="h-5 w-5" />,
-      permission: 'VIEW_CASH'
+      permission: 'VIEW_CASH',
+      requiredTenantFeaturesAny: ['CASH'],
     },
     {
       title: 'Ventas',
       description: 'Gestión de ventas y facturación',
       path: '/dashboard/ventas',
       icon: <ShoppingCart className="h-5 w-5" />,
-      permission: 'VIEW_ORDERS'
+      permission: 'VIEW_ORDERS',
+      requiredTenantFeaturesAny: ['SALES'],
     },
     {
       title: 'Servicios',
       description: 'Gestión de servicios',
       path: '/dashboard/servicios',
       icon: <Wrench className="h-5 w-5" />,
-      permission: 'VIEW_SERVICES'
+      permission: 'VIEW_SERVICES',
+      requiredTenantFeaturesAny: ['SERVICES'],
     },
     {
       title: 'Productos',
       description: 'Catálogo y gestión de productos',
       path: '/dashboard/productos',
       icon: <Package className="h-5 w-5" />,
-      permission: 'VIEW_PRODUCTS'
+      permission: 'VIEW_PRODUCTS',
+      requiredTenantFeaturesAny: ['PRODUCTS'],
     },
     {
       title: 'Inventario',
       description: 'Control de stock y almacenes',
       path: '/dashboard/inventario',
       icon: <Package className="h-5 w-5" />,
-      permission: 'VIEW_INVENTORY'
+      permission: 'VIEW_INVENTORY',
+      requiredTenantFeaturesAny: ['INVENTORY'],
     },
     {
       title: 'Soporte Técnico',
       description: 'Gestión de tickets y soporte',
       path: '/dashboard/support',
       icon: <Headphones className="h-5 w-5" />,
-      permission: 'VIEW_SUPPORT'
+      permission: 'VIEW_SUPPORT',
+      requiredTenantFeaturesAny: ['SUPPORT'],
     },
     {
       title: 'Almacenes',
       description: 'Gestión de almacenes',
       path: '/dashboard/warehouses',
       icon: <Warehouse className="h-5 w-5" />,
-      permission: 'VIEW_WAREHOUSES'
+      permission: 'VIEW_WAREHOUSES',
+      requiredTenantFeaturesAny: ['WAREHOUSES'],
     },
     {
       title: 'Clientes',
       description: 'Gestión de clientes',
       path: '/dashboard/clientes',
       icon: <Users className="h-5 w-5" />,
-      permission: 'VIEW_CLIENTS'
+      permission: 'VIEW_CLIENTS',
+      requiredTenantFeaturesAny: ['CLIENTS'],
     },
     {
       title: 'Empleados',
       description: 'Gestionar personal y asignaciones',
       path: '/dashboard/empleados',
       icon: <Users className="h-5 w-5" />,
-      permission: 'VIEW_EMPLOYEES'
+      permission: 'VIEW_EMPLOYEES',
+      requiredTenantFeaturesAny: ['EMPLOYEES'],
     },
     {
       title: 'Proveedores',
       description: 'Gestión de proveedores',
       path: '/dashboard/proveedores',
       icon: <Truck className="h-5 w-5" />,
-      permission: 'VIEW_SUPPLIERS'
+      permission: 'VIEW_SUPPLIERS',
+      requiredTenantFeaturesAny: ['SUPPLIERS'],
     },
     {
       title: 'Órdenes de Suministro',
       description: 'Gestión de órdenes de suministro',
       path: '/dashboard/ordenes-suministro',
       icon: <FileText className="h-5 w-5" />,
-      permission: 'VIEW_SUPPLY_ORDERS'
+      permission: 'VIEW_SUPPLY_ORDERS',
+      requiredTenantFeaturesAny: ['SUPPLY_ORDERS'],
     },
     {
       title: 'Movimientos de Stock',
       description: 'Control de movimientos de stock',
       path: '/dashboard/movimientos-stock',
       icon: <Package className="h-5 w-5" />,
-      permission: 'VIEW_STOCK_TRANSFERS'
+      permission: 'VIEW_STOCK_TRANSFERS',
+      requiredTenantFeaturesAny: ['STOCKTRANSFER'],
     },
     {
       title: 'Usuarios',
       description: 'Gestión de usuarios y configuración',
       path: '/dashboard/configuracion/usuarios',
       icon: <Settings className="h-5 w-5" />,
-      permission: 'VIEW_USERS'
+      permission: 'VIEW_USERS',
+      requiredTenantFeaturesAny: ['USERS'],
+      requiredTenantFeaturesAll: ['CONFIG'],
     }
   ];
 
-  const accessibleSections = availableSections.filter(section => hasPermission(section.permission));
+  const hasAnyTenantFeature = (required?: string[]) => {
+    if (!required || required.length === 0) return true;
+    return required.some((feature) => hasFeature(feature));
+  };
+
+  const hasAllTenantFeatures = (required?: string[]) => {
+    if (!required || required.length === 0) return true;
+    return required.every((feature) => hasFeature(feature));
+  };
+
+  const accessibleSections = availableSections.filter(
+    (section) =>
+      hasPermission(section.permission) &&
+      hasAnyTenantFeature(section.requiredTenantFeaturesAny) &&
+      hasAllTenantFeatures(section.requiredTenantFeaturesAll)
+  );
 
   // Debug para ver qué permisos tiene el usuario y qué secciones son accesibles
   console.log('DEBUG - Permisos disponibles:');

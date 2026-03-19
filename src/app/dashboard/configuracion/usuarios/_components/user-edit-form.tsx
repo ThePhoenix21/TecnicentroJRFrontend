@@ -18,6 +18,7 @@ import { storeService } from '@/services/store.service';
 import { warehouseService } from '@/services/warehouse.service';
 import { useAuth } from '@/contexts/auth-context';
 import { tenantService } from '@/services/tenant.service';
+import { useTenantFeatures } from '@/hooks/useTenantFeatures';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // Schema para edición de usuario
@@ -137,10 +138,8 @@ export function UserEditForm({ user, stores, warehouses, onSuccess }: UserEditFo
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(true);
   const [storesCount, setStoresCount] = useState<number | null>(null);
 
-  const { tenantFeatures, tenantFeaturesLoaded } = useAuth();
-
-  const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
-  const hasFeature = (feature: string) => !tenantFeaturesLoaded || normalizedTenantFeatures.includes(feature);
+  const { tenantFeaturesLoaded } = useAuth();
+  const { hasFeature, hasWarehouse } = useTenantFeatures();
 
   const allowedPermissionsSet = (() => {
     if (!tenantFeaturesLoaded) return null;
@@ -585,8 +584,8 @@ export function UserEditForm({ user, stores, warehouses, onSuccess }: UserEditFo
                           {hasFeature('STORE') && (
                             <SelectItem value="store">🏪 Tienda</SelectItem>
                           )}
-                          {/* Solo mostrar opción de almacén si tiene el feature WAREHOUSE */}
-                          {hasFeature('WAREHOUSE') && (
+                          {/* Solo mostrar opción de almacén si el tenant tiene la feature WAREHOUSES */}
+                          {hasWarehouse() && (
                             <SelectItem value="warehouse">🏭 Almacén</SelectItem>
                           )}
                         </SelectContent>
@@ -624,7 +623,7 @@ export function UserEditForm({ user, stores, warehouses, onSuccess }: UserEditFo
                 />
               )}
 
-              {form.watch('assignmentType') === 'warehouse' && shouldShowWarehouseSelect(warehouses) && hasFeature('WAREHOUSE') && (
+              {form.watch('assignmentType') === 'warehouse' && shouldShowWarehouseSelect(warehouses) && hasWarehouse() && (
                 <FormField
                   control={form.control}
                   name="warehouseId"

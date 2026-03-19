@@ -55,6 +55,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SupplyOrderPDF } from "./SupplyOrderPDF";
 import { useAuth } from "@/contexts/auth-context";
+import { useTenantFeatures } from "@/hooks/useTenantFeatures";
 import { getActiveLoginMode } from "@/services/domainApi";
 
 const PAGE_SIZE = 12;
@@ -103,6 +104,7 @@ const shortId = (value?: string | null) => {
 
 export default function OrdenesSuministroPage() {
   const { isAdmin, hasPermission, isAuthenticated, currentStore, currentWarehouse, activeLoginMode } = useAuth();
+  const { hasWarehouse } = useTenantFeatures();
   const canViewSupplyOrders = isAdmin || hasPermission?.("VIEW_SUPPLY_ORDERS");
   const canCreateSupplyOrder = isAdmin || hasPermission?.("CREATE_SUPPLY_ORDER");
   const canReceiveSupplyOrder = isAdmin || hasPermission?.("RECEIVE_SUPPLY_ORDER");
@@ -436,10 +438,10 @@ export default function OrdenesSuministroPage() {
       const tasks = await Promise.allSettled([
         providersLookup.length ? Promise.resolve(providersLookup) : providerService.getProvidersLookup(),
         storesLookup.length ? Promise.resolve(storesLookup) : storeService.getStoresLookup(),
-        // Solo cargar warehouses si está en modo WAREHOUSE
-        ...(activeLoginMode === 'WAREHOUSE' 
+        // Solo cargar warehouses si está en modo WAREHOUSE y el tenant tiene la feature WAREHOUSES
+        ...(activeLoginMode === 'WAREHOUSE' && hasWarehouse()
           ? [warehousesLookup.length ? Promise.resolve(warehousesLookup) : warehouseService.getWarehousesSimple()]
-          : [Promise.resolve([])] // Array vacío si no es modo WAREHOUSE
+          : [Promise.resolve([])] // Array vacío si no es modo WAREHOUSE o no tiene la feature
         ),
         providerService.getProductsLookup(),
       ]);
@@ -454,8 +456,8 @@ export default function OrdenesSuministroPage() {
         setStoresLookup(Array.isArray(storesResult.value) ? storesResult.value : []);
       }
 
-      // Solo procesar warehouses si está en modo WAREHOUSE
-      if (activeLoginMode === 'WAREHOUSE' && warehousesResult.status === "fulfilled") {
+      // Solo procesar warehouses si está en modo WAREHOUSE y el tenant tiene la feature WAREHOUSES
+      if (activeLoginMode === 'WAREHOUSE' && hasWarehouse() && warehousesResult.status === "fulfilled") {
         setWarehousesLookup(Array.isArray(warehousesResult.value) ? warehousesResult.value : []);
       } else {
         setWarehousesLookup([]);
@@ -1441,29 +1443,11 @@ if (openedWindow) {
                     {activeLoginMode === 'STORE' && detail.store && (
                       <div className="space-y-2 rounded-lg border bg-background p-4">
                         <h3 className="text-sm font-semibold">Tienda</h3>
-                        {isEditing ? (
-                          <Select
-                            value={editForm.storeId}
-                            onValueChange={(value) => setEditForm(prev => ({ ...prev, storeId: value, warehouseId: '' }))}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Seleccionar tienda" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {storesLookup.map((store) => (
-                                <SelectItem key={store.id} value={store.id}>
-                                  {store.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <div className="text-sm space-y-1">
-                            <div>{detail.store.name}</div>
-                            {detail.store.address && <div className="text-muted-foreground">{detail.store.address}</div>}
-                            {detail.store.phone && <div className="text-muted-foreground">Tel: {detail.store.phone}</div>}
-                          </div>
-                        )}
+                        <div className="text-sm space-y-1">
+                          <div>{detail.store.name}</div>
+                          {detail.store.address && <div className="text-muted-foreground">{detail.store.address}</div>}
+                          {detail.store.phone && <div className="text-muted-foreground">Tel: {detail.store.phone}</div>}
+                        </div>
                       </div>
                     )}
                     {activeLoginMode === 'WAREHOUSE' && detail.warehouse && (

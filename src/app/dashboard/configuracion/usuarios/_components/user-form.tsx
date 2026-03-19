@@ -30,6 +30,7 @@ import { userService, type CreateUserRegularDto, type UpdateUserDto } from '@/se
 import { adminRegisterService, type CreateAdminData } from '@/services/admin-register';
 import { useAuth } from '@/contexts/auth-context';
 import { tenantService } from '@/services/tenant.service';
+import { useTenantFeatures } from '@/hooks/useTenantFeatures';
 import { AssignmentType, type Store, type Warehouse, type UserFormData } from '@/types/user.types';
 import { storeService } from '@/services/store.service';
 import { warehouseService } from '@/services/warehouse.service';
@@ -259,10 +260,8 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
   const [availablePermissions, setAvailablePermissions] = useState<string[]>([]);
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(true);
 
-  const { tenantFeatures, tenantFeaturesLoaded } = useAuth();
-
-  const normalizedTenantFeatures = (tenantFeatures || []).map((f) => String(f).toUpperCase());
-  const hasFeature = (feature: string) => !tenantFeaturesLoaded || normalizedTenantFeatures.includes(feature);
+  const { tenantFeaturesLoaded } = useAuth();
+  const { hasFeature, hasWarehouse } = useTenantFeatures();
 
   const allowedPermissionsSet = (() => {
     if (!tenantFeaturesLoaded) return null;
@@ -444,9 +443,9 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
         const storesData = await storeService.getAllStores();
         setStores(storesData);
 
-        // Solo cargar almacenes si está en modo WAREHOUSE
+        // Solo cargar almacenes si está en modo WAREHOUSE y el tenant tiene la feature WAREHOUSES
         let warehousesData: any[] = [];
-        if (form.watch('assignmentType') === 'warehouse') {
+        if (form.watch('assignmentType') === 'warehouse' && hasWarehouse()) {
           warehousesData = await warehouseService.getWarehousesSimple();
         }
 
@@ -708,8 +707,8 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
                           </FormControl>
                           <SelectContent>
                             <SelectItem value="store">🏪 Tienda</SelectItem>
-                            {/* Solo mostrar opción de almacén si tiene el feature WAREHOUSE */}
-                            {hasFeature('WAREHOUSE') && (
+                            {/* Solo mostrar opción de almacén si el tenant tiene la feature WAREHOUSES */}
+                            {hasWarehouse() && (
                               <SelectItem value="warehouse">🏭 Almacén</SelectItem>
                             )}
                           </SelectContent>
