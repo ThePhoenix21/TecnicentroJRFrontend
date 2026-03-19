@@ -56,14 +56,6 @@ export default function SelectInitialContextPage() {
     if (!isAuthenticated) return;
     if (activeLoginMode) return;
 
-    // Si el feature WAREHOUSES está desactivado y hay solo 1 tienda, auto-seleccionarla
-    if (!hasWarehouseFeature() && stores.length === 1 && !hasStoreSelected) {
-      selectStore(stores[0], { reload: false })
-        .then(() => router.replace('/dashboard'))
-        .catch(() => setMode('STORE'));
-      return;
-    }
-
     if (!hasBoth) {
       if (hasStores) setMode('STORE');
       else if (hasWarehouses) setMode('WAREHOUSE');
@@ -71,7 +63,7 @@ export default function SelectInitialContextPage() {
     } else {
       setMode('STORE');
     }
-  }, [loading, isAuthenticated, activeLoginMode, hasBoth, hasStores, hasWarehouses, hasWarehouseFeature, stores, hasStoreSelected, selectStore, router]);
+  }, [loading, isAuthenticated, activeLoginMode, hasBoth, hasStores, hasWarehouses]);
 
   if (loading) {
     return (

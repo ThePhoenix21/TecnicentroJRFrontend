@@ -55,6 +55,8 @@ export interface User {
   stores?: AuthStore[];  // Tiendas asociadas al usuario (formato simplificado)
   warehouses?: AuthStore[];  // Almacenes asociados al usuario
   activeLoginMode?: LoginMode | null;
+  activeStoreId?: string | null;
+  activeWarehouseId?: string | null;
   iat?: number;
   exp?: number;
 }
@@ -371,6 +373,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [loadRealStores]);
 
+  const resolveAutoContextSelection = useCallback((userData: User) => {
+    const role = userData.role?.toLowerCase() || 'user';
+    if (role !== 'user' || userData.activeLoginMode) {
+      return { userData, selectedStore: null as AuthStore | null, selectedWarehouse: null as AuthStore | null };
+    }
+
+    const stores = userData.stores || [];
+    const warehouses = userData.warehouses || [];
+    const hasSingleStore = stores.length === 1 && warehouses.length === 0;
+    const hasSingleWarehouse = warehouses.length === 1 && stores.length === 0;
+
+    if (!hasSingleStore && !hasSingleWarehouse) {
+      return { userData, selectedStore: null as AuthStore | null, selectedWarehouse: null as AuthStore | null };
+    }
+
+    const activeLoginMode: LoginMode = hasSingleStore ? 'STORE' : 'WAREHOUSE';
+    const nextUser = { ...userData, activeLoginMode };
+
+    return {
+      userData: nextUser,
+      selectedStore: hasSingleStore ? stores[0] : null,
+      selectedWarehouse: hasSingleWarehouse ? warehouses[0] : null,
+    };
+  }, []);
+
+  const applySelectedContext = useCallback((selectedStore: AuthStore | null, selectedWarehouse: AuthStore | null) => {
+    try {
+      if (selectedStore) {
+        localStorage.setItem(CURRENT_STORE_STORAGE_KEY, JSON.stringify(selectedStore));
+        localStorage.removeItem(CURRENT_WAREHOUSE_STORAGE_KEY);
+      } else if (selectedWarehouse) {
+        localStorage.setItem(CURRENT_WAREHOUSE_STORAGE_KEY, JSON.stringify(selectedWarehouse));
+        localStorage.removeItem(CURRENT_STORE_STORAGE_KEY);
+      }
+    } catch {
+      // ignorar
+    }
+
+    setCurrentStore(selectedStore);
+    setCurrentWarehouse(selectedWarehouse);
+  }, []);
+
   const login = async (email: string, password: string, context?: LoginContextPayload): Promise<User | null> => {
     setLoading(true);
     setError(null);
@@ -464,17 +508,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         activeStoreId: response.activeStoreId ?? response.user.activeStoreId ?? null,
         activeWarehouseId: response.activeWarehouseId ?? response.user.activeWarehouseId ?? null,
       };
-      setUser(userData);
-      localStorage.setItem('user', JSON.stringify(userData));
-      setActiveLoginMode(userData.activeLoginMode ?? null);
+
+      const { userData: resolvedUser, selectedStore, selectedWarehouse } = resolveAutoContextSelection(userData);
+      setUser(resolvedUser);
+      localStorage.setItem('user', JSON.stringify(resolvedUser));
+      setActiveLoginMode(resolvedUser.activeLoginMode ?? null);
       
       // Resolver contexto activo según modo devuelto por backend
-      if (userData.activeLoginMode === 'STORE' && userData.activeStoreId) {
-        const selectedStore = jwtStores.find((s) => s.id === userData.activeStoreId) || null;
+      if (selectedStore || selectedWarehouse) {
+        applySelectedContext(selectedStore, selectedWarehouse);
+      } else if (resolvedUser.activeLoginMode === 'STORE' && resolvedUser.activeStoreId) {
+        const selectedStore = jwtStores.find((s) => s.id === resolvedUser.activeStoreId) || null;
         setCurrentStore(selectedStore);
         setCurrentWarehouse(null);
-      } else if (userData.activeLoginMode === 'WAREHOUSE' && userData.activeWarehouseId) {
-        const selectedWarehouse = jwtWarehouses.find((w) => w.id === userData.activeWarehouseId) || null;
+      } else if (resolvedUser.activeLoginMode === 'WAREHOUSE' && resolvedUser.activeWarehouseId) {
+        const selectedWarehouse = jwtWarehouses.find((w) => w.id === resolvedUser.activeWarehouseId) || null;
         setCurrentWarehouse(selectedWarehouse);
         setCurrentStore(null);
       } else {
@@ -482,7 +530,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setCurrentWarehouse(null);
       }
       
-      return userData;
+      return resolvedUser;
       
     } catch (err: unknown) {
       // Clear any partial authentication state
@@ -692,36 +740,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Save user data for future use
           localStorage.setItem('user', JSON.stringify(userData));
         }
-        setUser(userData);
-        setActiveLoginMode(userData.activeLoginMode ?? null);
+        const { userData: resolvedUser, selectedStore, selectedWarehouse } = resolveAutoContextSelection(userData);
+        setUser(resolvedUser);
+        setActiveLoginMode(resolvedUser.activeLoginMode ?? null);
+        localStorage.setItem('user', JSON.stringify(resolvedUser));
 
         // Restaurar selección local de tienda/almacén tras hard reload.
-        try {
-          if (userData.activeLoginMode === 'STORE') {
-            const rawStore = localStorage.getItem(CURRENT_STORE_STORAGE_KEY);
-            if (rawStore) {
-              const parsed = JSON.parse(rawStore) as AuthStore;
-              if (parsed?.id) {
-                setCurrentStore(parsed);
-                setCurrentWarehouse(null);
+        if (selectedStore || selectedWarehouse) {
+          applySelectedContext(selectedStore, selectedWarehouse);
+        } else {
+          try {
+            if (resolvedUser.activeLoginMode === 'STORE') {
+              const rawStore = localStorage.getItem(CURRENT_STORE_STORAGE_KEY);
+              if (rawStore) {
+                const parsed = JSON.parse(rawStore) as AuthStore;
+                if (parsed?.id) {
+                  setCurrentStore(parsed);
+                  setCurrentWarehouse(null);
+                }
               }
-            }
-          } else if (userData.activeLoginMode === 'WAREHOUSE') {
-            const rawWarehouse = localStorage.getItem(CURRENT_WAREHOUSE_STORAGE_KEY);
-            if (rawWarehouse) {
-              const parsed = JSON.parse(rawWarehouse) as AuthStore;
-              if (parsed?.id) {
-                setCurrentWarehouse(parsed);
-                setCurrentStore(null);
+            } else if (resolvedUser.activeLoginMode === 'WAREHOUSE') {
+              const rawWarehouse = localStorage.getItem(CURRENT_WAREHOUSE_STORAGE_KEY);
+              if (rawWarehouse) {
+                const parsed = JSON.parse(rawWarehouse) as AuthStore;
+                if (parsed?.id) {
+                  setCurrentWarehouse(parsed);
+                  setCurrentStore(null);
+                }
               }
+            } else {
+              setCurrentStore(null);
+              setCurrentWarehouse(null);
             }
-          } else {
+          } catch {
             setCurrentStore(null);
             setCurrentWarehouse(null);
           }
-        } catch {
-          setCurrentStore(null);
-          setCurrentWarehouse(null);
         }
 
         // Schedule token refresh 1 minute before expiration
