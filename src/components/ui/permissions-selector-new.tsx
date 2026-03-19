@@ -206,11 +206,11 @@ function SectionBlock({ section, visibleKeys, selectedKeys, onToggle, onToggleAl
   return (
     <div className="rounded-lg border bg-card">
       <div className="flex items-center justify-between px-4 py-2.5 border-b bg-muted/40 rounded-t-lg">
-        <span className="text-sm font-semibold tracking-tight">{section.label}</span>
+        <span className="text-sm font-semibold tracking-tight text-primary/80 dark:text-primary/70">{section.label}</span>
         <button
           type="button"
           onClick={() => onToggleAll(visibleKeys, allSelected)}
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          className="text-xs text-primary/70 hover:text-primary transition-colors"
         >
           {allSelected ? "Deseleccionar sección" : someSelected ? "Seleccionar todos" : "Seleccionar sección"}
         </button>

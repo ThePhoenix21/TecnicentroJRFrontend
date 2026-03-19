@@ -47,7 +47,7 @@ const userFormSchema = z.object({
     .string()
     .optional()
     .refine((value) => !value || value.trim().length === 0 || value.trim().length >= 3, {
-      message: 'El alias debe tener al menos 3 caracteres.',
+      message: 'El apellido debe tener al menos 3 caracteres.',
     }),
   email: z.string().email({
     message: 'Por favor ingresa un correo electrónico válido.',
@@ -271,11 +271,13 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
 
     if (hasFeature('DASHBOARD')) {
       allowed.add('VIEW_DASHBOARD');
+      allowed.add('VIEW_ANALYTICS');
     }
 
     if (hasFeature('INVENTORY')) {
       allowed.add('VIEW_INVENTORY');
       allowed.add('MANAGE_INVENTORY');
+      allowed.add('START_PHYSICAL_INVENTORY');
     }
 
     if (hasFeature('PRODUCTS')) {
@@ -292,15 +294,31 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
       allowed.add('MANAGE_CLIENTS');
     }
 
+    if (hasFeature('USERS')) {
+      allowed.add('VIEW_USERS');
+      allowed.add('MANAGE_USERS');
+      allowed.add('DELETE_USERS');
+    }
+
+    if (hasFeature('STORES')) {
+      allowed.add('VIEW_STORES');
+      allowed.add('MANAGE_STORES');
+      allowed.add('CHANGE_STORE_LOGO');
+    }
+
     if (hasFeature('SERVICES')) {
       allowed.add('VIEW_SERVICES');
       allowed.add('VIEW_ALL_SERVICES');
       allowed.add('MANAGE_SERVICES');
+      allowed.add('DETAIL_SERVICES');
     }
 
     if (hasFeature('SALES')) {
       allowed.add('VIEW_ORDERS');
       allowed.add('MANAGE_ORDERS');
+      allowed.add('VIEW_ALL_ORDERS_HISTORY');
+      allowed.add('VIEW_OWN_ORDERS_HISTORY');
+      allowed.add('DETAIL_ORDERS');
     }
 
     if (hasFeature('SALESOFPRODUCTS') && hasFeature('PRODUCTS')) {
@@ -316,6 +334,42 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
     if (hasFeature('CASH')) {
       allowed.add('VIEW_CASH');
       allowed.add('MANAGE_CASH');
+      allowed.add('VIEW_ALL_CASH_HISTORY');
+      allowed.add('VIEW_OWN_CASH_HISTORY');
+      allowed.add('PRINT_CASH_CLOSURE');
+      allowed.add('VIEW_ALL_CASH_OPEN');
+    }
+
+    if (hasFeature('EMPLOYEES')) {
+      allowed.add('VIEW_EMPLOYEES');
+      allowed.add('MANAGE_EMPLOYEES');
+      allowed.add('CONVERT_EMPLOYEE_TO_USER');
+      allowed.add('RECREATE_EMPLOYEE');
+    }
+
+    if (hasFeature('WAREHOUSES')) {
+      allowed.add('VIEW_WAREHOUSES');
+      allowed.add('MANAGE_WAREHOUSES');
+    }
+
+    if (hasFeature('SUPPLIERS')) {
+      allowed.add('VIEW_SUPPLIERS');
+      allowed.add('MANAGE_SUPPLIERS');
+      allowed.add('DELETE_SUPPLIERS');
+    }
+
+    if (hasFeature('SUPPLY_ORDERS')) {
+      allowed.add('VIEW_SUPPLY_ORDERS');
+      allowed.add('CREATE_SUPPLY_ORDER');
+      allowed.add('EDIT_EMITTED_SUPPLY_ORDER');
+      allowed.add('APPROVE_SUPPLY_ORDER');
+      allowed.add('RECEIVE_SUPPLY_ORDER');
+      allowed.add('CANCEL_SUPPLY_ORDER');
+    }
+
+    if (hasFeature('SUPPORT')) {
+      allowed.add('VIEW_SUPPORT');
+      allowed.add('MANAGE_SUPPORT');
     }
 
     return allowed;
@@ -523,12 +577,8 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
 
   return (
     <Form {...form}>
-      <div className="flex flex-col max-h-[calc(100vh-220px)]">
-        <form
-          onSubmit={form.handleSubmit(onSubmit as any)}
-          className="flex-1 overflow-y-auto pr-2"
-        >
-          <Tabs defaultValue="info" className="space-y-4 pb-2">
+      <form onSubmit={form.handleSubmit(onSubmit as any)} className="space-y-4 sm:space-y-6">
+        <Tabs defaultValue="info" className="space-y-4">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="info">Información</TabsTrigger>
               <TabsTrigger value="permissions">Permisos de usuario</TabsTrigger>
@@ -562,11 +612,11 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
               name="username"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Alias (opcional)</FormLabel>
+                  <FormLabel>Apellido</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="alias"
-                      autoComplete="nickname"
+                      placeholder="apellido"
+                      autoComplete="family-name"
                       autoCapitalize="none"
                       autoCorrect="off"
                       spellCheck={false}
@@ -823,23 +873,22 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
             )}
           </TabsContent>
         </Tabs>
-        </form>
 
-        <div className="flex-shrink-0 border-t bg-background pt-4 mt-6 flex justify-end space-x-4">
+        <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t">
           <Button
             type="button"
             variant="outline"
             onClick={onSuccess}
             disabled={isSubmitting}
+            className="w-full sm:w-auto h-10"
           >
             Cancelar
           </Button>
-          
-          <Button type="submit" disabled={isSubmitting} onClick={form.handleSubmit(onSubmit as any)}>
+          <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto h-10">
             {isSubmitting ? 'Guardando...' : 'Guardar usuario'}
           </Button>
         </div>
-      </div>
+      </form>
     </Form>
   );
 }

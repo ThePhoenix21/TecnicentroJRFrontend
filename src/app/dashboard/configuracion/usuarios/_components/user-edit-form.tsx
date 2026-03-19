@@ -29,7 +29,7 @@ const userEditSchema = z.object({
     .string()
     .optional()
     .refine((value) => !value || value.trim().length === 0 || value.trim().length >= 3, {
-      message: 'El alias debe tener al menos 3 caracteres.',
+      message: 'El apellido debe tener al menos 3 caracteres.',
     }),
   email: z.string().email({
     message: 'Por favor ingresa un correo electrónico válido.',
@@ -444,11 +444,11 @@ export function UserEditForm({ user, stores, warehouses, onSuccess }: UserEditFo
             name="username"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-sm font-medium">Alias (opcional)</FormLabel>
+                <FormLabel className="text-sm font-medium">Apellido</FormLabel>
                 <FormControl>
                   <Input
-                    placeholder="alias"
-                    autoComplete="nickname"
+                    placeholder="apellido"
+                    autoComplete="family-name"
                     autoCapitalize="none"
                     autoCorrect="off"
                     spellCheck={false}

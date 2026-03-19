@@ -42,7 +42,9 @@ const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
               : "bg-background border-border hover:bg-accent hover:text-accent-foreground",
             className
           )}
-          onClick={() => {
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
             const newChecked = !isChecked
             setIsChecked(newChecked)
             onCheckedChange?.(newChecked)

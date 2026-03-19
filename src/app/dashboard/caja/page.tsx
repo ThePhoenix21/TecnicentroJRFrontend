@@ -435,6 +435,21 @@ export default function CajaPage() {
     loadCurrentSession();
   }, [loadCurrentSession]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleSessionClosed = () => {
+      loadCurrentSession();
+      setMovementsPage(1);
+      loadMovementsRef.current?.(1);
+    };
+
+    window.addEventListener('cash-session-closed', handleSessionClosed);
+    return () => {
+      window.removeEventListener('cash-session-closed', handleSessionClosed);
+    };
+  }, [loadCurrentSession]);
+
   const loadClosedSessions = useCallback(async () => {
     if (!canViewHistory) return;
     if (!currentStore?.id) return;

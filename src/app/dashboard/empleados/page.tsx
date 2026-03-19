@@ -1970,12 +1970,12 @@ export default function EmpleadosPage() {
       </Dialog>
 
       <Dialog open={isConvertOpen} onOpenChange={(open) => (open ? setIsConvertOpen(true) : closeConvert())}>
-        <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[720px] lg:max-w-[1040px] max-h-[90vh] lg:max-h-[92vh] lg:min-h-[70vh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>Convertir empleado a usuario</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4 flex-1 min-h-0">
             <div className="space-y-2">
               <label className="text-sm font-medium">Contraseña</label>
               <Input
@@ -1987,19 +1987,21 @@ export default function EmpleadosPage() {
               />
             </div>
 
-            <PermissionsSelector
-              selectedPermissions={convertPermissions}
-              availablePermissions={availablePermissions}
-              isLoading={permissionsLoading}
-              onPermissionChange={setConvertPermissions}
-              title="Permisos"
-              description="Selecciona los permisos para el usuario"
-              columns={2}
-              maxHeight="max-h-56"
-              className="space-y-3"
-            />
+            <div className="flex-1 min-h-0">
+              <PermissionsSelector
+                selectedPermissions={convertPermissions}
+                availablePermissions={availablePermissions}
+                isLoading={permissionsLoading}
+                onPermissionChange={setConvertPermissions}
+                title="Permisos"
+                description="Selecciona los permisos para el usuario"
+                columns={2}
+                maxHeight="max-h-[50vh] sm:max-h-[520px]"
+                className="space-y-3"
+              />
+            </div>
 
-            <DialogFooter className="gap-2 sm:gap-2">
+            <DialogFooter className="gap-2 sm:gap-2 mt-auto">
               <Button variant="outline" onClick={closeConvert} disabled={convertSubmitting}>
                 Cancelar
               </Button>

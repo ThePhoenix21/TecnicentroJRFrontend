@@ -487,16 +487,30 @@ export function SaleForm({
       paymentMethods: [{
         id: "1",
         type: PaymentType.EFECTIVO,
-        amount: 0
-      }]
+        amount: 0,
+      }],
     });
-  }, []);
+  }, [newItem.type, tenantDefaultService, tenantDefaultServiceLoaded]);
 
-  // Efecto para cargar la sesión de caja activa cuando se abre el formulario o cambia la tienda
   useEffect(() => {
     if (isOpen && currentStore?.id) {
       loadActiveCashSession();
     }
+  }, [isOpen, currentStore?.id]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleSessionClosed = () => {
+      if (isOpen && currentStore?.id) {
+        loadActiveCashSession();
+      }
+    };
+
+    window.addEventListener('cash-session-closed', handleSessionClosed);
+    return () => {
+      window.removeEventListener('cash-session-closed', handleSessionClosed);
+    };
   }, [isOpen, currentStore?.id]);
 
   // Función para cargar la sesión de caja activa

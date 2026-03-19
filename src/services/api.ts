@@ -57,11 +57,22 @@ api.interceptors.response.use(
   (response: AxiosResponse) => response,
   (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean; _skipAuthRedirect?: boolean };
-    
+
+    const responseMessage =
+      typeof error.response?.data === 'object' && error.response?.data
+        ? String((error.response?.data as any).message || (error.response?.data as any).error || '')
+        : '';
+    const isCashSessionClosed =
+      responseMessage && /caja|sesion|sesión/i.test(responseMessage) && /cerrad|close/i.test(responseMessage);
+
+    if (isCashSessionClosed && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('cash-session-closed', { detail: { message: responseMessage } }));
+    }
+
     if (error.code === 'ECONNABORTED' || !error.response) {
       // Error de timeout o de red - activar pantalla de error de conexión
       console.error('Error de conexión o timeout del servidor');
-      
+
       if (connectionErrorHandler) {
         connectionErrorHandler(true);
       }
