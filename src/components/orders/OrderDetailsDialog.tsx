@@ -1246,7 +1246,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
       {/* Dialog para mostrar el PDF */}
       <Dialog open={showPDF} onOpenChange={setShowPDF}>
         <DialogContent className="max-w-4xl w-[90vw] h-[90vh] p-0 flex flex-col">
-          <DialogHeader className="px-6 py-8 border-b flex flex-row items-center justify-between position-relative">
+          <DialogHeader className="px-4 sm:px-6 py-6 border-b space-y-3">
             <div>
               <DialogTitle>Comprobante de Venta {order.orderNumber ? `- ${order.orderNumber}` : ''}</DialogTitle>
               <DialogDescription>
@@ -1254,7 +1254,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
               </DialogDescription>
             </div>
             {canIssuePdf && showPDF && orderDetails && (
-              <div className="flex gap-2 absolute left-6 top-14">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto sm:self-start">
                 <PDFDownloadLink
                   document={
                     <ReceiptThermalPDF
@@ -1264,7 +1264,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                     />
                   }
                   fileName={`${order.orderNumber || 'comprobante-venta'}.pdf`}
-                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-black bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                  className="inline-flex items-center justify-center px-3 py-2 border border-transparent text-xs font-medium rounded-md shadow-sm text-black bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary w-full sm:w-auto"
                 >
                   {({ blob, url, loading, error }) =>
                     loading ? (
@@ -1325,7 +1325,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                       toast.error("Error al generar el PDF para impresión");
                     }
                   }}
-                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-black bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                  className="inline-flex items-center justify-center px-3 py-2 border border-transparent text-xs font-medium rounded-md shadow-sm text-black bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary w-full sm:w-auto"
                 >
                   <Printer className="h-3 w-3 mr-1" />
                   Imprimir Térmico
