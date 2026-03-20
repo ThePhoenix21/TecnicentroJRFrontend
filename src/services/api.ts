@@ -56,7 +56,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response: AxiosResponse) => response,
   (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean; _skipAuthRedirect?: boolean };
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean; _skipAuthRedirect?: boolean; _skipConnectionError?: boolean };
 
     const responseMessage =
       typeof error.response?.data === 'object' && error.response?.data
@@ -73,7 +73,7 @@ api.interceptors.response.use(
       // Error de timeout o de red - activar pantalla de error de conexión
       console.error('Error de conexión o timeout del servidor');
 
-      if (connectionErrorHandler) {
+      if (!originalRequest?._skipConnectionError && connectionErrorHandler) {
         connectionErrorHandler(true);
       }
     } else if (error.response.status === 401) {

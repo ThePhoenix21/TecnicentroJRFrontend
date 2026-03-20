@@ -337,7 +337,7 @@ function EndpointErrorAlerts({
 export default function DashboardPage() {
   const { currentStore, hasPermission } = useAuth();
   const dashboard = useDashboard();
-  const analytics = hasPermission('VIEW_ANALYTICS') ? useAnalytics() : null;
+  const analytics = useAnalytics();
   const {
     summary,
     charts,
@@ -370,31 +370,7 @@ export default function DashboardPage() {
     userRankingsError,
     fetchNetProfit,
     fetchAnalytics,
-  } = analytics || {
-    overview: null,
-    incomeTimeseries: null,
-    income: null,
-    netProfit: null,
-    expenses: null,
-    paymentMethodsSummary: null,
-    userRankings: null,
-    overviewLoading: false,
-    incomeTimeseriesLoading: false,
-    incomeLoading: false,
-    netProfitLoading: false,
-    expensesLoading: false,
-    paymentMethodsLoading: false,
-    userRankingsLoading: false,
-    loading: false,
-    overviewError: null,
-    incomeError: null,
-    netProfitError: null,
-    expensesError: null,
-    paymentMethodsError: null,
-    userRankingsError: null,
-    fetchNetProfit: () => Promise.resolve(),
-    fetchAnalytics: () => Promise.resolve(),
-  };
+  } = analytics;
 
   const [activeTab, setActiveTab] = useState<TabValue>("dashboard");
   const [from, setFrom] = useState("");

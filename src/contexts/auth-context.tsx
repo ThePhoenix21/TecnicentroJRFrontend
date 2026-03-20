@@ -154,7 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback((redirect: boolean = true) => {
-    try {
+    const performCleanup = () => {
       // Clear all auth related data
       if (typeof window !== 'undefined') {
         localStorage.removeItem('auth_token');
@@ -184,23 +184,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setTenantDefaultServiceLoaded(false);
       setError(null);
       setLoading(false);
+    };
 
+    try {
       if (redirect && typeof window !== 'undefined') {
         suppressRejectionsRef.current = true;
         setTimeout(() => {
           suppressRejectionsRef.current = false;
         }, 2000);
-        window.location.href = '/login';
+        router.replace('/login');
+        setTimeout(performCleanup, 0);
+        return;
       }
+
+      performCleanup();
     } catch (error) {
       console.error('Error durante logout:', error);
       // Forzar limpieza de estado incluso si hay error
-      setUser(null);
-      setCurrentStore(null);
-      setCurrentWarehouse(null);
-      setActiveLoginMode(null);
+      performCleanup();
       if (redirect && typeof window !== 'undefined') {
-        window.location.href = '/login';
+        router.replace('/login');
       }
     }
   }, [router]);

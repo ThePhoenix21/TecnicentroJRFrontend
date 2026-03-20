@@ -4,9 +4,9 @@ import { Store, CreateStoreDto, UpdateStoreDto, StoreResponse, StoreListResponse
 class StoreService {
     private baseUrl = '/store';
 
-    async getAllStores(): Promise<Store[]> {
+    async getAllStores(config?: Record<string, unknown>): Promise<Store[]> {
         try {
-            const response = await api.get<Store[]>(`${this.baseUrl}/tenant-info`);
+            const response = await api.get<Store[]>(`${this.baseUrl}/tenant-info`, config as any);
             return response.data;
         } catch (error) {
             this.handleError(error);

@@ -136,7 +136,9 @@ function ClientesContent() {
       setLoading(true);
 
       lastClientsRequestKeyRef.current = requestKey;
-      const requestPromise = clientService.getClients(page, pageSize, filters);
+      const requestPromise = clientService.getClients(page, pageSize, filters, {
+        _skipConnectionError: true,
+      });
       clientsRequestInFlightRef.current = requestPromise.then(() => undefined);
 
       const response = await requestPromise;
@@ -162,9 +164,9 @@ function ClientesContent() {
     const loadLookups = async () => {
       try {
         const [names, phones, dnis] = await Promise.all([
-          clientService.getLookupName(),
-          clientService.getLookupPhone(),
-          clientService.getLookupDni(),
+          clientService.getLookupName({ _skipConnectionError: true }),
+          clientService.getLookupPhone({ _skipConnectionError: true }),
+          clientService.getLookupDni({ _skipConnectionError: true }),
         ]);
         const safeNames = Array.isArray(names)
           ? uniqueBy(names, (item) => item.name?.trim().toLowerCase())

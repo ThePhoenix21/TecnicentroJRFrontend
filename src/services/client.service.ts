@@ -61,10 +61,16 @@ const isAuthError = (error: unknown) => {
 };
 
 export const clientService = {
-  async getClients(page: number = 1, pageSize: number = 12, filters: ClientFilters = {}): Promise<ClientsListResponse> {
+  async getClients(
+    page: number = 1,
+    pageSize: number = 12,
+    filters: ClientFilters = {},
+    config?: Record<string, unknown>
+  ): Promise<ClientsListResponse> {
     try {
       const response = await api.get<ClientsListResponse>('/clientes', {
-        params: { page, pageSize, ...filters }
+        params: { page, pageSize, ...filters },
+        ...(config as any)
       });
       return response.data;
     } catch (error) {
@@ -89,9 +95,9 @@ export const clientService = {
     }
   },
 
-  async getLookupName(): Promise<ClientLookupNameItem[]> {
+  async getLookupName(config?: Record<string, unknown>): Promise<ClientLookupNameItem[]> {
     try {
-      const response = await api.get<ClientLookupNameItem[]>('/clientes/lookup-name');
+      const response = await api.get<ClientLookupNameItem[]>('/clientes/lookup-name', config as any);
       return response.data;
     } catch (error) {
       if (!isAuthError(error)) {
@@ -101,9 +107,9 @@ export const clientService = {
     }
   },
 
-  async getLookupPhone(): Promise<ClientLookupPhoneItem[]> {
+  async getLookupPhone(config?: Record<string, unknown>): Promise<ClientLookupPhoneItem[]> {
     try {
-      const response = await api.get<ClientLookupPhoneItem[]>('/clientes/lookup-phone');
+      const response = await api.get<ClientLookupPhoneItem[]>('/clientes/lookup-phone', config as any);
       return response.data;
     } catch (error) {
       if (!isAuthError(error)) {
@@ -113,9 +119,9 @@ export const clientService = {
     }
   },
 
-  async getLookupDni(): Promise<ClientLookupDniItem[]> {
+  async getLookupDni(config?: Record<string, unknown>): Promise<ClientLookupDniItem[]> {
     try {
-      const response = await api.get<ClientLookupDniItem[]>('/clientes/lookup-dni');
+      const response = await api.get<ClientLookupDniItem[]>('/clientes/lookup-dni', config as any);
       return response.data;
     } catch (error) {
       if (!isAuthError(error)) {

@@ -48,7 +48,7 @@ export function UserDialog({
     const loadData = async () => {
       try {
         setIsLoading(true);
-        const storesData = await storeService.getAllStores();
+        const storesData = await storeService.getAllStores({ _skipConnectionError: true });
         
         // Solo cargar almacenes si está en modo WAREHOUSE y el tenant tiene la feature WAREHOUSES
         let warehousesData: any[] = [];
