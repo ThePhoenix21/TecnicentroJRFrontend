@@ -54,6 +54,7 @@ function ClientesContent() {
   const [pageSize] = useState(12);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [pageInput, setPageInput] = useState('1');
 
   const [nameFilter, setNameFilter] = useState('');
   const [nameQuery, setNameQuery] = useState('');
@@ -186,13 +187,26 @@ function ClientesContent() {
   }, []);
 
   useEffect(() => {
-    const timeout = setTimeout(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+    }
+
+    if (page !== 1) {
       setPage(1);
+    }
+  }, [nameFilter, phoneFilter, dniFilter, fromDate, toDate]);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
       loadClients();
     }, 400);
 
     return () => clearTimeout(timeout);
-  }, [nameFilter, phoneFilter, dniFilter, fromDate, toDate, loadClients]);
+  }, [loadClients]);
+
+  useEffect(() => {
+    setPageInput(String(page));
+  }, [page]);
 
   const filteredNameSuggestions = useMemo(() => {
     const q = nameQuery.trim().toLowerCase();
@@ -215,7 +229,18 @@ function ClientesContent() {
   const handlePageChange = (next: number) => {
     if (next < 1 || next > totalPages) return;
     setPage(next);
-    loadClients();
+  };
+
+  const applyPageInput = () => {
+    const parsed = Number(pageInput);
+    if (!Number.isFinite(parsed)) {
+      setPageInput(String(page));
+      return;
+    }
+
+    const next = Math.min(Math.max(1, Math.floor(parsed)), totalPages);
+    setPage(next);
+    setPageInput(String(next));
   };
 
   const handleDeleted = () => {
@@ -503,6 +528,33 @@ function ClientesContent() {
                     >
                       Anterior
                     </Button>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={pageInput}
+                        onChange={(e) => setPageInput(e.target.value)}
+                        onBlur={applyPageInput}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter') return;
+                          e.preventDefault();
+                          applyPageInput();
+                        }}
+                        className="h-8 w-14 text-center text-sm"
+                        inputMode="numeric"
+                        aria-label="Número de página"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={applyPageInput}
+                        className="h-8 px-2 text-xs"
+                      >
+                        Ir
+                      </Button>
+                      <span className="text-xs text-muted-foreground">
+                        / {totalPages}
+                      </span>
+                    </div>
                     <Button
                       variant="outline"
                       size="sm"
