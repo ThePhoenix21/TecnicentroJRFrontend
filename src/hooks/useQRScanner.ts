@@ -154,13 +154,6 @@ export function useQRScanner(options: UseQRScannerOptions): UseQRScannerReturn {
       if (!enabled) return;
 
       const activeElement = document.activeElement as HTMLElement | null;
-      // TEMPORAL DEBUG - borrar después
-      console.log(
-        'activeElement:',
-        activeElement?.tagName,
-        activeElement?.id,
-        document.activeElement
-      );
       if (
         activeElement &&
         (activeElement.tagName === 'INPUT' ||
@@ -168,11 +161,8 @@ export function useQRScanner(options: UseQRScannerOptions): UseQRScannerReturn {
           activeElement.tagName === 'SELECT' ||
           activeElement.isContentEditable)
       ) {
-        console.log('BLOQUEADO por activeElement:', activeElement.tagName);
         return;
       }
-
-      console.log('PROCESANDO key:', event.key, 'buffer:', gunBufferRef.current);
 
       const now = Date.now();
       const lastTime = gunLastTimeRef.current;

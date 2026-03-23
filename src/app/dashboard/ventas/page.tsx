@@ -47,6 +47,7 @@ import { Search, Plus, Info, ShoppingCart, AlertTriangle, Loader2, Trash2 } from
 import { toast } from "sonner";
 import OrderDetailsDialog from "@/components/orders/OrderDetailsDialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { QRScanner } from "@/components/ui/qr-scanner";
 
 import {
   Select,
@@ -70,6 +71,8 @@ export default function VentasPage() {
   const [products, setProducts] = useState<StoreProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const addItemFromOutside = useRef<((p: Product) => void) | null>(null);
+  const pendingProductRef = useRef<Product | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -636,6 +639,54 @@ export default function VentasPage() {
     return transformed;
   }, []);
 
+  const handleQRScanGlobal = useCallback((code: string) => {
+    const scannedCode = code.trim();
+    const normalizedCode = scannedCode.toLowerCase();
+
+    const matchedSP = products.find(
+      (sp) => (sp.product?.sku ?? '').trim().toLowerCase() === normalizedCode
+    );
+
+    if (!matchedSP) {
+      toast.error(`Producto no encontrado: ${scannedCode}`);
+      return;
+    }
+
+    const product: Product = {
+      id: matchedSP.product.id,
+      storeProductId: matchedSP.id,
+      name: matchedSP.product.name,
+      sku: matchedSP.product.sku,
+      description: '',
+      buycost: 0,
+      createdById: '',
+      isDeleted: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      price: Number(matchedSP.price) || 0,
+      stock: matchedSP.stock,
+      stockTreshold: 0,
+    };
+
+    if (isFormOpen && addItemFromOutside.current) {
+      addItemFromOutside.current(product);
+      return;
+    }
+
+    pendingProductRef.current = product;
+    setIsFormOpen(true);
+  }, [products, isFormOpen]);
+
+  useEffect(() => {
+    if (!isFormOpen || !pendingProductRef.current) return;
+    const product = pendingProductRef.current;
+    pendingProductRef.current = null;
+    const timer = setTimeout(() => {
+      addItemFromOutside.current?.(product);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [isFormOpen]);
+
   if (loading) {
     return (
       <div className="container mx-auto px-2 sm:px-4 py-6 space-y-6">
@@ -707,6 +758,16 @@ export default function VentasPage() {
                     <Plus className="h-4 w-4 mr-2" />
                     <span className="font-medium">Nueva Venta</span>
                   </Button>
+                )}
+
+                {canManageOrders && canViewProductsForSales && (
+                  <QRScanner
+                    mode="both"
+                    enabled={true}
+                    onScan={handleQRScanGlobal}
+                    onError={(error) => toast.error(error)}
+                    buttonLabel="Escanear"
+                  />
                 )}
 
                 {canManageOrders && hasHardDeleteSalesHistory && (
@@ -1268,6 +1329,7 @@ export default function VentasPage() {
           return result;
         }}
         products={canViewProductsForSales ? transformStoreProductsToProducts(products) : []}
+        onRegisterAddItem={(fn) => { addItemFromOutside.current = fn; }}
       />
 
       <Dialog open={isHardDeleteOpen} onOpenChange={handleHardDeleteOpenChange}>

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { Product } from "@/types/product.types";
-import type { StoreProduct } from "@/types/store-product.types";
 import type { SaleData } from '@/types/sale.types';
 import {
   Plus,
@@ -31,7 +30,6 @@ import { clientService } from '@/services/client.service';
 import { cashSessionService } from "@/services/cash-session.service";
 import { orderService } from "@/services/order.service";
 import { storeService } from "@/services/store.service";
-import { storeProductService } from "@/services/store-product.service";
 import type { Store } from "@/types/store";
 import { formatCurrency } from "@/lib/utils";
 
@@ -104,7 +102,6 @@ import {
 import { useDropzone } from "react-dropzone";
 import { Order } from "@/services/order.service";
 import { PaymentConfirmationDialog } from "@/components/ui/payment-confirmation-dialog";
-import { QRScanner } from "@/components/ui/qr-scanner";
 
 type CartItem = {
   id: string;
@@ -162,6 +159,7 @@ type SaleFormProps = {
   onSubmit: (data: SaleData) => Promise<{ success: boolean; orderId?: string; orderNumber?: string; orderData?: any }>;
   products: Product[];
   services?: Service[];
+  onRegisterAddItem?: (fn: (product: Product) => void) => void;
 };
 
 export function SaleForm({
@@ -170,6 +168,7 @@ export function SaleForm({
   onSubmit,
   products,
   services,
+  onRegisterAddItem,
 }: SaleFormProps) {
   const { user, currentStore, tenantFeatures, tenantFeaturesLoaded, tenantDefaultService, tenantDefaultServiceLoaded, canIssuePdf, hasPermission, tenantName } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
@@ -1027,11 +1026,38 @@ export function SaleForm({
     });
   };
 
+  const addItemFromQRRef = useRef<((product: Product) => void) | null>(null);
+  addItemFromQRRef.current = (product: Product) => {
+    handleAddItem(
+      {
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        productId: product.storeProductId || product.id,
+      },
+      'product',
+      '',
+      1,
+      [],
+      undefined,
+      undefined,
+      [{ id: '1', type: PaymentType.EFECTIVO, amount: product.price }]
+    );
+  };
+
+  useEffect(() => {
+    if (!onRegisterAddItem) return;
+    onRegisterAddItem((product: Product) => {
+      addItemFromQRRef.current?.(product);
+    });
+  }, [onRegisterAddItem]);
+
   // Funciones para manejar la confirmación del modal de pago
   const handlePaymentConfirmation = () => {
     if (!paymentConfirmation.pendingItem) return;
 
     const { pendingItem } = paymentConfirmation;
+    // ...
     
     // Usar el total de métodos de pago como precio confirmado
     const confirmedPrice = paymentConfirmation.paymentTotal;
@@ -1110,8 +1136,6 @@ export function SaleForm({
 
   // Manejar envío del formulario
   const handleSubmit = async (paymentMethodsOverride?: PaymentMethod[], printWindow?: Window | null) => {
-    console.trace('[SaleForm][debug] handleSubmit call stack');
-
     if (!paymentMethodsOverride) {
       setIsOrderPaymentsModalOpen(true);
       return;
@@ -1872,55 +1896,6 @@ export function SaleForm({
     }
   }, [businessInfo]);
 
-  const mapStoreProductToProduct = useCallback((storeProduct: StoreProduct): Product => ({
-    id: storeProduct.product.id,
-    storeProductId: storeProduct.id,
-    name: storeProduct.product.name,
-    sku: storeProduct.product.sku,
-    description: '',
-    buycost: 0,
-    createdById: '',
-    isDeleted: false,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    price: Number(storeProduct.price) || 0,
-    stock: storeProduct.stock,
-    stockTreshold: 0,
-  }), []);
-
-  const handleQRScan = useCallback((code: string) => {
-    const scannedCode = code.trim();
-    const normalizedCode = scannedCode.toLowerCase();
-
-    const matchedProduct = products.find((product) =>
-      (product.sku ?? "").trim().toLowerCase() === normalizedCode
-    );
-
-    if (!matchedProduct) {
-      toast.error(`Producto no encontrado: ${scannedCode}`);
-      return;
-    }
-
-    // Llamar handleAddItem directamente con los campos
-    // exactos que espera, igual que cuando el usuario
-    // selecciona manualmente y hace clic en Agregar
-    handleAddItem(
-      {
-        id: matchedProduct.id,
-        name: matchedProduct.name,
-        price: matchedProduct.price,
-        productId: matchedProduct.storeProductId || matchedProduct.id,
-      },
-      'product',
-      '',
-      1,
-      [],
-      undefined,
-      undefined,
-      [{ id: '1', type: PaymentType.EFECTIVO, amount: matchedProduct.price }]
-    );
-  }, [products, handleAddItem]);
-
   return (
     <div 
       className={`fixed inset-0 bg-black/90 flex items-start md:items-center justify-center z-50 p-2 md:p-4 overflow-hidden ${(!isOpen && !showServiceSheet) ? 'hidden' : ''}`}
@@ -2195,14 +2170,6 @@ export function SaleForm({
                           </div>
                         )}
                       </div>
-
-                      <QRScanner
-                        mode="both"
-                        enabled={newItem.type === "product"}
-                        onScan={handleQRScan}
-                        onError={(error) => toast.error(error)}
-                        buttonLabel="Escanear"
-                      />
                     </div>
                   </div>
                 </div>
