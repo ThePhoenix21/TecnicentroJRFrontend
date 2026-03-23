@@ -53,6 +53,7 @@ import {
 } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { QRScanner } from "@/components/ui/qr-scanner";
 import { Loader2, Plus, Trash2, ArrowLeftRight, Search, X } from "lucide-react";
 import { ActiveFilters } from "@/components/ui/active-filters";
 import { userService, type UserLookupItem } from "@/services/user.service";
@@ -162,6 +163,8 @@ export default function MovimientosStockPage() {
   const [productsLookup, setProductsLookup] = useState<ProductLookupItem[]>([]);
   const [productsLoading, setProductsLoading] = useState(false);
   const [productSuggestions, setProductSuggestions] = useState<ProductLookupItem[][]>([]);
+  const [highlightedCreateItemIndex, setHighlightedCreateItemIndex] = useState<number | null>(null);
+  const createItemRefs = useRef<Array<HTMLDivElement | null>>([]);
 
   // ─── Receive modal ───
   const [receiveOpen, setReceiveOpen] = useState(false);
@@ -575,6 +578,69 @@ export default function MovimientosStockPage() {
       return updated;
     });
   };
+
+  const scrollAndHighlightCreateItem = useCallback((index: number) => {
+    requestAnimationFrame(() => {
+      createItemRefs.current[index]?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    });
+
+    setHighlightedCreateItemIndex(index);
+    window.setTimeout(() => {
+      setHighlightedCreateItemIndex((prev) => (prev === index ? null : prev));
+    }, 1200);
+  }, []);
+
+  const handleQRScanTransfer = useCallback((code: string) => {
+    const scannedCode = code.trim();
+    const normalizedCode = scannedCode.toLowerCase();
+
+    const matchedProduct = productsLookup.find((product) => {
+      const sku = ((product as { sku?: string }).sku ?? "").trim().toLowerCase();
+      return sku === normalizedCode;
+    });
+
+    if (!matchedProduct) {
+      toast.error(`Producto no encontrado: ${scannedCode}`);
+      return;
+    }
+
+    const existingIndex = createItems.findIndex((item) => item.productId === matchedProduct.id);
+    if (existingIndex >= 0) {
+      setCreateItems((prev) =>
+        prev.map((item, index) =>
+          index === existingIndex
+            ? { ...item, quantityRequested: item.quantityRequested + 1 }
+            : item
+        )
+      );
+      scrollAndHighlightCreateItem(existingIndex);
+      return;
+    }
+
+    let emptyIndex = -1;
+    for (let i = createItems.length - 1; i >= 0; i -= 1) {
+      if (!createItems[i].productId) {
+        emptyIndex = i;
+        break;
+      }
+    }
+
+    if (emptyIndex >= 0) {
+      handleProductSelect(emptyIndex, matchedProduct);
+      scrollAndHighlightCreateItem(emptyIndex);
+      return;
+    }
+
+    const newIndex = createItems.length;
+    setCreateItems((prev) => [...prev, { productId: matchedProduct.id, quantityRequested: 1 }]);
+    setProductSuggestions((prev) => [...prev, []]);
+    window.setTimeout(() => {
+      scrollAndHighlightCreateItem(newIndex);
+    }, 0);
+  }, [productsLookup, createItems, handleProductSelect, scrollAndHighlightCreateItem]);
 
   const handleSubmitCreate = async () => {
     if (!createTransferType) {
@@ -1697,7 +1763,15 @@ export default function MovimientosStockPage() {
               ) : productsLoading ? null : (
                 <>
                   {createItems.map((item, idx) => (
-                    <div key={idx} className="flex gap-2 items-center relative">
+                    <div
+                      key={idx}
+                      ref={(node) => {
+                        createItemRefs.current[idx] = node;
+                      }}
+                      className={`flex gap-2 items-center relative rounded-md transition-colors ${
+                        highlightedCreateItemIndex === idx ? "bg-primary/10 ring-1 ring-primary/40" : ""
+                      }`}
+                    >
                       <div className="flex-1 relative">
                         <Input
                           value={item.productId ? productsLookup.find(p => p.id === item.productId)?.name || "" : ""}
@@ -1753,20 +1827,29 @@ export default function MovimientosStockPage() {
                       </Button>
                     </div>
                   ))}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      setCreateItems((prev) => [
-                        ...prev,
-                        { productId: "", quantityRequested: 1 },
-                      ])
-                    }
-                    className="w-full"
-                  >
-                    <Plus className="h-3 w-3 mr-1" />
-                    Agregar producto
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <QRScanner
+                      enabled={true}
+                      mode="both"
+                      onScan={handleQRScanTransfer}
+                      onError={(error) => toast.error(error)}
+                      buttonLabel="Escanear"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setCreateItems((prev) => [
+                          ...prev,
+                          { productId: "", quantityRequested: 1 },
+                        ])
+                      }
+                      className="flex-1"
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      Agregar producto
+                    </Button>
+                  </div>
                 </>
               )}
             </div>

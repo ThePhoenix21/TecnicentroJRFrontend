@@ -44,6 +44,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { QRScanner } from "@/components/ui/qr-scanner";
 import {
   Table,
   TableBody,
@@ -430,6 +431,58 @@ export default function OrdenesSuministroPage() {
       products: [],
     });
   };
+
+  const handleQRScanSupplyOrder = useCallback((code: string) => {
+    const scannedCode = code.trim();
+    const normalizedCode = scannedCode.toLowerCase();
+
+    const matchedProduct = productsLookup.find((product) => {
+      const sku = ((product as { sku?: string }).sku ?? "").trim().toLowerCase();
+      return sku === normalizedCode;
+    });
+
+    if (!matchedProduct) {
+      toast.error(`Producto no encontrado: ${scannedCode}`);
+      return;
+    }
+
+    setCreateForm((prev) => {
+      const existingIndex = prev.products.findIndex((item) => item.productId === matchedProduct.id);
+      if (existingIndex >= 0) {
+        return {
+          ...prev,
+          products: prev.products.map((item, index) =>
+            index === existingIndex
+              ? { ...item, quantity: (item.quantity || 0) + 1 }
+              : item
+          ),
+        };
+      }
+
+      const emptyIndex = prev.products.findIndex((item) => !item.productId);
+      if (emptyIndex >= 0) {
+        return {
+          ...prev,
+          products: prev.products.map((item, index) =>
+            index === emptyIndex ? { ...item, productId: matchedProduct.id } : item
+          ),
+        };
+      }
+
+      return {
+        ...prev,
+        products: [...prev.products, { productId: matchedProduct.id, quantity: 1, note: "" }],
+      };
+    });
+
+    setCreateErrors((prev) => ({
+      ...prev,
+      products: prev.products.map((prod) => ({
+        ...prod,
+        productId: false,
+      })),
+    }));
+  }, [productsLookup]);
 
   const ensureLookupsLoaded = async () => {
     if (lookupLoading) return;
@@ -2005,26 +2058,35 @@ if (openedWindow) {
                 <div className="space-y-3 rounded-lg border bg-muted/30 p-3 sm:p-4">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <h3 className="text-sm font-semibold">Productos</h3>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        {
-                          setCreateForm((prev) => ({
-                            ...prev,
-                            products: [...prev.products, { productId: "", quantity: 1, note: "" }],
-                          }));
-                          setCreateErrors((prev) => ({
-                            ...prev,
-                            products: [...prev.products, { productId: false, quantity: false }],
-                          }));
+                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                      <QRScanner
+                        enabled={true}
+                        mode="both"
+                        onScan={handleQRScanSupplyOrder}
+                        onError={(error) => toast.error(error)}
+                        buttonLabel="Escanear QR"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          {
+                            setCreateForm((prev) => ({
+                              ...prev,
+                              products: [...prev.products, { productId: "", quantity: 1, note: "" }],
+                            }));
+                            setCreateErrors((prev) => ({
+                              ...prev,
+                              products: [...prev.products, { productId: false, quantity: false }],
+                            }));
+                          }
                         }
-                      }
-                      className="w-full sm:w-auto h-8"
-                    >
-                      Agregar producto
-                    </Button>
+                        className="w-full sm:w-auto h-8"
+                      >
+                        Agregar producto
+                      </Button>
+                    </div>
                   </div>
                   <div className="space-y-4 max-h-[280px] sm:max-h-[320px] overflow-y-auto pr-1">
                     {createForm.products.map((item, index) => {

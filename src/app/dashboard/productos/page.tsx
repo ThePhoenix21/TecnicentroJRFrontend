@@ -25,6 +25,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Plus, Search, X, Info, Package, Loader2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { toast as sonnerToast } from 'sonner';
 import { useAuth } from '@/contexts/auth-context';
 import { ProductHistory } from '@/components/inventory/ProductHistory';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -41,6 +42,7 @@ import {
 interface StoreProductFormData {
   name: string;
   description: string;
+  sku: string;
   buyCost: number;
   basePrice: number;
   price: number;
@@ -62,11 +64,24 @@ export default function ProductsPage() {
   const [nameSuggestions, setNameSuggestions] = useState<Array<{ id: string; name: string }>>([]);
   const [nameLookupLoading, setNameLookupLoading] = useState(false);
   const nameInputWrapperRef = useRef<HTMLDivElement | null>(null);
+
+  const [skuFilter, setSkuFilter] = useState('');
+  const [skuQuery, setSkuQuery] = useState('');
+  const [showSkuSuggestions, setShowSkuSuggestions] = useState(false);
+  const [skuSuggestions, setSkuSuggestions] = useState<Array<{ id: string; sku: string }>>([]);
+  const [skuLookupLoading, setSkuLookupLoading] = useState(false);
+  const skuInputWrapperRef = useRef<HTMLDivElement | null>(null);
   const filteredNameSuggestions = useMemo(() => {
     const query = nameQuery.trim().toLowerCase();
     if (!query) return [];
     return nameSuggestions.filter((item) => item.name?.toLowerCase().includes(query));
   }, [nameQuery, nameSuggestions]);
+
+  const filteredSkuSuggestions = useMemo(() => {
+    const query = skuQuery.trim().toLowerCase();
+    if (!query) return [];
+    return skuSuggestions.filter((item) => item.sku?.toLowerCase().includes(query));
+  }, [skuQuery, skuSuggestions]);
 
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -86,6 +101,7 @@ export default function ProductsPage() {
   const [detailForm, setDetailForm] = useState({
     name: '',
     description: '',
+    sku: '',
     price: '',
     buyCost: '',
     basePrice: '',
@@ -97,10 +113,12 @@ export default function ProductsPage() {
   const [catalogDeleteCredentials, setCatalogDeleteCredentials] = useState({ email: '', password: '' });
   const [showCatalogDeleteForm, setShowCatalogDeleteForm] = useState(false);
   const [isSavingProduct, setIsSavingProduct] = useState(false);
+  const [createErrorMessage, setCreateErrorMessage] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<StoreProductFormData>({
     name: '',
     description: '',
+    sku: '',
     buyCost: 0,
     basePrice: 0,
     price: 0,
@@ -251,6 +269,7 @@ export default function ProductsPage() {
         page: targetPage,
         pageSize: PAGE_SIZE,
         name: nameFilter.trim() || undefined,
+        sku: skuFilter.trim() || undefined,
         inStock: hideOutOfStock ? true : undefined,
       });
 
@@ -279,7 +298,7 @@ export default function ProductsPage() {
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated, isWarehouseMode, selectedStoreId, currentStore?.id, nameFilter, hideOutOfStock, toast, canViewProducts]);
+  }, [isAuthenticated, isWarehouseMode, selectedStoreId, currentStore?.id, nameFilter, skuFilter, hideOutOfStock, toast, canViewProducts]);
 
   const fetchStoreProductsRef = useRef(fetchStoreProducts);
 
@@ -299,13 +318,16 @@ export default function ProductsPage() {
   }, [isAuthenticated, router]);
 
   const filtersKey = useMemo(() => {
-    return [nameFilter, hideOutOfStock].join('|');
-  }, [nameFilter, hideOutOfStock]);
+    return [nameFilter, skuFilter, hideOutOfStock].join('|');
+  }, [nameFilter, skuFilter, hideOutOfStock]);
 
   const clearFilters = () => {
     setNameFilter('');
     setNameQuery('');
     setShowNameSuggestions(false);
+    setSkuFilter('');
+    setSkuQuery('');
+    setShowSkuSuggestions(false);
     setHideOutOfStock(true);
     // Forzar recarga después de limpiar filtros
     setTimeout(() => {
@@ -363,15 +385,44 @@ export default function ProductsPage() {
     }
   }, [isAuthenticated]);
 
+  const loadSkuLookup = useCallback(async (search = '') => {
+    if (!isAuthenticated) {
+      setSkuSuggestions([]);
+      return;
+    }
+
+    try {
+      setSkuLookupLoading(true);
+      const lookup = await storeProductService.getCatalogProductSkuLookup(search);
+      setSkuSuggestions(Array.isArray(lookup) ? lookup : []);
+    } catch (error) {
+      if (isUnauthorizedError(error)) return;
+      console.error('Error loading SKU lookup:', error);
+      setSkuSuggestions([]);
+    } finally {
+      setSkuLookupLoading(false);
+    }
+  }, [isAuthenticated]);
+
   useEffect(() => {
     loadProductLookup();
   }, [loadProductLookup]);
 
   useEffect(() => {
+    if (!skuQuery.trim()) {
+      setSkuSuggestions([]);
+      return;
+    }
+    loadSkuLookup(skuQuery.trim());
+  }, [skuQuery, loadSkuLookup]);
+
+  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (!nameInputWrapperRef.current) return;
-      if (!nameInputWrapperRef.current.contains(event.target as Node)) {
+      if (nameInputWrapperRef.current && !nameInputWrapperRef.current.contains(event.target as Node)) {
         setShowNameSuggestions(false);
+      }
+      if (skuInputWrapperRef.current && !skuInputWrapperRef.current.contains(event.target as Node)) {
+        setShowSkuSuggestions(false);
       }
     };
 
@@ -386,6 +437,14 @@ export default function ProductsPage() {
       fetchStoreProductsRef.current?.(1);
     }
   }, [isAuthenticated, nameFilter]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (skuFilter.trim()) {
+      setPage(1);
+      fetchStoreProductsRef.current?.(1);
+    }
+  }, [isAuthenticated, skuFilter]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -462,6 +521,7 @@ export default function ProductsPage() {
 
     try {
       setIsSavingProduct(true);
+      setCreateErrorMessage(null);
       if (isWarehouseMode) {
         if (isEditing && currentStoreProduct) {
           const updateDto: any = {
@@ -472,6 +532,7 @@ export default function ProductsPage() {
           if (canManageProducts) {
             updateDto.name = formData.name;
             updateDto.description = formData.description;
+            updateDto.sku = formData.sku || undefined;
           }
 
           if (canManagePricesEffective) {
@@ -492,6 +553,7 @@ export default function ProductsPage() {
             createNewProduct: true,
             name: formData.name,
             description: formData.description,
+            sku: formData.sku || undefined,
             basePrice: formData.basePrice,
             buyCost: formData.buyCost,
             stock: formData.stock,
@@ -520,6 +582,7 @@ export default function ProductsPage() {
         if (canManageProducts) {
           updateData.name = formData.name;
           updateData.description = formData.description;
+          updateData.sku = formData.sku || undefined;
           updateData.stockThreshold = formData.stockThreshold;
         }
 
@@ -554,6 +617,7 @@ export default function ProductsPage() {
           createNewProduct: true,
           name: formData.name,
           description: formData.description,
+          sku: formData.sku || undefined,
           storeId: currentStore.id,
           stockThreshold: formData.stockThreshold,
           stock: formData.stock,
@@ -570,22 +634,64 @@ export default function ProductsPage() {
         });
 
         await loadProductLookup();
+        await loadSkuLookup();
       }
 
       await fetchStoreProducts();
       resetForm();
       setIsModalOpen(false);
     } catch (error) {
-      console.error('Error al guardar producto:', error);
+      const responseData = (error as any)?.response?.data;
+      const statusFromResponse = (error as any)?.response?.status;
+      const statusFromPayload = typeof responseData?.statusCode === 'number'
+        ? responseData.statusCode
+        : undefined;
+      const status = statusFromResponse ?? statusFromPayload;
+      const rawMessage = Array.isArray(responseData?.message)
+        ? responseData.message.join(' ')
+        : typeof responseData?.message === 'string'
+          ? responseData.message
+          : typeof responseData?.error === 'string'
+            ? responseData.error
+            : '';
+      const normalizedMessage = rawMessage.toLowerCase();
+      const isSkuConflict = !isWarehouseMode && (
+        status === 409 ||
+        normalizedMessage.includes('sku')
+      );
+
       if (isForbiddenError(error)) {
         toast({
           title: 'Sin permisos',
           description: 'No tienes permisos para realizar esta acción.',
         });
+      } else if (isSkuConflict) {
+        const skuValue = (formData.sku ?? '').trim();
+        const fallbackMessage = rawMessage || 'Ya existe un producto con ese SKU en este tenant.';
+        if (skuValue) {
+          try {
+            const skuMatch = await storeProductService.getCatalogProductBySku(skuValue);
+            if (skuMatch) {
+              setCreateErrorMessage(`El SKU ya está asignado a: <strong>${skuMatch.name}</strong> (${skuMatch.sku ?? skuValue}).`);
+              sonnerToast.error('SKU en uso', {
+                description: `El SKU ya está asignado a: ${skuMatch.name} (${skuMatch.sku ?? skuValue}).`,
+              });
+              return;
+            }
+          } catch (lookupError) {
+            console.error('Error buscando SKU en catálogo:', lookupError);
+          }
+        }
+        setCreateErrorMessage(fallbackMessage);
+        sonnerToast.error('SKU en uso', {
+          description: fallbackMessage,
+        });
       } else {
+        console.error('Error al guardar producto:', error);
+        setCreateErrorMessage(rawMessage || 'No se pudo guardar el producto.');
         toast({
           title: 'Error',
-          description: 'No se pudo guardar el producto',
+          description: rawMessage || 'No se pudo guardar el producto',
           variant: 'destructive',
         });
       }
@@ -636,6 +742,7 @@ export default function ProductsPage() {
         setDetailForm({
           name: detail.product?.name || '',
           description: detail.product?.description || '',
+          sku: detail.product?.sku || '',
           price: '',
           buyCost: formatValue(detail.product?.buyCost),
           basePrice: formatValue(detail.product?.basePrice),
@@ -659,6 +766,7 @@ export default function ProductsPage() {
           buyCost: formatValue(detail.product?.buyCost),
           basePrice: formatValue(detail.product?.basePrice),
           stockThreshold: formatValue(resolvedStockThreshold),
+          sku: detail.product?.sku || '',
         });
       }
     } catch (error) {
@@ -703,7 +811,7 @@ export default function ProductsPage() {
     setDetailModalOpen(false);
     setSelectedProductId(null);
     setProductDetail(null);
-    setDetailForm({ name: '', description: '', price: '', buyCost: '', basePrice: '', stockThreshold: '' });
+    setDetailForm({ name: '', description: '', sku: '', price: '', buyCost: '', basePrice: '', stockThreshold: '' });
     setDetailError(null);
     setCatalogDeleteCredentials({ email: '', password: '' });
     setShowCatalogDeleteForm(false);
@@ -738,6 +846,7 @@ export default function ProductsPage() {
         if (canManageProducts) {
           warehousePayload.name = detailForm.name;
           warehousePayload.description = detailForm.description;
+          warehousePayload.sku = detailForm.sku || undefined;
         }
 
         if (canManagePricesEffective) {
@@ -775,6 +884,7 @@ export default function ProductsPage() {
       if (canManageProducts) {
         payload.name = detailForm.name;
         payload.description = detailForm.description;
+        payload.sku = detailForm.sku || undefined;
         if (detailForm.stockThreshold !== '') {
           payload.stockThreshold = Number(detailForm.stockThreshold);
         }
@@ -961,6 +1071,7 @@ export default function ProductsPage() {
     setFormData({
       name: storeProduct.product.name,
       description: storeProduct.product.description || '',
+      sku: storeProduct.product.sku || '',
       buyCost: storeProduct.product.buyCost || 0,
       basePrice: storeProduct.product.basePrice || 0,
       price: storeProduct.price || 0,
@@ -973,11 +1084,13 @@ export default function ProductsPage() {
 
   const openNewProductModal = () => {
     setShowNameSuggestions(false);
+    setCreateErrorMessage(null);
     setCurrentStoreProduct(null);
     setOriginalStock(null);
     setFormData({
       name: '',
       description: '',
+      sku: '',
       buyCost: 0,
       basePrice: 0,
       price: 0,
@@ -997,7 +1110,9 @@ export default function ProductsPage() {
       price: 0,
       stock: 0,
       stockThreshold: 1,
+      sku: '',
     });
+    setCreateErrorMessage(null);
     setCurrentStoreProduct(null);
     setOriginalStock(null);
     setIsEditing(false);
@@ -1034,8 +1149,7 @@ export default function ProductsPage() {
       </div>
 
       <div className="space-y-4">
-        <div className="grid grid-cols-1 gap-4">
-          
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label className="text-sm font-medium">Producto</Label>
             <div className="relative" ref={nameInputWrapperRef}>
@@ -1112,10 +1226,87 @@ export default function ProductsPage() {
               )}
             </div>
           </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">SKU</Label>
+            <div className="relative" ref={skuInputWrapperRef}>
+              <Search className="absolute left-2 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={skuQuery}
+                onChange={(e) => {
+                  setSkuQuery(e.target.value);
+                  if (e.target.value.trim()) {
+                    setShowSkuSuggestions(true);
+                  } else {
+                    setShowSkuSuggestions(false);
+                  }
+                }}
+                onFocus={() => {
+                  if (skuQuery.trim()) {
+                    setShowSkuSuggestions(true);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    setSkuFilter(skuQuery);
+                    setShowSkuSuggestions(false);
+                  }
+                  if (e.key === 'Escape') {
+                    e.stopPropagation();
+                    setShowSkuSuggestions(false);
+                    (e.currentTarget as HTMLInputElement).blur();
+                  }
+                }}
+                placeholder={skuLookupLoading ? 'Buscando...' : 'Buscar SKU...'}
+                className="pl-8 h-10"
+              />
+              {skuQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSkuQuery('');
+                    setSkuFilter('');
+                    setShowSkuSuggestions(false);
+                  }}
+                  className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground"
+                >
+                  ×
+                </button>
+              )}
+
+              {showSkuSuggestions && skuQuery.trim() && (
+                <div className="absolute z-20 mt-1 w-full rounded-md border bg-background shadow">
+                  <div className="max-h-64 overflow-auto">
+                    {filteredSkuSuggestions.length === 0 ? (
+                      <div className="px-3 py-4 text-sm text-muted-foreground">
+                        {skuQuery ? 'No se encontraron SKUs' : 'Escribe para buscar'}
+                      </div>
+                    ) : (
+                      filteredSkuSuggestions.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setSkuQuery(item.sku);
+                            setSkuFilter(item.sku);
+                            setShowSkuSuggestions(false);
+                          }}
+                          className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted"
+                        >
+                          <span>{item.sku}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         <ActiveFilters 
-          hasActiveFilters={!!(nameFilter || !hideOutOfStock)}
+          hasActiveFilters={!!(nameFilter || skuFilter || !hideOutOfStock)}
           onClearFilters={clearFilters}
         />
 
@@ -1252,160 +1443,192 @@ export default function ProductsPage() {
       <Dialog open={isModalOpen} onOpenChange={(open) => {
         if (!open) setIsModalOpen(false);
       }}>
-        <DialogContent className="sm:max-w-[820px] max-h-[90vh] p-0 overflow-hidden">
-          <div className="flex flex-col max-h-[90vh]">
-            <DialogHeader className="px-6 sm:px-8 pt-6 sm:pt-7 pb-4 flex-shrink-0 border-b bg-muted/40">
-              <DialogTitle className="text-lg sm:text-xl">
-                {isEditing ? 'Editar Producto' : 'Nuevo Producto'}
+        <DialogContent className="w-full max-w-[95vw] sm:max-w-[860px] lg:max-w-[1020px] max-h-[92vh] p-0 overflow-hidden">
+          <div className="flex flex-col max-h-[92vh]">
+
+            {/* ── Header ── */}
+            <DialogHeader className="px-6 pt-5 pb-4 flex-shrink-0 border-b bg-muted/30">
+              <DialogTitle className="text-lg sm:text-xl leading-tight">
+                {isEditing ? 'Editar producto' : 'Nuevo producto'}
               </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground mt-1">
+                {isEditing
+                  ? 'Modifica los datos del producto y guarda los cambios.'
+                  : 'Completa la información para registrar un nuevo producto.'}
+              </DialogDescription>
             </DialogHeader>
 
             <form onSubmit={handleSubmit} className="flex flex-1 flex-col min-h-0">
-              <div className="flex-1 overflow-y-auto px-6 sm:px-8 pb-7 sm:pb-8 pt-5">
-                <div className="space-y-6">
-                  <section className="rounded-lg border bg-card p-4 sm:p-5 shadow-sm">
-                    <h3 className="text-sm font-semibold text-foreground mb-4">Datos generales</h3>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="sm:col-span-2">
-                        <label className="block text-sm font-medium mb-2">
-                          Nombre <span className="text-destructive">*</span>
-                        </label>
-                        <Input
-                          name="name"
-                          value={formData.name}
-                          onChange={handleInputChange}
-                          required
-                          disabled={isWarehouseMode ? (isEditing ? !isAdmin : false) : !canCreateProducts}
-                          className="h-10"
-                        />
-                      </div>
-                      <div className="sm:col-span-2">
-                        <label className="block text-sm font-medium mb-2">
-                          Descripción
-                        </label>
-                        <textarea
-                          name="description"
-                          value={formData.description}
-                          onChange={handleInputChange}
-                          className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                          rows={4}
-                          disabled={isWarehouseMode ? !isAdmin : !canCreateProducts}
-                        />
+              {/* ── Body ── */}
+              <div className="flex-1 overflow-y-auto">
+                {createErrorMessage && (
+                  <div className="mx-6 mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive" dangerouslySetInnerHTML={{ __html: createErrorMessage }} />
+                )}
+                <div className="flex flex-col lg:flex-row divide-y lg:divide-y-0 lg:divide-x">
+
+                  {/* ── Left: Identificación ── */}
+                  <div className="flex-1 min-w-0 px-6 py-5 space-y-6">
+
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Identificación</p>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-medium mb-1">
+                            Nombre <span className="text-destructive">*</span>
+                          </label>
+                          <Input
+                            name="name"
+                            value={formData.name}
+                            onChange={handleInputChange}
+                            required
+                            disabled={isWarehouseMode ? (isEditing ? !isAdmin : false) : !canCreateProducts}
+                            className="h-10"
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-medium mb-1">
+                            SKU / Código de barras
+                          </label>
+                          <Input
+                            name="sku"
+                            value={formData.sku}
+                            onChange={handleInputChange}
+                            placeholder="Ej: SKU-ACEITE-10W40"
+                            maxLength={120}
+                            disabled={isWarehouseMode ? !isAdmin : !canCreateProducts}
+                            className="h-10"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1.5">
+                            Opcional. Se usa para búsqueda con pistola lectora o cámara QR.
+                          </p>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-medium mb-1">
+                            Descripción
+                          </label>
+                          <textarea
+                            name="description"
+                            value={formData.description}
+                            onChange={handleInputChange}
+                            rows={4}
+                            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={isWarehouseMode ? !isAdmin : !canCreateProducts}
+                          />
+                        </div>
                       </div>
                     </div>
-                  </section>
 
-                  <section className="rounded-lg border bg-card p-4 sm:p-5 shadow-sm">
-                    <h3 className="text-sm font-semibold text-foreground mb-4">Precios</h3>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      {!isWarehouseMode && (
+                  </div>
+
+                  {/* ── Right: Precios + Inventario + Acciones ── */}
+                  <div className="lg:w-[280px] xl:w-[300px] flex-shrink-0 px-6 py-5 space-y-6 bg-muted/20">
+
+                    {/* Precios */}
+                    {(!isWarehouseMode || isAdmin) && (
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Precios</p>
+                        <div className="space-y-4">
+                          {!isWarehouseMode && (
+                            <div>
+                              <label className="block text-sm font-medium mb-1">
+                                Precio de venta <span className="text-destructive">*</span>
+                              </label>
+                              <Input
+                                type="number"
+                                name="price"
+                                value={formData.price}
+                                onChange={handleInputChange}
+                                min="0"
+                                step="0.01"
+                                required={canManagePricesEffective}
+                                disabled={!canManagePricesEffective}
+                                className="h-10"
+                              />
+                              {!canManagePricesEffective && (
+                                <p className="text-xs text-muted-foreground mt-1">Sin permisos para establecer precios.</p>
+                              )}
+                            </div>
+                          )}
+                          <div>
+                            <label className="block text-sm font-medium mb-1">Precio base</label>
+                            <Input
+                              type="number"
+                              name="basePrice"
+                              value={formData.basePrice}
+                              onChange={handleInputChange}
+                              min="0"
+                              step="0.01"
+                              disabled={isWarehouseMode ? !isAdmin : !canManagePricesEffective}
+                              className="h-10"
+                            />
+                          </div>
+                          {canViewProductCostEffective && (
+                            <div>
+                              <label className="block text-sm font-medium mb-1">Costo de compra</label>
+                              <Input
+                                type="number"
+                                name="buyCost"
+                                value={formData.buyCost}
+                                onChange={handleInputChange}
+                                min="0"
+                                step="0.01"
+                                disabled={isWarehouseMode ? !isAdmin : !canManagePricesEffective}
+                                className="h-10"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Inventario */}
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Inventario</p>
+                      <div className="space-y-4">
                         <div>
-                          <label className="block text-sm font-medium mb-2">
-                            Precio de venta <span className="text-destructive">*</span>
+                          <label className="block text-sm font-medium mb-1">
+                            Stock inicial <span className="text-destructive">*</span>
                           </label>
                           <Input
                             type="number"
-                            name="price"
-                            value={formData.price}
+                            name="stock"
+                            value={formData.stock}
                             onChange={handleInputChange}
-                            min="0"
-                            step="0.01"
-                            required={canManagePricesEffective}
-                            disabled={!canManagePricesEffective}
+                            min={isEditing && originalStock !== null ? originalStock : 0}
+                            placeholder="0"
+                            required
+                            disabled={isWarehouseMode ? isEditing : (isEditing ? !canManageInventory : !canCreateProducts)}
                             className="h-10"
                           />
-                          {!canManagePricesEffective && (
+                          {isEditing && originalStock !== null && (
                             <p className="text-xs text-muted-foreground mt-1">
-                              No tienes permisos para establecer precios.
+                              Solo se permite aumentar el stock desde aquí.
                             </p>
                           )}
                         </div>
-                      )}
-
-                      <div>
-                        <label className="block text-sm font-medium mb-2">
-                          Precio base
-                        </label>
-                        <Input
-                          type="number"
-                          name="basePrice"
-                          value={formData.basePrice}
-                          onChange={handleInputChange}
-                          min="0"
-                          step="0.01"
-                          disabled={isWarehouseMode ? !isAdmin : !canManagePricesEffective}
-                          className="h-10"
-                        />
-                      </div>
-
-                      {canViewProductCostEffective && (
                         <div>
-                          <label className="block text-sm font-medium mb-2">
-                            Costo de compra
-                          </label>
+                          <label className="block text-sm font-medium mb-1">Alerta de stock</label>
                           <Input
                             type="number"
-                            name="buyCost"
-                            value={formData.buyCost}
+                            name="stockThreshold"
+                            value={formData.stockThreshold}
                             onChange={handleInputChange}
-                            min="0"
-                            step="0.01"
-                            disabled={isWarehouseMode ? !isAdmin : !canManagePricesEffective}
+                            min="1"
+                            placeholder="1"
+                            required
+                            disabled={isWarehouseMode ? (!canManageWarehouseProducts && isEditing) : !canCreateProducts}
                             className="h-10"
                           />
                         </div>
-                      )}
-                    </div>
-                  </section>
-
-                  <section className="rounded-lg border bg-card p-4 sm:p-5 shadow-sm">
-                    <h3 className="text-sm font-semibold text-foreground mb-4">Inventario</h3>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div>
-                        <label className="block text-sm font-medium mb-2">
-                          Stock <span className="text-destructive">*</span>
-                        </label>
-                        <Input
-                          type="number"
-                          name="stock"
-                          value={formData.stock}
-                          onChange={handleInputChange}
-                          min={isEditing && originalStock !== null ? originalStock : 0}
-                          placeholder="0"
-                          required
-                          disabled={isWarehouseMode ? isEditing : (isEditing ? !canManageInventory : !canCreateProducts)}
-                          className="h-10"
-                        />
-                        {isEditing && originalStock !== null && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Solo se permite aumentar el stock. Para reducirlo, use la sección de Inventario.
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium mb-2">
-                          Alerta de Stock
-                        </label>
-                        <Input
-                          type="number"
-                          name="stockThreshold"
-                          value={formData.stockThreshold}
-                          onChange={handleInputChange}
-                          min="1"
-                          placeholder="1"
-                          required
-                          disabled={isWarehouseMode ? (!canManageWarehouseProducts && isEditing) : !canCreateProducts}
-                          className="h-10"
-                        />
                       </div>
                     </div>
-                  </section>
+
+                  </div>
                 </div>
-
               </div>
 
-              <div className="flex flex-col sm:flex-row justify-between gap-3 px-8 sm:px-10 py-5 border-t bg-background">
+              {/* ── Footer ── */}
+              <div className="flex-shrink-0 px-6 py-4 border-t bg-background flex flex-col sm:flex-row justify-between gap-3">
                 <Button
                   type="button"
                   variant="outline"
@@ -1414,19 +1637,18 @@ export default function ProductsPage() {
                 >
                   Cancelar
                 </Button>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <Button
-                    type="submit"
-                    disabled={isSavingProduct}
-                    className="w-full sm:w-auto h-10"
-                  >
-                    {isSavingProduct
-                      ? (isEditing ? 'Guardando...' : 'Creando...')
-                      : (isEditing ? 'Guardar Cambios' : 'Crear Producto')}
-                  </Button>
-                </div>
+                <Button
+                  type="submit"
+                  disabled={isSavingProduct}
+                  className="w-full sm:w-auto h-10"
+                >
+                  {isSavingProduct ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{isEditing ? 'Guardando...' : 'Creando...'}</>
+                  ) : (isEditing ? 'Guardar cambios' : 'Crear producto')}
+                </Button>
               </div>
             </form>
+
           </div>
         </DialogContent>
       </Dialog>
@@ -1434,139 +1656,299 @@ export default function ProductsPage() {
       <Dialog open={detailModalOpen} onOpenChange={(open) => {
         if (!open) closeProductDetail();
       }}>
-        <DialogContent className="sm:max-w-[820px] max-h-[90vh] p-0 overflow-hidden">
-          <div className="flex flex-col max-h-[90vh]">
-            <DialogHeader className="px-6 pt-6 pb-4 flex-shrink-0 border-b bg-muted/40">
-              <DialogTitle className="text-lg sm:text-xl">Detalle del producto</DialogTitle>
-              <DialogDescription className="text-sm mt-1">
-                {isWarehouseMode
-                  ? 'Revisa la información del producto en el almacén y realiza ajustes si es necesario.'
-                  : 'Revisa la información del producto en la tienda y realiza ajustes si es necesario.'}
-              </DialogDescription>
+        <DialogContent className="w-full max-w-[95vw] sm:max-w-[860px] lg:max-w-[1020px] max-h-[92vh] p-0 overflow-hidden">
+          <div className="flex flex-col max-h-[92vh]">
+
+            {/* ── Header ── */}
+            <DialogHeader className="px-6 pt-5 pb-4 flex-shrink-0 border-b bg-muted/30">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="min-w-0">
+                  <DialogTitle className="text-lg sm:text-xl leading-tight truncate">
+                    {detailForm.name || 'Detalle del producto'}
+                  </DialogTitle>
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    {detailForm.sku?.trim() && (
+                      <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary border border-primary/20">
+                        SKU: {detailForm.sku}
+                      </span>
+                    )}
+                    <DialogDescription className="text-xs text-muted-foreground m-0">
+                      {isWarehouseMode ? 'Producto en almacén' : 'Producto en tienda'}
+                    </DialogDescription>
+                  </div>
+                </div>
+              </div>
             </DialogHeader>
 
-            <div className="flex-1 overflow-y-auto px-6 pb-6 pt-5">
+            {/* ── Body ── */}
+            <div className="flex-1 overflow-y-auto">
               {detailLoading ? (
-                <div className="flex justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <div className="flex flex-col items-center justify-center py-16 gap-3">
+                  <Loader2 className="h-7 w-7 animate-spin text-primary" />
+                  <p className="text-sm text-muted-foreground">Cargando información...</p>
                 </div>
               ) : detailError ? (
-                <p className="text-sm text-destructive">{detailError}</p>
+                <div className="px-6 py-8">
+                  <p className="text-sm text-destructive">{detailError}</p>
+                </div>
               ) : productDetail ? (
-                <div className="space-y-4 sm:space-y-6">
-                  <div className="grid gap-4 sm:grid-cols-2">
+                <div className="flex flex-col lg:flex-row divide-y lg:divide-y-0 lg:divide-x">
+
+                  {/* ── Left: form ── */}
+                  <div className="flex-1 min-w-0 px-6 py-5 space-y-6">
+
+                    {/* Sección: Identificación */}
                     <div>
-                      <Label className="text-sm font-medium">Nombre</Label>
-                      <Input
-                        value={detailForm.name}
-                        onChange={(e) => handleDetailFormChange('name', e.target.value)}
-                        disabled={isWarehouseMode ? (!isAdmin || isUpdatingDetail) : (isUpdatingDetail || !canManageProducts)}
-                        className="h-10 mt-1"
-                      />
-                    </div>
-                    {!isWarehouseMode && (
-                      <div>
-                        <Label className="text-sm font-medium">Precio (venta)</Label>
-                        {canViewProductPrices ? (
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Identificación</p>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <Label className="text-sm font-medium">Nombre</Label>
                           <Input
-                            type="number"
-                            value={detailForm.price}
-                            onChange={(e) => {
-                              const next = e.target.value;
-                              if (!isValidNumberInputValue(next)) return;
-                              handleDetailFormChange('price', next);
-                            }}
-                            disabled={isUpdatingDetail || !canManagePrices}
+                            value={detailForm.name}
+                            onChange={(e) => handleDetailFormChange('name', e.target.value)}
+                            disabled={isWarehouseMode ? (!isAdmin || isUpdatingDetail) : (isUpdatingDetail || !canManageProducts)}
                             className="h-10 mt-1"
                           />
-                        ) : (
-                          <p className="text-sm text-muted-foreground mt-1">-</p>
-                        )}
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium">SKU</Label>
+                          {((isWarehouseMode ? isAdmin : canManageProducts) && !isUpdatingDetail) ? (
+                            <Input
+                              value={detailForm.sku}
+                              onChange={(e) => handleDetailFormChange('sku', e.target.value)}
+                              maxLength={120}
+                              placeholder="Sin SKU"
+                              className="h-10 mt-1"
+                            />
+                          ) : (
+                            <p className="text-sm text-muted-foreground mt-2 h-10 flex items-center">
+                              {detailForm.sku?.trim() ? detailForm.sku : <span className="italic">Sin SKU</span>}
+                            </p>
+                          )}
+                        </div>
+                        <div className="sm:col-span-2">
+                          <Label className="text-sm font-medium">Descripción</Label>
+                          <textarea
+                            value={detailForm.description}
+                            onChange={(e) => handleDetailFormChange('description', e.target.value)}
+                            rows={3}
+                            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1 resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                            disabled={isWarehouseMode ? (!isAdmin || isUpdatingDetail) : (isUpdatingDetail || !canManageProducts)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Sección: Precios */}
+                    {(!isWarehouseMode || isAdmin) && (
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Precios</p>
+                        <div className="grid gap-4 sm:grid-cols-3">
+                          {!isWarehouseMode && (
+                            <div>
+                              <Label className="text-sm font-medium">Precio venta</Label>
+                              {canViewProductPrices ? (
+                                <Input
+                                  type="number"
+                                  value={detailForm.price}
+                                  onChange={(e) => {
+                                    const next = e.target.value;
+                                    if (!isValidNumberInputValue(next)) return;
+                                    handleDetailFormChange('price', next);
+                                  }}
+                                  disabled={isUpdatingDetail || !canManagePrices}
+                                  className="h-10 mt-1"
+                                />
+                              ) : (
+                                <p className="text-sm text-muted-foreground mt-2 h-10 flex items-center">—</p>
+                              )}
+                            </div>
+                          )}
+                          <div>
+                            <Label className="text-sm font-medium">Precio base</Label>
+                            {(isWarehouseMode ? true : canViewProductPrices) ? (
+                              <Input
+                                type="number"
+                                value={detailForm.basePrice}
+                                onChange={(e) => {
+                                  const next = e.target.value;
+                                  if (!isValidNumberInputValue(next)) return;
+                                  handleDetailFormChange('basePrice', next);
+                                }}
+                                disabled={isWarehouseMode ? (!isAdmin || isUpdatingDetail) : (isUpdatingDetail || !canManagePrices)}
+                                className="h-10 mt-1"
+                              />
+                            ) : (
+                              <p className="text-sm text-muted-foreground mt-2 h-10 flex items-center">—</p>
+                            )}
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">Costo</Label>
+                            {(isWarehouseMode ? true : canViewProductCost) ? (
+                              <Input
+                                type="number"
+                                value={detailForm.buyCost}
+                                onChange={(e) => handleDetailFormChange('buyCost', e.target.value)}
+                                disabled={isWarehouseMode ? (!isAdmin || isUpdatingDetail) : (isUpdatingDetail || !canManagePrices)}
+                                className="h-10 mt-1"
+                              />
+                            ) : (
+                              <p className="text-sm text-muted-foreground mt-2 h-10 flex items-center">—</p>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     )}
 
-                    {(!isWarehouseMode || isAdmin) && (
-                      <>
-                        <div>
-                          <Label className="text-sm font-medium">Costo</Label>
-                          {(isWarehouseMode ? true : canViewProductCost) ? (
-                            <Input
-                              type="number"
-                              value={detailForm.buyCost}
-                              onChange={(e) => handleDetailFormChange('buyCost', e.target.value)}
-                              disabled={isWarehouseMode ? (!isAdmin || isUpdatingDetail) : (isUpdatingDetail || !canManagePrices)}
-                              className="h-10 mt-1"
-                            />
-                          ) : (
-                            <p className="text-sm text-muted-foreground mt-1">-</p>
-                          )}
-                        </div>
-                        <div>
-                          <Label className="text-sm font-medium">Precio base</Label>
-                          {(isWarehouseMode ? true : canViewProductPrices) ? (
-                            <Input
-                              type="number"
-                              value={detailForm.basePrice}
-                              onChange={(e) => {
-                                const next = e.target.value;
-                                if (!isValidNumberInputValue(next)) return;
-                                handleDetailFormChange('basePrice', next);
-                              }}
-                              disabled={isWarehouseMode ? (!isAdmin || isUpdatingDetail) : (isUpdatingDetail || !canManagePrices)}
-                              className="h-10 mt-1"
-                            />
-                          ) : (
-                            <p className="text-sm text-muted-foreground mt-1">-</p>
-                          )}
-                        </div>
-                      </>
-                    )}
-                    <div className="sm:col-span-2">
-                      <Label className="text-sm font-medium">Descripción</Label>
-                      <textarea
-                        value={detailForm.description}
-                        onChange={(e) => handleDetailFormChange('description', e.target.value)}
-                        className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
-                        disabled={isWarehouseMode ? (!isAdmin || isUpdatingDetail) : (isUpdatingDetail || !canManageProducts)}
-                      />
-                    </div>
+                    {/* Sección: Inventario */}
                     <div>
-                      <Label className="text-sm font-medium">Alerta de stock</Label>
-                      <Input
-                        type="number"
-                        value={detailForm.stockThreshold}
-                        onChange={(e) => handleDetailFormChange('stockThreshold', e.target.value)}
-                        disabled={isWarehouseMode ? (isUpdatingDetail || !canManageWarehouseProducts) : (isUpdatingDetail || !canManageProducts)}
-                        min="1"
-                        className="h-10 mt-1"
-                      />
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Inventario</p>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <Label className="text-sm font-medium">Alerta de stock mínimo</Label>
+                          <Input
+                            type="number"
+                            value={detailForm.stockThreshold}
+                            onChange={(e) => handleDetailFormChange('stockThreshold', e.target.value)}
+                            disabled={isWarehouseMode ? (isUpdatingDetail || !canManageWarehouseProducts) : (isUpdatingDetail || !canManageProducts)}
+                            min="1"
+                            className="h-10 mt-1"
+                          />
+                        </div>
+                        <div className="rounded-lg bg-muted/50 border px-4 py-3 flex items-center gap-3">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Stock actual</p>
+                            <p className="text-2xl font-bold tabular-nums leading-tight">{productDetail.stock}</p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
+
+                    {/* Zona de peligro: eliminar del catálogo */}
+                    {!isWarehouseMode && (
+                      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-destructive">Zona de peligro</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Eliminar del catálogo quitará el producto de <strong>todas</strong> las tiendas. Deja el stock en 0 antes de continuar.
+                            </p>
+                          </div>
+                          {!showCatalogDeleteForm && canDeleteProducts && (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCatalogDeleteCredentials({ email: '', password: '' });
+                                setShowCatalogDeleteForm(true);
+                              }}
+                              disabled={isDeletingCatalogProduct}
+                              className="w-full sm:w-auto shrink-0"
+                            >
+                              Eliminar del catálogo
+                            </Button>
+                          )}
+                        </div>
+                        {showCatalogDeleteForm && (
+                          <div className="space-y-3 pt-1">
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <div>
+                                <Label className="text-sm">Correo de confirmación</Label>
+                                <Input
+                                  type="email"
+                                  value={catalogDeleteCredentials.email}
+                                  onChange={(e) => setCatalogDeleteCredentials((prev) => ({ ...prev, email: e.target.value }))}
+                                  disabled={isDeletingCatalogProduct}
+                                  className="h-9 mt-1"
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-sm">Contraseña</Label>
+                                <Input
+                                  type="password"
+                                  value={catalogDeleteCredentials.password}
+                                  onChange={(e) => setCatalogDeleteCredentials((prev) => ({ ...prev, password: e.target.value }))}
+                                  disabled={isDeletingCatalogProduct}
+                                  className="h-9 mt-1"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex flex-col sm:flex-row justify-end gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setShowCatalogDeleteForm(false);
+                                  setCatalogDeleteCredentials({ email: '', password: '' });
+                                }}
+                                disabled={isDeletingCatalogProduct}
+                                className="w-full sm:w-auto"
+                              >
+                                Cancelar
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteCatalogProductDetail();
+                                }}
+                                disabled={isDeletingCatalogProduct}
+                                className="w-full sm:w-auto"
+                              >
+                                {isDeletingCatalogProduct ? 'Eliminando...' : 'Confirmar eliminación'}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-3">
-                    <div className="rounded-md border p-4 text-sm sm:col-span-2">
-                      <p className="font-semibold mb-2">{isWarehouseMode ? 'Información en almacén' : 'Información en tienda'}</p>
-                      <div className="space-y-1">
+                  {/* ── Right: info + acciones ── */}
+                  <div className="lg:w-[260px] xl:w-[280px] flex-shrink-0 px-6 py-5 space-y-4 bg-muted/20">
+
+                    {/* Info ubicación */}
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                        {isWarehouseMode ? 'Almacén' : 'Tienda'}
+                      </p>
+                      <div className="space-y-2 text-sm">
                         {!isWarehouseMode && (
                           <>
-                            <p>Tienda: {productDetail.store?.name ?? '—'}</p>
-                            <p>Dirección: {productDetail.store?.address ?? '—'}</p>
-                            <p>Teléfono: {productDetail.store?.phone ?? '—'}</p>
+                            <div className="flex justify-between gap-2">
+                              <span className="text-muted-foreground shrink-0">Nombre</span>
+                              <span className="font-medium text-right truncate">{productDetail.store?.name ?? '—'}</span>
+                            </div>
+                            <div className="flex justify-between gap-2">
+                              <span className="text-muted-foreground shrink-0">Dirección</span>
+                              <span className="font-medium text-right text-xs">{productDetail.store?.address ?? '—'}</span>
+                            </div>
+                            <div className="flex justify-between gap-2">
+                              <span className="text-muted-foreground shrink-0">Teléfono</span>
+                              <span className="font-medium text-right">{productDetail.store?.phone ?? '—'}</span>
+                            </div>
+                            <div className="flex justify-between gap-2">
+                              <span className="text-muted-foreground shrink-0">Responsable</span>
+                              <span className="font-medium text-right truncate">{productDetail.user?.name ?? '—'}</span>
+                            </div>
                           </>
                         )}
-                        <p>Stock actual: {productDetail.stock}</p>
-                        {!isWarehouseMode && <p>Responsable: {productDetail.user?.name ?? '—'}</p>}
                       </div>
                     </div>
-                    <div className="rounded-md border p-4 text-sm space-y-3 flex flex-col h-full">
-                      <p className="font-semibold">Acciones</p>
+
+                    <div className="border-t pt-4 space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Acciones</p>
                       <Button
-                        variant="outline"
                         className="w-full h-9"
                         onClick={handleUpdateDetail}
                         disabled={isUpdatingDetail || (isWarehouseMode ? !canManageWarehouseProducts : (!canManageProducts && !canManagePrices))}
                       >
-                        {isUpdatingDetail ? 'Guardando...' : 'Guardar cambios'}
+                        {isUpdatingDetail ? (
+                          <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Guardando...</>
+                        ) : 'Guardar cambios'}
                       </Button>
                       {(isWarehouseMode ? isAdmin : canDeleteProducts) && (
                         <Button
@@ -1578,103 +1960,30 @@ export default function ProductsPage() {
                           }}
                           disabled={isDeletingStoreProduct}
                         >
-                          {isDeletingStoreProduct ? 'Eliminando...' : (isWarehouseMode ? 'Eliminar de este almacén' : 'Eliminar de esta tienda')}
+                          {isDeletingStoreProduct ? (
+                            <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Eliminando...</>
+                          ) : (isWarehouseMode ? 'Quitar del almacén' : 'Quitar de la tienda')}
                         </Button>
                       )}
                     </div>
                   </div>
 
-                  {!isWarehouseMode && (
-                    <div className="rounded-md border p-4 space-y-3">
-                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                        <div>
-                          <p className="font-semibold">Eliminar del catálogo</p>
-                          <p className="text-xs text-muted-foreground">
-                            Esta acción eliminará el producto de todas las tiendas. Se recomienda dejar el stock en 0 antes de continuar.
-                          </p>
-                        </div>
-                        {!showCatalogDeleteForm && canDeleteProducts && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setCatalogDeleteCredentials({ email: '', password: '' });
-                              setShowCatalogDeleteForm(true);
-                            }}
-                            disabled={isDeletingCatalogProduct}
-                            className="w-full sm:w-auto"
-                          >
-                            Eliminar del catálogo
-                          </Button>
-                        )}
-                      </div>
-
-                      {showCatalogDeleteForm && (
-                        <div className="space-y-3">
-                          <div className="grid gap-3 sm:grid-cols-2">
-                            <div>
-                              <Label className="text-sm">Correo de confirmación</Label>
-                              <Input
-                                type="email"
-                                value={catalogDeleteCredentials.email}
-                                onChange={(e) => setCatalogDeleteCredentials((prev) => ({ ...prev, email: e.target.value }))}
-                                disabled={isDeletingCatalogProduct}
-                                className="h-9 mt-1"
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-sm">Contraseña</Label>
-                              <Input
-                                type="password"
-                                value={catalogDeleteCredentials.password}
-                                onChange={(e) => setCatalogDeleteCredentials((prev) => ({ ...prev, password: e.target.value }))}
-                                disabled={isDeletingCatalogProduct}
-                                className="h-9 mt-1"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="flex flex-col sm:flex-row justify-end gap-3">
-                            <Button
-                              variant="outline"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setShowCatalogDeleteForm(false);
-                                setCatalogDeleteCredentials({ email: '', password: '' });
-                              }}
-                              disabled={isDeletingCatalogProduct}
-                              className="w-full sm:w-auto h-9"
-                            >
-                              Cancelar
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteCatalogProductDetail();
-                              }}
-                              disabled={isDeletingCatalogProduct}
-                              className="w-full sm:w-auto h-9"
-                            >
-                              {isDeletingCatalogProduct ? 'Eliminando del catálogo...' : 'Confirmar eliminación'}
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               ) : null}
             </div>
 
-            <div className="flex-shrink-0 px-8 sm:px-10 py-5 border-t bg-background">
-              <div className="flex justify-end">
-                <Button variant="outline" onClick={closeProductDetail} disabled={isUpdatingDetail || isDeletingStoreProduct || isDeletingCatalogProduct} className="w-full sm:w-auto h-10">
-                  Cerrar
-                </Button>
-              </div>
+            {/* ── Footer ── */}
+            <div className="flex-shrink-0 px-6 py-4 border-t bg-background flex justify-end">
+              <Button
+                variant="outline"
+                onClick={closeProductDetail}
+                disabled={isUpdatingDetail || isDeletingStoreProduct || isDeletingCatalogProduct}
+                className="w-full sm:w-auto h-10"
+              >
+                Cerrar
+              </Button>
             </div>
+
           </div>
         </DialogContent>
       </Dialog>

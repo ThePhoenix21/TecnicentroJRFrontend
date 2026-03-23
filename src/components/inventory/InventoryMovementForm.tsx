@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { storeProductService } from "@/services/store-product.service";
 import { inventoryService } from "@/services/inventory.service";
@@ -11,7 +11,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
+import { QRScanner } from "@/components/ui/qr-scanner";
 import { Loader2, Search } from "lucide-react";
+import { toast as sonnerToast } from "sonner";
 
 interface InventoryMovementFormProps {
   onSuccess?: () => void;
@@ -20,6 +22,7 @@ interface InventoryMovementFormProps {
 type StoreProductLookupItem = {
   id: string;
   name: string;
+  sku?: string;
 };
 
 export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps) {
@@ -38,6 +41,7 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
   const [quantity, setQuantity] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const productInputRef = useRef<HTMLDivElement | null>(null);
+  const quantityInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (activeLoginMode === 'WAREHOUSE') {
@@ -161,6 +165,29 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
     product.name.toLowerCase().includes(productQuery.trim().toLowerCase())
   );
 
+  const handleQRScan = useCallback((code: string) => {
+    const scannedCode = code.trim();
+    const normalizedCode = scannedCode.toLowerCase();
+
+    const matchedProduct = products.find((product) =>
+      (product.sku ?? "").trim().toLowerCase() === normalizedCode
+    );
+
+    if (!matchedProduct) {
+      sonnerToast.error(`Producto no encontrado: ${scannedCode}`);
+      return;
+    }
+
+    setProductQuery(matchedProduct.name);
+    setSelectedProductId(matchedProduct.id);
+    setShowProductSuggestions(false);
+
+    const parsedQuantity = Number(quantity);
+    if (!quantity.trim() || parsedQuantity === 0) {
+      quantityInputRef.current?.focus();
+    }
+  }, [products, quantity]);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (!productInputRef.current) return;
@@ -201,28 +228,38 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
           <div className="space-y-2">
             <Label>Producto</Label>
             <div className="relative" ref={productInputRef}>
-              <Search className="absolute left-2 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                value={productQuery}
-                onChange={(e) => {
-                  setProductQuery(e.target.value);
-                  setShowProductSuggestions(true);
-                  if (!e.target.value) {
-                    setSelectedProductId("");
-                  }
-                }}
-                onFocus={() => setShowProductSuggestions(true)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    e.stopPropagation();
-                    setShowProductSuggestions(false);
-                    (e.currentTarget as HTMLInputElement).blur();
-                  }
-                }}
-                placeholder={isLoadingProducts ? "Cargando..." : "Buscar producto"}
-                disabled={isLoadingProducts}
-                className="pl-8"
-              />
+              <div className="flex items-start gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-2 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={productQuery}
+                    onChange={(e) => {
+                      setProductQuery(e.target.value);
+                      setShowProductSuggestions(true);
+                      if (!e.target.value) {
+                        setSelectedProductId("");
+                      }
+                    }}
+                    onFocus={() => setShowProductSuggestions(true)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        e.stopPropagation();
+                        setShowProductSuggestions(false);
+                        (e.currentTarget as HTMLInputElement).blur();
+                      }
+                    }}
+                    placeholder={isLoadingProducts ? "Cargando..." : "Buscar producto"}
+                    disabled={isLoadingProducts}
+                    className="pl-8"
+                  />
+                </div>
+                <QRScanner
+                  mode="both"
+                  onScan={handleQRScan}
+                  onError={(error) => sonnerToast.error(error)}
+                  buttonLabel="Escanear"
+                />
+              </div>
               {productQuery && (
                 <button
                   type="button"
@@ -271,6 +308,7 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
           <div className="space-y-2">
             <Label>Cantidad</Label>
             <Input
+              ref={quantityInputRef}
               type="number"
               min="1"
               value={quantity}

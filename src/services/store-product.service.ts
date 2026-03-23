@@ -9,6 +9,7 @@ import {
   StoreProductStockItem,
   StoreProductsListResponse,
   CatalogProductLookupItem,
+  CatalogProductSkuLookupItem,
   StoreProductDetail,
   CatalogProductDeletePayload
 } from '@/types/store-product.types';
@@ -21,28 +22,41 @@ const isAuthOrForbiddenError = (error: unknown) => {
 class StoreProductService {
   // Obtener productos simples de la tienda para el formulario de ventas
   async getStoreProductsSimple(storeId: string, options: {
-    page?: number;
-    pageSize?: number;
     search?: string;
-  } = {}): Promise<{data: StoreProduct[], total: number}> {
+    sku?: string;
+  } = {}): Promise<{ data: StoreProduct[] }> {
     try {
-      // Endpoint: GET /store/products/store/{storeId}/simple?page=1&pageSize=20&search=text
+      // Endpoint: GET /store/products/store/{storeId}/simple?search=text&sku=SKU
       const params = new URLSearchParams();
-      if (options.page) params.set('page', options.page.toString());
-      if (options.pageSize) params.set('pageSize', options.pageSize.toString());
       if (options.search) params.set('search', options.search);
-      
-      const response = await domainApi.get<{ data: StoreProduct[]; total: number }>({
-        store: `/store/products/store/${storeId}/simple?${params.toString()}`,
-        warehouse: `/warehouse/products/simple?${params.toString()}`,
+      if (options.sku) params.set('sku', options.sku);
+      const qs = params.toString();
+
+      const response = await domainApi.get<{ data: StoreProduct[] }>({
+        store: `/store/products/store/${storeId}/simple${qs ? `?${qs}` : ''}`,
+        warehouse: `/warehouse/products/simple${qs ? `?${qs}` : ''}`,
       });
-      return response.data; // El backend devuelve {data: Array, total}
+      return response.data; // El backend devuelve {data: Array}
     } catch (error) {
       const anyError = error as any;
       console.error('[StoreProductService.getStoreProductsSimple] Error:', anyError);
       throw error;
     }
 
+  }
+
+  async getCatalogProductSkuLookup(search: string): Promise<CatalogProductSkuLookupItem[]> {
+    try {
+      const params = new URLSearchParams();
+      if (search) params.set('search', search);
+      const qs = params.toString();
+      const url = qs ? `/catalog/products/lookup-sku-id?${qs}` : '/catalog/products/lookup-sku-id';
+      const response = await api.get<CatalogProductSkuLookupItem[]>(url);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error('[StoreProductService.getCatalogProductSkuLookup] Error:', error);
+      throw error;
+    }
   }
 
   async getStoreProductsLookup(params?: { storeId?: string; search?: string }): Promise<Array<{ id: string; name: string }>> {
@@ -105,6 +119,7 @@ class StoreProductService {
     page?: number;
     pageSize?: number;
     name?: string;
+    sku?: string;
     inStock?: boolean;
   }): Promise<StoreProductsListResponse> {
     try {
@@ -113,6 +128,7 @@ class StoreProductService {
       searchParams.set('page', String(params.page ?? 1));
       searchParams.set('pageSize', String(params.pageSize ?? 12));
       if (params.name) searchParams.set('name', params.name);
+      if (params.sku) searchParams.set('sku', params.sku);
       if (typeof params.inStock === 'boolean') searchParams.set('inStock', String(params.inStock));
 
       const response = await domainApi.get<StoreProductsListResponse>({
@@ -136,6 +152,24 @@ class StoreProductService {
       return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
       console.error('[StoreProductService.getCatalogProductsLookup] Error:', error);
+      throw error;
+    }
+  }
+
+  async getCatalogProductBySku(sku: string): Promise<CatalogProductLookupItem | null> {
+    try {
+      const params = new URLSearchParams({ sku });
+      const response = await api.get<CatalogProductLookupItem | CatalogProductLookupItem[]>(
+        `/catalog/products/lookup-sku?${params.toString()}`
+      );
+      const payload = response.data;
+      if (Array.isArray(payload)) return payload[0] ?? null;
+      if (payload && typeof payload === 'object' && 'id' in payload) {
+        return payload as CatalogProductLookupItem;
+      }
+      return null;
+    } catch (error) {
+      console.error('[StoreProductService.getCatalogProductBySku] Error:', error);
       throw error;
     }
   }
@@ -226,36 +260,65 @@ class StoreProductService {
     }
   }
 
-  // Obtener todos los productos globales (para seleccionar al crear)
-  async getAllProducts(page = 1, limit = 50, search = ''): Promise<ProductsResponse> {
-    try {
-      const params = new URLSearchParams({
-        page: page.toString(),
-        limit: limit.toString(),
-      });
-      if (search) params.append('search', search);
-      
-      // Endpoint correcto: GET /catalog/products/all
-      const response = await domainApi.get<ProductsResponse>({
-        store: `/catalog/products/all?${params.toString()}`,
-        warehouse: `/warehouse/products/all?${params.toString()}`,
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error al obtener productos:', error);
-      throw error;
-    }
-  }
-
   // Crear producto de tienda (nuevo o existente)
   async createStoreProduct(data: CreateStoreProductRequest): Promise<StoreProduct> {
+    const sanitizedSku = typeof data.sku === 'string' ? data.sku.trim() : undefined;
+    const payload: CreateStoreProductRequest = {
+      ...data,
+      ...(sanitizedSku ? { sku: sanitizedSku } : {}),
+    };
+
     try {
       const response = await domainApi.post<StoreProduct>({
         store: '/store/products/create',
         warehouse: '/warehouse/products',
-      }, data);
+      }, payload);
+      const responseData = response.data as any;
+      if (responseData?.statusCode === 409 || (typeof responseData?.message === 'string' && responseData.message.toLowerCase().includes('sku'))) {
+        const conflictError = new Error(responseData?.message || 'SKU en uso');
+        (conflictError as any).response = {
+          status: responseData?.statusCode ?? 409,
+          data: responseData,
+        };
+        throw conflictError;
+      }
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const responseData = error?.response?.data;
+
+      const possibleMessages = [
+        ...(Array.isArray(responseData?.message) ? responseData.message : []),
+        typeof responseData?.message === 'string' ? responseData.message : '',
+        typeof responseData?.error === 'string' ? responseData.error : '',
+      ]
+        .filter(Boolean)
+        .join(' | ')
+        .toLowerCase();
+
+      // Compatibilidad: algunos backends aún no aceptan `sku` en el DTO de creación
+      const skuIsUnknownField =
+        status === 400 &&
+        !!payload.sku &&
+        (possibleMessages.includes('property sku should not exist') ||
+          possibleMessages.includes('sku should not exist'));
+
+      if (skuIsUnknownField) {
+        const { sku: _ignoredSku, ...payloadWithoutSku } = payload;
+        const retryResponse = await domainApi.post<StoreProduct>(
+          {
+            store: '/store/products/create',
+            warehouse: '/warehouse/products',
+          },
+          payloadWithoutSku
+        );
+        return retryResponse.data;
+      }
+
+      if (status === 409) {
+        throw error;
+      }
+
       console.error('Error al crear producto de tienda:', error);
       throw error;
     }

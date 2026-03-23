@@ -46,10 +46,15 @@ const config: Config = {
           from: { height: 'var(--radix-accordion-content-height)' },
           to: { height: '0' },
         },
+        'qr-scan': {
+          '0%, 100%': { top: '10%' },
+          '50%': { top: '80%' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
+        'qr-scan': 'qr-scan 2.2s ease-in-out infinite',
       },
       boxShadow: {
         'elevation-1': '0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15)',

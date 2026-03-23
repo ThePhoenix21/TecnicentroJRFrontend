@@ -2,6 +2,7 @@ export interface Product {
   id: string;
   name: string;
   description?: string;
+  sku?: string;
   basePrice?: number;
   buyCost?: number;
   isDeleted?: boolean;
@@ -44,6 +45,7 @@ export interface CreateStoreProductRequest {
   createNewProduct: boolean;
   name?: string;
   description?: string;
+  sku?: string;
   basePrice?: number;
   buyCost?: number;
   storeId: string;
@@ -84,6 +86,12 @@ export interface StoreProductsListResponse {
 export interface CatalogProductLookupItem {
   id: string;
   name: string;
+  sku?: string;
+}
+
+export interface CatalogProductSkuLookupItem {
+  id: string;
+  sku: string;
 }
 
 export interface StoreProductDetail {
@@ -96,6 +104,7 @@ export interface StoreProductDetail {
     id?: string;
     name: string;
     description?: string;
+    sku?: string;
     basePrice?: number;
     buyCost?: number;
   };
@@ -132,6 +141,7 @@ export interface WarehouseProduct {
     id: string;
     name: string;
     description: string;
+    sku?: string;
     buyCost: number;
     basePrice: number;
   };

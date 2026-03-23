@@ -229,10 +229,7 @@ export default function VentasPage() {
 
         if (canSellProducts && (canViewInventory || canViewProductsForSales)) {
           try {
-            const productsResponse = await storeProductService.getStoreProductsSimple(effectiveStoreId, {
-              page: 1,
-              pageSize: 1000
-            });
+            const productsResponse = await storeProductService.getStoreProductsSimple(effectiveStoreId);
             const productsArray = productsResponse.data || [];
             setProducts(productsArray);
           } catch (error) {
@@ -624,6 +621,7 @@ export default function VentasPage() {
       id: sp.product.id,
       storeProductId: sp.id,
       name: sp.product.name,
+      sku: sp.product.sku,
       description: '',
       buycost: 0,
       createdById: '',
