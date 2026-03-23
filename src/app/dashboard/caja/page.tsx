@@ -895,8 +895,10 @@ export default function CajaPage() {
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'open' | 'history' | 'open-sessions')}>
         <TabsList>
           <TabsTrigger value="open">Caja abierta</TabsTrigger>
-          {canViewHistory && <TabsTrigger value="history">Historial de cajas</TabsTrigger>}
-          {canViewOpenSessions && <TabsTrigger value="open-sessions">Sesiones abiertas</TabsTrigger>}
+          {canViewHistory && <TabsTrigger value="history" className="hidden sm:inline">Historial de cajas</TabsTrigger>}
+          {canViewHistory && <TabsTrigger value="history" className="sm:hidden">Historial</TabsTrigger>}
+          {canViewOpenSessions && <TabsTrigger value="open-sessions" className="hidden sm:inline">Sesiones abiertas</TabsTrigger>}
+          {canViewOpenSessions && <TabsTrigger value="open-sessions" className="sm:hidden">Cajas abiertas</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="open">
