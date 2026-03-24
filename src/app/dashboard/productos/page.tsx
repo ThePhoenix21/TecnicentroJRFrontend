@@ -1364,6 +1364,7 @@ export default function ProductsPage() {
             onScan={handleQRScanProducts}
             onError={(error) => sonnerToast.error(error)}
             buttonLabel="Escanear"
+            className="w-full sm:w-auto"
           />
         </div>
       </div>
@@ -1902,6 +1903,7 @@ export default function ProductsPage() {
                   onScan={handleQRScanProducts}
                   onError={(error) => sonnerToast.error(error)}
                   buttonLabel="Escanear"
+                  className="w-full sm:w-auto"
                 />
               </div>
             </DialogHeader>
@@ -2168,6 +2170,7 @@ export default function ProductsPage() {
                       </div>
                     </div>
 
+                    {/* 
                     <div className="border-t pt-4 space-y-2">
                       <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Acciones</p>
                       <Button
@@ -2179,11 +2182,11 @@ export default function ProductsPage() {
                           <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Guardando...</>
                         ) : 'Guardar cambios'}
                       </Button>
-                      {/*
+                      {*
                         TODO: Mover las acciones de borrado (quitar de tienda/almacén) a una pestaña dedicada
                         dentro de la sección "Borrar productos". Por ahora se ocultan para evitar exposición.
-                      */}
-                      {/* {(isWarehouseMode ? isAdmin : canDeleteProducts) && (
+                      *}
+                      {(isWarehouseMode ? isAdmin : canDeleteProducts) && (
                         <Button
                           variant="destructive"
                           className="w-full h-9"
@@ -2197,8 +2200,9 @@ export default function ProductsPage() {
                             <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Eliminando...</>
                           ) : (isWarehouseMode ? 'Quitar del almacén' : 'Quitar de la tienda')}
                         </Button>
-                      )} */}
+                      )}
                     </div>
+                    */}
                   </div>
 
                 </div>
@@ -2206,7 +2210,16 @@ export default function ProductsPage() {
             </div>
 
             {/* ── Footer ── */}
-            <div className="flex-shrink-0 px-6 py-4 border-t bg-background flex justify-end">
+            <div className="flex-shrink-0 px-6 py-4 border-t bg-background flex flex-col sm:flex-row justify-end gap-2">
+              <Button
+                onClick={handleUpdateDetail}
+                disabled={isUpdatingDetail || (isWarehouseMode ? !canManageWarehouseProducts : (!canManageProducts && !canManagePrices))}
+                className="w-full sm:w-auto h-10"
+              >
+                {isUpdatingDetail ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Guardando...</>
+                ) : 'Guardar cambios'}
+              </Button>
               <Button
                 variant="outline"
                 onClick={closeProductDetail}

@@ -482,7 +482,7 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
                   <FormControl>
                     <Input
                       placeholder="apellido"
-                      autoComplete="family-name"
+                      autoComplete="off"
                       autoCapitalize="none"
                       autoCorrect="off"
                       spellCheck={false}
@@ -651,9 +651,9 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
                   name="password"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Contraseña</FormLabel>
+                      <FormLabel>Crear contraseña</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder="••••••••" {...field} />
+                        <Input type="password" placeholder="••••••••" autoComplete="new-password" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
