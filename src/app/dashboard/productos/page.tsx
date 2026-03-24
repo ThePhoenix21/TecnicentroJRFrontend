@@ -1136,16 +1136,17 @@ export default function ProductsPage() {
     }
 
     try {
-      const lookup = await storeProductService.getCatalogProductSkuLookup(sku);
-      if (Array.isArray(lookup) && lookup.length > 0) {
-        const exact = lookup.find(
-          (item) => (item.sku ?? '').trim().toLowerCase() === sku.toLowerCase()
-        );
-        if (exact?.id) {
-          openProductDetail(exact.id);
-          return;
-        }
+      const storeIdForLookup = selectedStoreId || currentStore?.id || '';
+      const simple = await storeProductService.getStoreProductsSimple(storeIdForLookup, { sku });
+      const match = Array.isArray(simple?.data) ? simple.data[0] : undefined;
+      if (match?.id) {
+        openProductDetail(match.id);
+        return;
       }
+    } catch { /* ignorar errores de red */ }
+
+    try {
+      await storeProductService.getCatalogProductSkuLookup(sku);
     } catch { /* ignorar errores de red */ }
 
     const savedAction = localStorage.getItem('qr_products_not_found_action') ?? 'ask';
@@ -1158,7 +1159,7 @@ export default function ProductsPage() {
     setSkuNotFoundCode(sku);
     setSkuNotFoundRemember(false);
     setSkuNotFoundModalOpen(true);
-  }, [detailModalOpen, storeProducts, openProductDetail, openNewProductModal]);
+  }, [detailModalOpen, storeProducts, openProductDetail, openNewProductModal, selectedStoreId, currentStore?.id]);
 
   const handleConfirmSkuNotFound = async () => {
     if (skuNotFoundRemember) {
@@ -1195,6 +1196,114 @@ export default function ProductsPage() {
     sonnerToast.success(`SKU actualizado a: ${skuReplaceCode}`);
     setSkuReplaceModalOpen(false);
     setSkuReplaceCode('');
+  };
+
+  const handleConfirmSkuReplaceAndSave = async () => {
+    if (skuReplaceRemember) {
+      localStorage.setItem('qr_products_detail_open_action', 'replace');
+    }
+    const nextSku = skuReplaceCode;
+    handleDetailFormChange('sku', nextSku);
+    setSkuReplaceModalOpen(false);
+    setSkuReplaceCode('');
+    if (!selectedProductId) return;
+
+    setIsUpdatingDetail(true);
+    try {
+      if (isWarehouseMode) {
+        if (!canManageWarehouseProducts) {
+          toast({
+            title: 'Sin permisos',
+            description: 'No tienes permisos para editar este producto del almacén.',
+          });
+          return;
+        }
+
+        const warehousePayload: any = {};
+        if (detailForm.stockThreshold !== '') {
+          warehousePayload.stockThreshold = Number(detailForm.stockThreshold);
+        }
+
+        if (canManageProducts) {
+          warehousePayload.name = detailForm.name;
+          warehousePayload.description = detailForm.description;
+          warehousePayload.sku = nextSku || undefined;
+        }
+
+        if (canManagePricesEffective) {
+          if (detailForm.basePrice !== '') {
+            warehousePayload.basePrice = Number(detailForm.basePrice);
+          }
+          if (canViewProductCostEffective) {
+            if (detailForm.buyCost !== '') {
+              warehousePayload.buyCost = Number(detailForm.buyCost);
+            }
+          }
+        }
+
+        await domainApi.patch(`/warehouse/products/${selectedProductId}`, warehousePayload);
+
+        toast({
+          title: 'Producto actualizado',
+          description: 'Los cambios se guardaron correctamente.',
+        });
+
+        fetchStoreProducts(page);
+        closeProductDetail();
+        return;
+      }
+
+      if (!canManageProducts && !canManagePrices) {
+        toast({
+          title: 'Sin permisos',
+          description: 'No tienes permisos para editar este producto.',
+        });
+        return;
+      }
+
+      const payload: any = {};
+      if (canManageProducts) {
+        payload.name = detailForm.name;
+        payload.description = detailForm.description;
+        payload.sku = nextSku || undefined;
+        if (detailForm.stockThreshold !== '') {
+          payload.stockThreshold = Number(detailForm.stockThreshold);
+        }
+      }
+      if (canManagePrices) {
+        if (detailForm.price !== '') payload.price = Number(detailForm.price);
+        if (detailForm.basePrice !== '') payload.basePrice = Number(detailForm.basePrice);
+        if (canViewProductCost) {
+          if (detailForm.buyCost !== '') payload.buyCost = Number(detailForm.buyCost);
+        }
+      }
+
+      await storeProductService.updateStoreProduct(selectedProductId, payload);
+
+      toast({
+        title: 'Producto actualizado',
+        description: 'Los cambios se guardaron correctamente.',
+      });
+
+      fetchStoreProducts(page);
+      closeProductDetail();
+    } catch (error) {
+      console.error('Error updating product detail:', error);
+      if (isForbiddenError(error)) {
+        toast({
+          title: 'Sin permisos',
+          description: 'No tienes permisos para actualizar este producto.',
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: 'No se pudo actualizar el producto.',
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setIsUpdatingDetail(false);
+    }
   };
 
   const handleCancelSkuReplace = () => {
@@ -1421,6 +1530,15 @@ export default function ProductsPage() {
           onClearFilters={clearFilters}
         />
 
+        <div className="flex justify-end sm:justify-start">
+          <QRScanner
+            mode="both"
+            enabled={true}
+            onScan={handleQRScanProducts}
+            onError={(error) => sonnerToast.error(error)}
+            buttonLabel="Escanear"
+          />
+        </div>
       </div>
 
       <div className="flex items-center justify-between">
@@ -1788,6 +1906,13 @@ export default function ProductsPage() {
                     </DialogDescription>
                   </div>
                 </div>
+                <QRScanner
+                  mode="both"
+                  enabled={true}
+                  onScan={handleQRScanProducts}
+                  onError={(error) => sonnerToast.error(error)}
+                  buttonLabel="Escanear"
+                />
               </div>
             </DialogHeader>
 
@@ -2161,6 +2286,9 @@ export default function ProductsPage() {
             </Button>
             <Button onClick={handleConfirmSkuReplace} className="w-full sm:w-auto">
               Actualizar SKU
+            </Button>
+            <Button onClick={handleConfirmSkuReplaceAndSave} className="w-full sm:w-auto">
+              Actualizar y guardar SKU
             </Button>
           </DialogFooter>
         </DialogContent>
