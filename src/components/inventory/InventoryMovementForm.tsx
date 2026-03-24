@@ -44,20 +44,13 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
   const quantityInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (activeLoginMode === 'WAREHOUSE') {
-      loadCatalogProducts();
-      return;
-    }
-
-    if (currentStore?.id) {
-      loadProducts(currentStore.id);
-    }
+    loadCatalogProducts();
   }, [activeLoginMode, currentStore?.id]);
 
   const loadCatalogProducts = async () => {
     setIsLoadingProducts(true);
     try {
-      const response = await inventoryService.getProductsLookup('');
+      const response = await storeProductService.getCatalogProductsLookupSku('');
       setProducts(response);
     } catch (error) {
       console.error('Error loading products:', error);
@@ -65,23 +58,6 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
         title: 'Error',
         description: 'No se pudieron cargar los productos del catálogo.',
         variant: 'destructive',
-      });
-    } finally {
-      setIsLoadingProducts(false);
-    }
-  };
-
-  const loadProducts = async (storeId: string) => {
-    setIsLoadingProducts(true);
-    try {
-      const response = await storeProductService.getStoreProductsLookup({ storeId });
-      setProducts(response);
-    } catch (error) {
-      console.error("Error loading products:", error);
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar los productos de la tienda.",
-        variant: "destructive",
       });
     } finally {
       setIsLoadingProducts(false);
@@ -126,8 +102,24 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
 
     setIsSubmitting(true);
     try {
+      const resolvedStoreProductId = activeLoginMode === 'WAREHOUSE'
+        ? selectedProductId
+        : await storeProductService.getStoreProductIdByCatalogProduct({
+          productId: selectedProductId,
+          storeId: currentStore?.id ?? '',
+        });
+
+      if (!resolvedStoreProductId) {
+        toast({
+          title: "Producto no encontrado",
+          description: "No se pudo resolver el producto en la tienda actual.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       await inventoryService.createMovimiento({
-        storeProductId: selectedProductId,
+        storeProductId: resolvedStoreProductId,
         type,
         quantity: normalizedQuantity,
         description: description || undefined,

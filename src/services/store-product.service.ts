@@ -59,6 +59,45 @@ class StoreProductService {
     }
   }
 
+  async getInventoryReport(params: { storeId: string; page?: number; pageSize?: number }) {
+    try {
+      const searchParams = new URLSearchParams();
+      searchParams.set('storeId', params.storeId);
+      searchParams.set('page', String(params.page ?? 1));
+      searchParams.set('pageSize', String(params.pageSize ?? 12));
+      const response = await domainApi.get<{
+        data: Array<{ id: string; name: string; stock: number; stockThreshold: number }>;
+        total: number;
+        totalPages: number;
+        page: number;
+        pageSize: number;
+      }>({
+        store: `/store/products/inventory-report?${searchParams.toString()}`,
+        warehouse: `/store/products/inventory-report?${searchParams.toString()}`,
+      });
+      return response.data;
+    } catch (error) {
+      console.error('[StoreProductService.getInventoryReport] Error:', error);
+      throw error;
+    }
+  }
+
+  async getStoreProductIdByCatalogProduct(params: { productId: string; storeId: string }): Promise<string | null> {
+    try {
+      const searchParams = new URLSearchParams({
+        productId: params.productId,
+        storeId: params.storeId,
+      });
+      const response = await api.get<{ id?: string; storeProductId?: string }>(
+        `/store/products/lookup-store-product-id?${searchParams.toString()}`
+      );
+      return response.data?.storeProductId ?? response.data?.id ?? null;
+    } catch (error) {
+      console.error('[StoreProductService.getStoreProductIdByCatalogProduct] Error:', error);
+      throw error;
+    }
+  }
+
   async getStoreProductsLookup(params?: { storeId?: string; search?: string }): Promise<Array<{ id: string; name: string }>> {
     try {
       const activeLoginMode = (() => {
@@ -152,6 +191,20 @@ class StoreProductService {
       return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
       console.error('[StoreProductService.getCatalogProductsLookup] Error:', error);
+      throw error;
+    }
+  }
+
+  async getCatalogProductsLookupSku(search?: string): Promise<CatalogProductLookupItem[]> {
+    try {
+      const params = new URLSearchParams();
+      if (search) params.set('search', search);
+      const qs = params.toString();
+      const url = qs ? `/catalog/products/lookup-sku?${qs}` : '/catalog/products/lookup-sku';
+      const response = await api.get<CatalogProductLookupItem[]>(url);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error('[StoreProductService.getCatalogProductsLookupSku] Error:', error);
       throw error;
     }
   }

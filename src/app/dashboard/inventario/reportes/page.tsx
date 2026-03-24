@@ -66,7 +66,12 @@ export default function InventoryReportsPage() {
     setIsLoadingProducts(true);
     try {
       const storeId = mode === 'STORE' ? currentStore?.id : undefined;
-      const response = await storeProductService.getStoreProducts(storeId, page, pageSize); // Load more for filtering
+      if (!storeId) return;
+      const response = await storeProductService.getInventoryReport({
+        storeId,
+        page,
+        pageSize,
+      });
       const products = response.data || [];
       setAllStoreProducts(products);
       setStoreProducts(products);
