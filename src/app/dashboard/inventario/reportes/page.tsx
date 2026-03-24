@@ -168,7 +168,7 @@ export default function InventoryReportsPage() {
     // Filter by name
     if (nameFilter.trim()) {
       filtered = filtered.filter(product => 
-        product.product?.name?.toLowerCase().includes(nameFilter.toLowerCase())
+        product.name?.toLowerCase().includes(nameFilter.toLowerCase())
       );
     }
 
@@ -189,7 +189,7 @@ export default function InventoryReportsPage() {
 
   // Get unique product names for suggestions
   const nameSuggestions = useMemo(() => {
-    const names = new Set(allStoreProducts.map(p => p.product?.name).filter(Boolean));
+    const names = new Set(allStoreProducts.map(p => p.name).filter(Boolean));
     return Array.from(names).filter(name => 
       name.toLowerCase().includes(searchInput.toLowerCase())
     ).slice(0, 5);
@@ -470,7 +470,7 @@ export default function InventoryReportsPage() {
                   filteredProducts.map((product) => (
                   <div key={product.id} className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0">
                     <div className="flex-1">
-                      <p className="text-sm sm:text-base font-medium leading-none">{product.product?.name || 'Sin nombre'}</p>
+                      <p className="text-sm sm:text-base font-medium leading-none">{product.name || 'Sin nombre'}</p>
                     </div>
                     <div className="flex items-center gap-2 sm:gap-4">
                       <div className="text-right">
