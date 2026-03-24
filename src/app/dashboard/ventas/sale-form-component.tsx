@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { uploadImages } from "@/lib/api/imageService";
 import { Progress } from "@/components/ui/progress";
+import { QRScanner } from "@/components/ui/qr-scanner";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -640,6 +641,26 @@ export function SaleForm({
     setSearchTerm(""); // Limpiar búsqueda
     setIsDropdownOpen(false);
   };
+
+  // Manejar escaneo de QR para productos
+  const handleQRScan = useCallback((code: string) => {
+    const scannedCode = code.trim();
+    const normalizedCode = scannedCode.toLowerCase();
+
+    const matchedProduct = products.find((product) => {
+      const sku = ((product as { sku?: string }).sku ?? "").trim().toLowerCase();
+      return sku === normalizedCode;
+    });
+
+    if (!matchedProduct) {
+      toast.error(`Producto no encontrado: ${scannedCode}`);
+      return;
+    }
+
+    // Seleccionar el producto encontrado
+    handleItemSelect(matchedProduct);
+    toast.success(`Producto escaneado: ${matchedProduct.name}`);
+  }, [products, handleItemSelect]);
 
   // Manejar foco en el campo de búsqueda
   const handleFocus = () => {
@@ -2399,6 +2420,16 @@ export function SaleForm({
                   <Plus className="h-4 w-4 mr-2" />
                   Agregar al carrito
                 </Button>
+                {canSellProducts && (
+                  <QRScanner
+                    enabled={true}
+                    mode="both"
+                    onScan={handleQRScan}
+                    onError={(error) => toast.error(error)}
+                    buttonLabel="Escanear QR"
+                    className="w-full"
+                  />
+                )}
               </form>
 
               {/* Formulario de cliente - se muestra cuando hay items en el carrito */}

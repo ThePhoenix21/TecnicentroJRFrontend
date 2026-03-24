@@ -20,7 +20,7 @@ const ALL_THEME_CLASSES: AppTheme[] = ['theme-phoenix', 'theme-light', 'theme-ne
 
 const themes: { value: AppTheme; label: string; icon: string; description: string }[] = [
   { value: 'theme-phoenix', label: 'Phoenix',      icon: '🔥', description: 'Rojo fuego (default)'    },
-  { value: 'theme-light',   label: 'Zafiro',       icon: '☀️', description: 'Verde esmeralda'         },
+  { value: 'theme-light',   label: 'Esmeralda',       icon: '☀️', description: 'Verde esmeralda'         },
   { value: 'theme-neutral', label: 'Profesional',  icon: '💼', description: 'Gris neutro'             },
   { value: 'theme-ash',     label: 'Ceniza',       icon: '🌫️', description: 'Azul oscuro suave'       },
 ];

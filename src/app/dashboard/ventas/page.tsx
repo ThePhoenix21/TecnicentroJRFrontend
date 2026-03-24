@@ -752,7 +752,6 @@ export default function VentasPage() {
                 {canManageOrders && (
                   <Button
                     onClick={() => setIsFormOpen(true)}
-                    className="w-full sm:w-auto bg-primary hover:bg-primary/90 transition-colors"
                     size="sm"
                   >
                     <Plus className="h-4 w-4 mr-2" />

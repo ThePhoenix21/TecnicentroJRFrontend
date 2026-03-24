@@ -1529,16 +1529,6 @@ export default function ProductsPage() {
           hasActiveFilters={!!(nameFilter || skuFilter || !hideOutOfStock)}
           onClearFilters={clearFilters}
         />
-
-        <div className="flex justify-end sm:justify-start">
-          <QRScanner
-            mode="both"
-            enabled={true}
-            onScan={handleQRScanProducts}
-            onError={(error) => sonnerToast.error(error)}
-            buttonLabel="Escanear"
-          />
-        </div>
       </div>
 
       <div className="flex items-center justify-between">
