@@ -29,6 +29,7 @@ import { toast as sonnerToast } from 'sonner';
 import { useAuth } from '@/contexts/auth-context';
 import { ProductHistory } from '@/components/inventory/ProductHistory';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { QRScanner } from '@/components/ui/qr-scanner';
 import { usePermissions, PERMISSIONS } from '@/hooks/usePermissions';
 import {
   Dialog,
@@ -98,6 +99,14 @@ export default function ProductsPage() {
   const [productDetail, setProductDetail] = useState<StoreProductDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+
+  const [skuNotFoundModalOpen, setSkuNotFoundModalOpen] = useState(false);
+  const [skuNotFoundCode, setSkuNotFoundCode] = useState('');
+  const [skuNotFoundRemember, setSkuNotFoundRemember] = useState(false);
+  const [skuReplaceModalOpen, setSkuReplaceModalOpen] = useState(false);
+  const [skuReplaceCode, setSkuReplaceCode] = useState('');
+  const [skuReplaceRemember, setSkuReplaceRemember] = useState(false);
+
   const [detailForm, setDetailForm] = useState({
     name: '',
     description: '',
@@ -1101,6 +1110,99 @@ export default function ProductsPage() {
     setIsModalOpen(true);
   };
 
+  const handleQRScanProducts = useCallback(async (code: string) => {
+    const sku = code.trim();
+
+    if (detailModalOpen) {
+      const savedAction = localStorage.getItem('qr_products_detail_open_action') ?? 'ask';
+      if (savedAction === 'replace') {
+        handleDetailFormChange('sku', sku);
+        sonnerToast.success(`SKU actualizado a: ${sku}`);
+        return;
+      }
+      if (savedAction === 'ignore') return;
+      setSkuReplaceCode(sku);
+      setSkuReplaceRemember(false);
+      setSkuReplaceModalOpen(true);
+      return;
+    }
+
+    const found = storeProducts.find(
+      (p) => ((p as any).sku ?? '').trim().toLowerCase() === sku.toLowerCase()
+    );
+    if (found) {
+      openProductDetail(found.id);
+      return;
+    }
+
+    try {
+      const lookup = await storeProductService.getCatalogProductSkuLookup(sku);
+      if (Array.isArray(lookup) && lookup.length > 0) {
+        const exact = lookup.find(
+          (item) => (item.sku ?? '').trim().toLowerCase() === sku.toLowerCase()
+        );
+        if (exact?.id) {
+          openProductDetail(exact.id);
+          return;
+        }
+      }
+    } catch { /* ignorar errores de red */ }
+
+    const savedAction = localStorage.getItem('qr_products_not_found_action') ?? 'ask';
+    if (savedAction === 'create') {
+      openNewProductModal();
+      setFormData((prev) => ({ ...prev, sku }));
+      return;
+    }
+    if (savedAction === 'ignore') return;
+    setSkuNotFoundCode(sku);
+    setSkuNotFoundRemember(false);
+    setSkuNotFoundModalOpen(true);
+  }, [detailModalOpen, storeProducts, openProductDetail, openNewProductModal]);
+
+  const handleConfirmSkuNotFound = async () => {
+    if (skuNotFoundRemember) {
+      localStorage.setItem('qr_products_not_found_action', 'create');
+    }
+    openNewProductModal();
+    setFormData((prev) => ({ ...prev, sku: skuNotFoundCode }));
+    try {
+      const result = await productService.lookupExternal(skuNotFoundCode);
+      if (result.found && result.data) {
+        setFormData((prev) => ({
+          ...prev,
+          sku: skuNotFoundCode,
+          ...(result.data!.name ? { name: result.data!.name } : {}),
+          ...(result.data!.description ? { description: result.data!.description } : {}),
+        }));
+      }
+    } catch { /* ignorar */ }
+    setSkuNotFoundModalOpen(false);
+    setSkuNotFoundCode('');
+  };
+
+  const handleCancelSkuNotFound = () => {
+    setSkuNotFoundModalOpen(false);
+    setSkuNotFoundCode('');
+    setSkuNotFoundRemember(false);
+  };
+
+  const handleConfirmSkuReplace = () => {
+    if (skuReplaceRemember) {
+      localStorage.setItem('qr_products_detail_open_action', 'replace');
+    }
+    handleDetailFormChange('sku', skuReplaceCode);
+    sonnerToast.success(`SKU actualizado a: ${skuReplaceCode}`);
+    setSkuReplaceModalOpen(false);
+    setSkuReplaceCode('');
+  };
+
+  const handleCancelSkuReplace = () => {
+    setSkuReplaceModalOpen(false);
+    setSkuReplaceCode('');
+    setSkuReplaceRemember(false);
+  };
+
   const resetForm = () => {
     setFormData({
       name: '',
@@ -1140,12 +1242,21 @@ export default function ProductsPage() {
           <h1 className="text-2xl md:text-3xl font-bold">Productos</h1>
           <p className="text-sm text-muted-foreground">{isWarehouseMode ? (currentWarehouse?.name ?? '') : (currentStore?.name ?? '')}</p>
         </div>
-        {(isWarehouseMode ? canCreateWarehouseProducts : canCreateProducts) && (
-          <Button onClick={openNewProductModal} className="w-full sm:w-auto">
-            <Plus className="mr-2 h-4 w-4" />
-            Nuevo Producto
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2 items-center">
+          {(isWarehouseMode ? canCreateWarehouseProducts : canCreateProducts) && (
+            <Button onClick={openNewProductModal} className="w-full sm:w-auto">
+              <Plus className="mr-2 h-4 w-4" />
+              Nuevo Producto
+            </Button>
+          )}
+          <QRScanner
+            mode="both"
+            enabled={true}
+            onScan={handleQRScanProducts}
+            onError={(error) => sonnerToast.error(error)}
+            buttonLabel="Escanear"
+          />
+        </div>
       </div>
 
       <div className="space-y-4">
@@ -1824,8 +1935,11 @@ export default function ProductsPage() {
                       </div>
                     </div>
 
-                    {/* Zona de peligro: eliminar del catálogo */}
-                    {!isWarehouseMode && (
+                    {/*
+                      TODO: Mover la "Zona de peligro" y la eliminación del catálogo a la pestaña dedicada de
+                      "Borrar productos". Por ahora se oculta en el modal para evitar exposición accidental.
+                    */}
+                    {/* {!isWarehouseMode && (
                       <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 space-y-3">
                         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                           <div>
@@ -1904,7 +2018,7 @@ export default function ProductsPage() {
                           </div>
                         )}
                       </div>
-                    )}
+                    )} */}
                   </div>
 
                   {/* ── Right: info + acciones ── */}
@@ -1913,7 +2027,7 @@ export default function ProductsPage() {
                     {/* Info ubicación */}
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                        {isWarehouseMode ? 'Almacén' : 'Tienda'}
+                        {isWarehouseMode ? 'Almacén de origen' : 'Tienda de origen'}
                       </p>
                       <div className="space-y-2 text-sm">
                         {!isWarehouseMode && (
@@ -1950,7 +2064,11 @@ export default function ProductsPage() {
                           <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Guardando...</>
                         ) : 'Guardar cambios'}
                       </Button>
-                      {(isWarehouseMode ? isAdmin : canDeleteProducts) && (
+                      {/*
+                        TODO: Mover las acciones de borrado (quitar de tienda/almacén) a una pestaña dedicada
+                        dentro de la sección "Borrar productos". Por ahora se ocultan para evitar exposición.
+                      */}
+                      {/* {(isWarehouseMode ? isAdmin : canDeleteProducts) && (
                         <Button
                           variant="destructive"
                           className="w-full h-9"
@@ -1964,7 +2082,7 @@ export default function ProductsPage() {
                             <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Eliminando...</>
                           ) : (isWarehouseMode ? 'Quitar del almacén' : 'Quitar de la tienda')}
                         </Button>
-                      )}
+                      )} */}
                     </div>
                   </div>
 
@@ -1987,6 +2105,67 @@ export default function ProductsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Modal A: SKU no encontrado ── */}
+      <Dialog open={skuNotFoundModalOpen} onOpenChange={(open) => { if (!open) handleCancelSkuNotFound(); }}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Producto no encontrado</DialogTitle>
+            <DialogDescription>
+              El código <strong>{skuNotFoundCode}</strong> no está registrado en el sistema. ¿Deseas crear un nuevo producto con este SKU?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2 py-2">
+            <Checkbox
+              id="qr-not-found-remember"
+              checked={skuNotFoundRemember}
+              onCheckedChange={(checked) => setSkuNotFoundRemember(checked === true)}
+            />
+            <Label htmlFor="qr-not-found-remember" className="text-sm cursor-pointer">
+              Recordar mi decisión
+            </Label>
+          </div>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={handleCancelSkuNotFound} className="w-full sm:w-auto">
+              Cancelar
+            </Button>
+            <Button onClick={handleConfirmSkuNotFound} className="w-full sm:w-auto">
+              Crear producto
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Modal B: Reemplazar SKU ── */}
+      <Dialog open={skuReplaceModalOpen} onOpenChange={(open) => { if (!open) handleCancelSkuReplace(); }}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Código escaneado</DialogTitle>
+            <DialogDescription>
+              Se escaneó el código <strong>{skuReplaceCode}</strong>. ¿Deseas actualizar el SKU de este producto con el código escaneado?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2 py-2">
+            <Checkbox
+              id="qr-replace-remember"
+              checked={skuReplaceRemember}
+              onCheckedChange={(checked) => setSkuReplaceRemember(checked === true)}
+            />
+            <Label htmlFor="qr-replace-remember" className="text-sm cursor-pointer">
+              Recordar mi decisión
+            </Label>
+          </div>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={handleCancelSkuReplace} className="w-full sm:w-auto">
+              Cancelar
+            </Button>
+            <Button onClick={handleConfirmSkuReplace} className="w-full sm:w-auto">
+              Actualizar SKU
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

@@ -3,6 +3,15 @@ import { api } from './api';
 import { AxiosError } from 'axios';
 import { Product, ProductsResponse } from '@/types/product.types';
 
+export interface ExternalProductLookup {
+  found: boolean;
+  data?: {
+    id: string;
+    name: string | null;
+    description: string | null;
+  };
+}
+
 export const productService = {
   async getProducts(page: number = 1, limit: number = 10, search?: string): Promise<ProductsResponse> {
     try {
@@ -294,6 +303,13 @@ export const productService = {
       
       throw new Error(errorMessage);
     }
+  },
+
+  async lookupExternal(sku: string): Promise<ExternalProductLookup> {
+    const response = await api.get<ExternalProductLookup>('/catalog/products/lookup-external', {
+      params: { sku },
+    });
+    return response.data;
   },
 
   async deleteProduct(id: string) {
