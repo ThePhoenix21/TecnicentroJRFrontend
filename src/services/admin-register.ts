@@ -10,7 +10,7 @@ export interface CreateAdminData {
   birthdate?: string;
   language?: string;
   timezone?: string;
-  permissions?: string[];
+  permissions: string[];
 }
 
 export interface CreateAdminResponse {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useForm, type Control } from 'react-hook-form';
+import { useForm, type Control, type FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { toast } from 'sonner';
@@ -75,8 +75,8 @@ const userFormSchema = z.object({
   message: "Las contraseñas no coinciden",
   path: ["confirmPassword"],
 }).refine((data) => {
-  // Validar XOR: Debe proporcionar storeId O warehouseId, pero NO ambos
-  if (!data.id) { // Solo en creación
+  // Validar XOR solo para usuarios regulares en creación
+  if (!data.id && data.role === 'USER') {
     if (data.assignmentType === 'store' && !data.storeId) {
       return false;
     }
@@ -263,6 +263,7 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userFormSchema) as any,
+    mode: 'onChange',
     defaultValues: {
       id: initialData?.id || '',
       name: initialData?.name || '',
@@ -441,9 +442,19 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
     }
   };
 
+  const handleInvalidSubmit = (errors: FieldErrors<UserFormValues>) => {
+    const firstError = Object.values(errors)[0];
+    const message =
+      (firstError && 'message' in firstError && typeof firstError.message === 'string'
+        ? firstError.message
+        : undefined) || 'Revisa los campos obligatorios antes de guardar.';
+    toast.error(message);
+    console.warn('Formulario inválido:', errors);
+  };
+
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit as any)} className="space-y-4 sm:space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit as any, handleInvalidSubmit)} className="space-y-4 sm:space-y-6">
         <Tabs defaultValue="info" className="space-y-4">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="info">Información</TabsTrigger>
@@ -530,7 +541,17 @@ export function UserForm({ onSuccess, initialData }: UserFormProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Rol</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select
+                      value={field.value}
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        if (value === 'ADMIN') {
+                          form.setValue('storeId', '');
+                          form.setValue('warehouseId', '');
+                          form.setValue('assignmentType', 'store');
+                        }
+                      }}
+                    >
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Selecciona un rol" />
