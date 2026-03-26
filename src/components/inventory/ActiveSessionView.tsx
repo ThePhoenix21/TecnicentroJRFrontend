@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { inventoryService } from "@/services/inventory.service";
 import { storeProductService } from "@/services/store-product.service";
 import { InventoryCountSession, InventoryCountItem, InventorySessionReport } from "@/types/inventory.types";
-import { StoreProductStockItem } from "@/types/store-product.types";
+import { StoreProductStockItem, CatalogProductLookupItem } from "@/types/store-product.types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,9 @@ import InventoryReportPDF from "./InventoryReportPDF";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2, Save, AlertTriangle, CheckCircle, XCircle, Search, RefreshCw, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { QRScanner } from "@/components/ui/qr-scanner";
+import { Label } from "@/components/ui/label";
+import { toast as sonnerToast } from "sonner";
 
 interface ActiveSessionViewProps {
   session: InventoryCountSession;
@@ -70,6 +73,10 @@ export function ActiveSessionView({
   // Estado para manejar los valores temporales de los inputs
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const [hideZeroStock, setHideZeroStock] = useState(true);
+  const [qrCountModalOpen, setQrCountModalOpen] = useState(false);
+  const [qrCountProduct, setQrCountProduct] = useState<{ id: string; name: string } | null>(null);
+  const [qrCountValue, setQrCountValue] = useState("1");
+  const [catalogProducts, setCatalogProducts] = useState<CatalogProductLookupItem[]>([]);
 
   // Cargar productos y reporte actualizado
   const loadData = useCallback(async () => {
@@ -117,6 +124,10 @@ export function ActiveSessionView({
     loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    storeProductService.getCatalogProductsLookupSku().then(setCatalogProducts).catch(() => {});
+  }, []);
+
   // Manejar cambio en input de conteo (solo estado local)
   const handleInputChange = (storeProductId: string, value: string) => {
     if (!canManage || !isOpen) return;
@@ -136,9 +147,9 @@ export function ActiveSessionView({
     }
   };
 
-  const saveCount = async (storeProductId: string) => {
+  const saveCount = async (storeProductId: string, directValue?: string) => {
     if (!canManage || !isOpen) return;
-    const valueStr = inputValues[storeProductId];
+    const valueStr = directValue ?? inputValues[storeProductId];
     if (!valueStr || valueStr === '') return;
     
     const value = parseInt(valueStr);
@@ -315,6 +326,33 @@ export function ActiveSessionView({
     return matchesSearch && (!hideZeroStock || p.stock !== 0);
   });
 
+  const handleQRScan = useCallback((code: string) => {
+    const scanned = code.trim().toLowerCase();
+    const catalogProduct = catalogProducts.find(p => (p.sku ?? '').trim().toLowerCase() === scanned);
+    if (!catalogProduct) {
+      sonnerToast.error(`Producto no encontrado: ${code.trim()}`);
+      return;
+    }
+    const storeProduct = products.find(p => p.productId === catalogProduct.id);
+    if (!storeProduct) {
+      sonnerToast.error(`Producto no disponible en esta sesión: ${catalogProduct.name}`);
+      return;
+    }
+    setQrCountProduct({ id: storeProduct.id, name: storeProduct.name });
+    setQrCountValue("1");
+    setQrCountModalOpen(true);
+  }, [catalogProducts, products]);
+
+  const handleQrCountConfirm = () => {
+    if (!qrCountProduct) return;
+    const val = qrCountValue.trim();
+    const numVal = parseInt(val);
+    if (val === '' || isNaN(numVal) || numVal < 0) return;
+    setInputValues(prev => ({ ...prev, [qrCountProduct.id]: val }));
+    setQrCountModalOpen(false);
+    saveCount(qrCountProduct.id, val);
+  };
+
   return (
     <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
       {/* Header con información distribuida */}
@@ -373,6 +411,14 @@ export function ActiveSessionView({
                     className="pl-7 sm:pl-8 text-sm"
                 />
               </div>
+              {isOpen && canManage && (
+                <QRScanner
+                  mode="both"
+                  onScan={handleQRScan}
+                  onError={(error) => sonnerToast.error(error)}
+                  buttonLabel="Escanear"
+                />
+              )}
             </div>
           </div>
         </CardHeader>
@@ -492,6 +538,36 @@ export function ActiveSessionView({
             )}
         </CardContent>
       </Card>
+
+      {/* Modal de conteo por QR */}
+      <Dialog open={qrCountModalOpen} onOpenChange={setQrCountModalOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Registrar conteo físico</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              Producto: <span className="font-medium text-foreground">{qrCountProduct?.name}</span>
+            </p>
+            <div className="space-y-1">
+              <Label htmlFor="qr-count-input">Cantidad contada</Label>
+              <Input
+                id="qr-count-input"
+                type="number"
+                min="0"
+                value={qrCountValue}
+                onChange={(e) => setQrCountValue(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleQrCountConfirm(); }}
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setQrCountModalOpen(false)}>Cancelar</Button>
+            <Button onClick={handleQrCountConfirm}>Registrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Diálogo del Reporte PDF */}
       <Dialog open={showReport} onOpenChange={(open) => {

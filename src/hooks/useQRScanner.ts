@@ -7,6 +7,7 @@ interface UseQRScannerOptions {
   onScan: (code: string) => void;
   onError?: (error: string) => void;
   enabled?: boolean;
+  allowInInputs?: boolean;
 }
 
 interface UseQRScannerReturn {
@@ -28,7 +29,7 @@ const GUN_IDLE_TIMEOUT_MS = 500;
 const GUN_MIN_LENGTH = 3;
 
 export function useQRScanner(options: UseQRScannerOptions): UseQRScannerReturn {
-  const { onScan, onError, enabled = true } = options;
+  const { onScan, onError, enabled = true, allowInInputs = false } = options;
   const videoRef = useRef<HTMLVideoElement>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -154,7 +155,7 @@ export function useQRScanner(options: UseQRScannerOptions): UseQRScannerReturn {
       if (!enabled) return;
 
       const activeElement = document.activeElement as HTMLElement | null;
-      if (
+      if (!allowInInputs &&
         activeElement &&
         (activeElement.tagName === 'INPUT' ||
           activeElement.tagName === 'TEXTAREA' ||
@@ -200,7 +201,7 @@ export function useQRScanner(options: UseQRScannerOptions): UseQRScannerReturn {
       document.removeEventListener('keydown', handleKeyDown);
       clearGunBuffer();
     };
-  }, [clearGunBuffer, enabled, isListeningGun, onScan]);
+  }, [allowInInputs, clearGunBuffer, enabled, isListeningGun, onScan]);
 
   useEffect(() => {
     if (!enabled) {

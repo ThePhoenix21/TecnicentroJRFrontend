@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { inventoryService } from "@/services/inventory.service";
 import { storeProductService } from "@/services/store-product.service";
@@ -26,6 +26,8 @@ import {
   RotateCcw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { QRScanner } from "@/components/ui/qr-scanner";
+import { toast as sonnerToast } from "sonner";
 
 export default function InventoryReportsPage() {
   const { currentStore, hasPermission, activeLoginMode } = useAuth();
@@ -59,8 +61,9 @@ export default function InventoryReportsPage() {
   const [showNameSuggestions, setShowNameSuggestions] = useState(false);
   const [allStoreProducts, setAllStoreProducts] = useState<any[]>([]);
   const [searchInput, setSearchInput] = useState("");
+  const [catalogProducts, setCatalogProducts] = useState<any[]>([]);
 
-  const loadStoreProducts = async (page = 1) => {
+  const loadStoreProducts = async (page = 1, search?: string, sku?: string) => {
     const mode = activeLoginMode;
     if (mode === 'STORE' && !currentStore?.id) return;
     setIsLoadingProducts(true);
@@ -71,6 +74,8 @@ export default function InventoryReportsPage() {
         storeId,
         page,
         pageSize,
+        search,
+        sku,
       });
       const products = response.data || [];
       setAllStoreProducts(products);
@@ -120,6 +125,13 @@ export default function InventoryReportsPage() {
       loadStoreProducts();
     }
   }, [currentStore?.id, canViewInventory, activeLoginMode]);
+
+  useEffect(() => {
+    storeProductService
+      .getCatalogProductsLookupSku()
+      .then(setCatalogProducts)
+      .catch(() => setCatalogProducts([]));
+  }, []);
 
   const formatDateForInput = (isoString: string) => {
     if (!isoString) return "";
@@ -189,11 +201,11 @@ export default function InventoryReportsPage() {
 
   // Get unique product names for suggestions
   const nameSuggestions = useMemo(() => {
-    const names = new Set(allStoreProducts.map(p => p.name).filter(Boolean));
+    const names = new Set(catalogProducts.map(p => p.name).filter(Boolean));
     return Array.from(names).filter(name => 
       name.toLowerCase().includes(searchInput.toLowerCase())
     ).slice(0, 5);
-  }, [allStoreProducts, searchInput]);
+  }, [catalogProducts, searchInput]);
 
   // Check if there are active filters
   const hasActiveFilters = nameFilter.trim() !== "" || stockFilter !== "all";
@@ -204,20 +216,43 @@ export default function InventoryReportsPage() {
     setSearchInput("");
     setStockFilter("all");
     setShowNameSuggestions(false);
+    loadStoreProducts(1);
   };
+
+  const runSearch = (value: string) => {
+    setSearchInput(value);
+    setNameFilter(value);
+    setShowNameSuggestions(false);
+    loadStoreProducts(1, value);
+  };
+
+  const runScanSearch = (sku: string, name: string) => {
+    setSearchInput(name);
+    setNameFilter(name);
+    setShowNameSuggestions(false);
+    loadStoreProducts(1, undefined, sku);
+  };
+
+  const handleQRScanReportes = useCallback((code: string) => {
+    const scanned = code.trim().toLowerCase();
+    const product = catalogProducts.find((p) => (p.sku ?? '').trim().toLowerCase() === scanned);
+    if (!product) {
+      sonnerToast.error(`Producto no encontrado: ${code.trim()}`);
+      return;
+    }
+    runScanSearch(scanned, product.name);
+    window?.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [catalogProducts]);
 
   // Handle name selection from suggestions
   const handleNameSelect = (name: string) => {
-    setNameFilter(name);
-    setSearchInput(name);
-    setShowNameSuggestions(false);
+    runSearch(name);
   };
 
   // Handle Enter key in name input
   const handleNameKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
-      setNameFilter(searchInput);
-      setShowNameSuggestions(false);
+      runSearch(searchInput);
     }
   };
 
@@ -425,6 +460,13 @@ export default function InventoryReportsPage() {
                 )}
               </div>
               
+              <QRScanner
+                mode="both"
+                onScan={handleQRScanReportes}
+                onError={(error) => sonnerToast.error(error)}
+                buttonLabel="Escanear"
+              />
+
               <Select value={stockFilter} onValueChange={setStockFilter}>
                 <SelectTrigger className="w-full sm:w-48">
                   <SelectValue placeholder="Stock" />

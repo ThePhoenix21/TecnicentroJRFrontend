@@ -170,15 +170,18 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
       return;
     }
 
+    if (matchedProduct.id === selectedProductId) {
+      setQuantity((prev) => String(Number(prev || "0") + 1));
+      quantityInputRef.current?.focus();
+      return;
+    }
+
     setProductQuery(matchedProduct.name);
     setSelectedProductId(matchedProduct.id);
     setShowProductSuggestions(false);
-
-    const parsedQuantity = Number(quantity);
-    if (!quantity.trim() || parsedQuantity === 0) {
-      quantityInputRef.current?.focus();
-    }
-  }, [products, quantity]);
+    setQuantity("1");
+    quantityInputRef.current?.focus();
+  }, [products, selectedProductId]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -250,6 +253,7 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
                   onScan={handleQRScan}
                   onError={(error) => sonnerToast.error(error)}
                   buttonLabel="Escanear"
+                  allowInInputs
                 />
               </div>
               {productQuery && (

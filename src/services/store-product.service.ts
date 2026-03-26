@@ -59,12 +59,28 @@ class StoreProductService {
     }
   }
 
-  async getInventoryReport(params: { storeId: string; page?: number; pageSize?: number }) {
+  async getInventoryReport(params: {
+    storeId: string;
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    sku?: string;
+    available?: boolean;
+  }) {
     try {
       const searchParams = new URLSearchParams();
       searchParams.set('storeId', params.storeId);
       searchParams.set('page', String(params.page ?? 1));
       searchParams.set('pageSize', String(params.pageSize ?? 12));
+      if (params.search) {
+        searchParams.set('search', params.search);
+      }
+      if (params.sku) {
+        searchParams.set('sku', params.sku);
+      }
+      if (params.available !== undefined) {
+        searchParams.set('available', String(params.available));
+      }
       const response = await domainApi.get<{
         data: Array<{ id: string; name: string; stock: number; stockThreshold: number }>;
         total: number;

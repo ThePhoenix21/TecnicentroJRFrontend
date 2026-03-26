@@ -18,6 +18,7 @@ interface QRScannerProps {
   mode?: 'camera' | 'gun' | 'both';
   buttonLabel?: string;
   className?: string;
+  allowInInputs?: boolean;
 }
 
 export function QRScanner({
@@ -27,6 +28,7 @@ export function QRScanner({
   mode = 'both',
   buttonLabel = 'Escanear QR',
   className = '',
+  allowInInputs = false,
 }: QRScannerProps) {
   const [open, setOpen] = useState(false);
   const {
@@ -44,6 +46,7 @@ export function QRScanner({
     },
     onError,
     enabled,
+    allowInInputs,
   });
 
   const showCameraButton = useMemo(
