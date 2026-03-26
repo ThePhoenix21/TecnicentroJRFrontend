@@ -214,8 +214,8 @@ export function InventoryMovementForm({ onSuccess }: InventoryMovementFormProps)
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="INCOMING">Entrada (Compra/Devolución)</SelectItem>
-                <SelectItem value="OUTGOING">Salida (Consumo/Pérdida)</SelectItem>
+                <SelectItem value="INCOMING">Entrada (Ingreso)</SelectItem>
+                <SelectItem value="OUTGOING">Salida (Salida)</SelectItem>
               </SelectContent>
             </Select>
           </div>
