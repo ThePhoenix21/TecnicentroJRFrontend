@@ -107,14 +107,7 @@ const getSidebarItems = (
       requiredTenantFeatures: ["PRODUCTS"],
       requiredPermissions: ["VIEW_PRODUCTS"],
     },
-    {
-      name: "Packs",
-      href: "/dashboard/packs",
-      icon: Package,
-      requiredTenantFeatures: ["PRODUCTS"],
-      requiredPermissions: ["VIEW_PRODUCTS"],
-    },
-    {
+        {
       name: "Inventario",
       href: "/dashboard/inventario",
       icon: ClipboardCheck,

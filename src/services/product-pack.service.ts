@@ -128,7 +128,7 @@ export const productPackService = {
   },
 
   async toggleActive(id: string, value: boolean): Promise<ProductPack> {
-    const response = await api.patch(`/product-packs/${id}/active`, null, {
+    const response = await api.patch(`/product-packs/${id}/active`, { value }, {
       params: { value },
     });
     return normalizePack(response.data);
