@@ -1,4 +1,5 @@
 import { api } from "./api";
+import type { OrderPack } from "@/types/product-pack.types";
 
 type CanonicalServiceType = 'REPAIR' | 'WARRANTY' | 'MISELANEOUS';
 type ServiceTypeInput = CanonicalServiceType | 'OTHER';
@@ -101,6 +102,11 @@ export interface OrderListServiceItem {
   price: number;
 }
 
+export interface OrderListPackItem {
+  name: string;
+  quantity: number;
+}
+
 export interface OrderListPaymentMethodItem {
   type: PaymentTypeInput;
   amount: number;
@@ -112,6 +118,7 @@ export interface OrderListItem {
   clientName: string;
   sellerName: string;
   products: OrderListProductItem[];
+  packs?: OrderListPackItem[];
   services: OrderListServiceItem[];
   status: string;
   paymentMethods: OrderListPaymentMethodItem[];
@@ -152,6 +159,7 @@ export interface Order {
   client?: Client;
   services?: Service[];
   orderProducts?: OrderProduct[];
+  orderPacks?: OrderPack[];
   user?: UserInfo;
   cashSessionId?: string;
   cashSessionsId?: string;
@@ -239,6 +247,10 @@ export const orderService = {
               name: p.product?.name || 'Producto',
               quantity: p.quantity
             })) || [],
+            packs: order.orderPacks?.map((p: any) => ({
+              name: p.name || p.packName || 'Pack',
+              quantity: Number(p.quantity) || 0,
+            })) || [],
             services: order.services?.map((s: any) => ({
               name: s.name,
               price: s.price
@@ -266,6 +278,12 @@ export const orderService = {
         ...response.data,
         data: (response.data.data || []).map((item: any) => ({
           ...item,
+          packs: Array.isArray(item.packs)
+            ? item.packs.map((pack: any) => ({
+                name: pack.name || pack.packName || 'Pack',
+                quantity: Number(pack.quantity) || 0,
+              }))
+            : [],
           cashSessionId: item.cashSessionId || item.cashSessionsId || item.cashSession?.id,
           isFromCurrentCashSession: item.isFromCurrentCashSession,
         })),
@@ -390,6 +408,11 @@ export const orderService = {
         amount: number;
       }>;
     }>;
+    packs?: Array<{
+      packId: string;
+      quantity: number;
+      customPrice?: number;
+    }>;
     services?: Array<{
       name?: string;
       description?: string;
@@ -423,8 +446,9 @@ export const orderService = {
 
     // Validar que se proporcione al menos un producto o servicio
     if ((!orderData.products || orderData.products.length === 0) &&
+          (!orderData.packs || orderData.packs.length === 0) &&
           (!orderData.services || orderData.services.length === 0)) {
-      throw new Error('Se requiere al menos un producto o servicio');
+      throw new Error('Se requiere al menos un producto, pack o servicio');
     }
 
     // Validar que no se especifiquen clientId y clientInfo simultáneamente
@@ -470,6 +494,24 @@ export const orderService = {
             
             return productData;
           }) 
+        }),
+        ...(orderData.packs && {
+          packs: orderData.packs.map((pack) => {
+            const packData: {
+              packId: string;
+              quantity: number;
+              customPrice?: number;
+            } = {
+              packId: pack.packId,
+              quantity: pack.quantity,
+            };
+
+            if (pack.customPrice !== undefined) {
+              packData.customPrice = pack.customPrice;
+            }
+
+            return packData;
+          }),
         }),
         ...(orderData.services && { 
           services: orderData.services.map(s => {

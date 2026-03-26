@@ -236,6 +236,35 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
     return order?.services || [];
   }, [orderDetails?.servicios, order?.services]);
 
+  const displayPacks = useMemo(() => {
+    const source =
+      orderDetails?.packs ||
+      orderDetails?.paquetes ||
+      orderDetails?.productPacks ||
+      orderDetails?.orderPacks;
+
+    if (Array.isArray(source)) {
+      return source.map((pack: any) => ({
+        id: pack.id || pack.packId,
+        packId: pack.packId || pack.id,
+        name: pack.name || pack.nombre || "Pack",
+        quantity: Number(pack.quantity ?? pack.cantidad ?? 0),
+        basePriceSnapshot: Number(pack.basePriceSnapshot ?? pack.precioBaseSnapshot ?? pack.basePrice ?? pack.fixedPrice ?? 0),
+        soldPrice: Number(pack.soldPrice ?? pack.precioVendido ?? pack.unitPrice ?? pack.price ?? 0),
+        subtotal: Number(pack.subtotal ?? pack.subTotal ?? 0),
+        components: Array.isArray(pack.components || pack.componentes)
+          ? (pack.components || pack.componentes).map((component: any) => ({
+              productId: component.productId,
+              name: component.name || component.nombre || "Producto",
+              quantity: Number(component.quantity ?? component.cantidad ?? 0),
+            }))
+          : [],
+      }));
+    }
+
+    return order?.orderPacks || [];
+  }, [orderDetails?.packs, orderDetails?.paquetes, orderDetails?.productPacks, orderDetails?.orderPacks, order?.orderPacks]);
+
   const orderStatus = useMemo<OrderStatus>(() => {
     if (!order) return 'PENDING';
     return calculateOrderStatus(order);
@@ -245,9 +274,10 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
 
   const isOnlyProductsOrder = useMemo(() => {
     const productsCount = (displayProducts?.length || 0);
+    const packsCount = (displayPacks?.length || 0);
     const servicesCount = (displayServices?.length || 0);
-    return productsCount > 0 && servicesCount === 0;
-  }, [displayProducts, displayServices]);
+    return (productsCount > 0 || packsCount > 0) && servicesCount === 0;
+  }, [displayPacks, displayProducts, displayServices]);
 
   const handleCancelOrder = async (refundMethods: Array<{ type: PaymentTypeInput; amount: number }> = []) => {
     if (!order) return;
@@ -859,6 +889,55 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
               </div>
             )}
 
+            {displayPacks.length > 0 && (
+              <div className="space-y-2 mt-6">
+                <h3 className="font-medium">Packs</h3>
+                <div className="space-y-3">
+                  {displayPacks.map((pack: any, index: number) => {
+                    const basePrice = Number(pack.basePriceSnapshot ?? pack.basePrice ?? 0);
+                    const soldPrice = Number(pack.soldPrice ?? pack.price ?? 0);
+                    const subtotal =
+                      Number(pack.subtotal ?? 0) ||
+                      (soldPrice * Number(pack.quantity ?? 0));
+
+                    return (
+                      <div key={`${pack.packId || pack.id || index}`} className="rounded-lg border p-4 bg-muted/10">
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                          <div>
+                            <p className="font-medium">{pack.name || "Pack"}</p>
+                            <p className="text-sm text-muted-foreground">
+                              Cantidad: {pack.quantity}
+                            </p>
+                          </div>
+                          <div className="text-sm sm:text-right">
+                            <p>Base snapshot: S/{basePrice.toFixed(2)}</p>
+                            <p>Precio vendido: S/{soldPrice.toFixed(2)}</p>
+                            <p className="font-medium">Subtotal: S/{subtotal.toFixed(2)}</p>
+                          </div>
+                        </div>
+
+                        {Array.isArray(pack.components) && pack.components.length > 0 && (
+                          <div className="mt-3 space-y-1">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                              Componentes
+                            </p>
+                            {pack.components.map((component: any, componentIndex: number) => (
+                              <div
+                                key={`${pack.packId || pack.id || index}-${component.productId || componentIndex}`}
+                                className="rounded-md bg-background px-3 py-2 text-sm"
+                              >
+                                {component.name || "Producto"} x{Number(component.quantity ?? 0)}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Servicios */}
             {displayServices.length > 0 && (
               <div className="space-y-2 mt-6">
@@ -978,7 +1057,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
             )}
 
             {/* Resumen Total */}
-            {((displayProducts.length > 0) || (displayServices.length > 0)) && (
+            {((displayProducts.length > 0) || (displayPacks.length > 0) || (displayServices.length > 0)) && (
               <div className="border-t pt-4 mt-4">
                 <div className="flex justify-between items-center">
                   <h3 className="font-medium">Total General</h3>

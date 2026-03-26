@@ -3,9 +3,11 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 
 import { orderService, type Order, type OrderListItem, type OrderLookupItem } from "@/services/order.service";
+import { productPackService } from "@/services/product-pack.service";
 import { storeProductService } from "@/services/store-product.service";
 import { type StoreProduct } from "@/types/store-product.types";
 import { type Product } from "@/types/product.types";
+import { type ProductPackListItem } from "@/types/product-pack.types";
 import { SaleForm } from "./sale-form-component";
 import type { SaleData } from '@/types/sale.types';
 import { useAuth } from "@/contexts/auth-context";
@@ -69,6 +71,7 @@ export default function VentasPage() {
 
   const [orders, setOrders] = useState<OrderListItem[]>([]);
   const [products, setProducts] = useState<StoreProduct[]>([]);
+  const [packs, setPacks] = useState<ProductPackListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const addItemFromOutside = useRef<((p: Product) => void) | null>(null);
@@ -243,6 +246,18 @@ export default function VentasPage() {
           setProducts([]);
         }
 
+        if (canSellProducts) {
+          try {
+            const packsResponse = await productPackService.list({ isActive: true });
+            setPacks(packsResponse.data || []);
+          } catch (error) {
+            console.error("Error al cargar packs:", error);
+            setPacks([]);
+          }
+        } else {
+          setPacks([]);
+        }
+
         if (canViewOrdersHistoryPermission) {
           try {            
             const response = await orderService.listOrders({
@@ -271,6 +286,7 @@ export default function VentasPage() {
         }
       } else {
         setProducts([]);
+        setPacks([]);
         setOrders([]);
         setTotalPages(1);
         setTotalItems(0);
@@ -475,10 +491,11 @@ export default function VentasPage() {
     }
 
     const products = Array.isArray(orderData.products) ? orderData.products : [];
+    const packs = Array.isArray(orderData.packs) ? orderData.packs : [];
     const services = Array.isArray(orderData.services) ? orderData.services : [];
 
-    if (products.length === 0 && services.length === 0) {
-      throw new Error('Se requiere al menos un producto o servicio');
+    if (products.length === 0 && packs.length === 0 && services.length === 0) {
+      throw new Error('Se requiere al menos un producto, pack o servicio');
     }
 
     const payload = {
@@ -495,6 +512,13 @@ export default function VentasPage() {
           quantity: p.quantity || 1,
           ...(p.customPrice !== undefined && p.customPrice > 0 ? { price: p.customPrice } : (p.price !== undefined ? { price: p.price } : {})),
           ...(p.payments && p.payments.length > 0 ? { payments: p.payments } : {}),
+        })),
+      }),
+      ...(packs.length > 0 && {
+        packs: packs.map((pack) => ({
+          packId: pack.packId,
+          quantity: pack.quantity || 1,
+          ...(pack.customPrice !== undefined ? { customPrice: pack.customPrice } : {}),
         })),
       }),
       ...(services.length > 0 && {
@@ -1020,6 +1044,7 @@ export default function VentasPage() {
                             ? order.services?.[0]?.name || "Sin nombre"
                             : clientName;
                           const productCount = order.products?.length ?? 0;
+                          const packCount = order.packs?.length ?? 0;
                           const serviceCount = order.services?.length ?? 0;
                           const paymentMethods = order.paymentMethods ?? [];
                           const refundPaymentMethods = order.refundPaymentMethods ?? [];
@@ -1116,10 +1141,14 @@ export default function VentasPage() {
                               <TableCell className="px-2 py-1 text-center">
                                 <div className="flex flex-col items-center">
                                   <span className="text-xs font-medium text-center">
-                                    {productCount > 0 && serviceCount > 0 ? (
+                                    {productCount > 0 && (packCount > 0 || serviceCount > 0) ? (
                                       <span className="text-xs">Venta mixta</span>
+                                    ) : packCount > 0 && productCount === 0 && serviceCount === 0 ? (
+                                      <span className="text-xs">Pack</span>
                                     ) : productCount > 0 ? (
-                                      <span className="text-xs">Producto{serviceCount > 0 ? ' + Servicio' : ''}</span>
+                                      <span className="text-xs">Producto{packCount > 0 || serviceCount > 0 ? ' + Otros' : ''}</span>
+                                    ) : packCount > 0 ? (
+                                      <span className="text-xs">Pack{serviceCount > 0 ? ' + Servicio' : ''}</span>
                                     ) : serviceCount > 0 ? (
                                       <span className="text-xs">Servicio</span>
                                     ) : (
@@ -1130,6 +1159,11 @@ export default function VentasPage() {
                                     {productCount > 0 && (
                                       <Badge variant="outline" className="text-xs py-0 px-1">
                                         {productCount} prod.
+                                      </Badge>
+                                    )}
+                                    {packCount > 0 && (
+                                      <Badge variant="outline" className="text-xs py-0 px-1">
+                                        {packCount} pack.
                                       </Badge>
                                     )}
                                     {serviceCount > 0 && (
@@ -1328,6 +1362,7 @@ export default function VentasPage() {
           return result;
         }}
         products={canViewProductsForSales ? transformStoreProductsToProducts(products) : []}
+        packs={packs}
         onRegisterAddItem={(fn) => { addItemFromOutside.current = fn; }}
       />
 

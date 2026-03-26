@@ -204,6 +204,7 @@ const ReceiptThermalPDF: React.FC<ReceiptThermalPDFProps> = ({ saleData, busines
 
   // Detectar si la respuesta tiene productos y/o servicios
   const productos = saleData.productos || [];
+  const packs = saleData.packs || saleData.paquetes || saleData.orderPacks || [];
   const servicios = saleData.servicios || [];
 
   const adelanto = parseAmount(
@@ -240,7 +241,14 @@ const ReceiptThermalPDF: React.FC<ReceiptThermalPDFProps> = ({ saleData, busines
     return sum + parseAmount(item.precio ?? item.price);
   }, 0);
 
-  const subtotalCalculado = totalProductos + totalServicios;
+  const totalPacks = packs.reduce((sum: number, item: any) => {
+    const soldPrice = parseAmount(item.soldPrice ?? item.precioVendido ?? item.price ?? item.unitPrice);
+    const quantity = parseAmount(item.quantity ?? item.cantidad, 1);
+    const subtotal = parseAmount(item.subtotal ?? item.subTotal, soldPrice * quantity);
+    return sum + subtotal;
+  }, 0);
+
+  const subtotalCalculado = totalProductos + totalPacks + totalServicios;
 
   const paymentMethodsSource =
     saleData.paymentMethods ??
@@ -439,6 +447,43 @@ const ReceiptThermalPDF: React.FC<ReceiptThermalPDFProps> = ({ saleData, busines
                         Descuento: {formatCurrency(item.descuento)}
                       </Text>
                     )}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Detalle de servicios */}
+          {packs.length > 0 && (
+            <View style={{ marginBottom: 6 }}>
+              <Text style={styles.textBold}>Packs:</Text>
+              <View style={[styles.row, { marginBottom: 2 }]}>
+                <Text style={[styles.textBold, { width: 20 }]}>Cant</Text>
+                <Text style={[styles.textBold, { flex: 1, marginLeft: 4 }]}>Descripción</Text>
+                <Text style={[styles.textBold, { width: 35, textAlign: 'right' }]}>P. Unit</Text>
+                <Text style={[styles.textBold, { width: 40, textAlign: 'right' }]}>Importe</Text>
+              </View>
+              {packs.map((item: any, index: number) => {
+                const quantity = parseAmount(item.quantity ?? item.cantidad, 1);
+                const soldPrice = parseAmount(item.soldPrice ?? item.precioVendido ?? item.price ?? item.unitPrice);
+                const subtotal = parseAmount(item.subtotal ?? item.subTotal, soldPrice * quantity);
+                const components = item.components || item.componentes || [];
+
+                return (
+                  <View key={index} style={{ marginBottom: 2 }}>
+                    <View style={styles.row}>
+                      <Text style={styles.itemQty}>{quantity}</Text>
+                      <Text style={[styles.itemName, { flex: 1, marginLeft: 4 }]}>
+                        {item.name || item.nombre}
+                      </Text>
+                      <Text style={styles.itemUnitPrice}>{formatCurrency(soldPrice)}</Text>
+                      <Text style={styles.itemPrice}>{formatCurrency(subtotal)}</Text>
+                    </View>
+                    {Array.isArray(components) && components.map((component: any, componentIndex: number) => (
+                      <Text key={componentIndex} style={[styles.textSmall, { marginLeft: 24, marginBottom: 2 }]}>
+                        {component.name || component.nombre || 'Producto'} x{parseAmount(component.quantity ?? component.cantidad, 0)}
+                      </Text>
+                    ))}
                   </View>
                 );
               })}

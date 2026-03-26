@@ -3,6 +3,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { Product } from "@/types/product.types";
 import type { SaleData } from '@/types/sale.types';
+import type {
+  ProductPack,
+  ProductPackListItem,
+  ProductPackPreview,
+} from "@/types/product-pack.types";
 import {
   Plus,
   Minus,
@@ -14,6 +19,8 @@ import {
   Printer,
   Download,
   AlertCircle,
+  Package,
+  TriangleAlert,
 } from "lucide-react";
 import { uploadImages } from "@/lib/api/imageService";
 import { Progress } from "@/components/ui/progress";
@@ -30,6 +37,7 @@ import ReceiptThermalPDF from './ReceiptThermalPDF';
 import { clientService } from '@/services/client.service';
 import { cashSessionService } from "@/services/cash-session.service";
 import { orderService } from "@/services/order.service";
+import { productPackService } from "@/services/product-pack.service";
 import { storeService } from "@/services/store.service";
 import type { Store } from "@/types/store";
 import { formatCurrency } from "@/lib/utils";
@@ -109,21 +117,28 @@ type CartItem = {
   name: string;
   price: number;
   quantity: number;
-  type: "product" | "service";
+  type: "product" | "pack" | "service";
   notes?: string;
   images?: File[];
   serviceType?: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS'; // Added service type field
   // Add these to match ProductOrder
   productId?: string;
+  packId?: string;
   storeProductId?: string; // ID del store-product para enviar al backend
   unitPrice?: number;
   customPrice?: number; // Precio personalizado para el producto
   paymentMethods: PaymentMethod[]; // Métodos de pago para el ítem
+  components?: Array<{
+    productId: string;
+    name: string;
+    quantity: number;
+  }>;
+  packPreview?: ProductPackPreview | null;
 };
 
 interface NewItemForm {
   id: string;
-  type: "product" | "service" | "";
+  type: "product" | "pack" | "service" | "";
   name: string;
   price: string;
   quantity: string;
@@ -132,6 +147,7 @@ interface NewItemForm {
   serviceType?: 'REPAIR' | 'WARRANTY' | 'MISELANEOUS'; // Added service type field
   // Add these to match ProductOrder
   productId?: string;
+  packId?: string;
   unitPrice?: number;
   paymentMethods: PaymentMethod[]; // Métodos de pago para el ítem
 };
@@ -159,6 +175,7 @@ type SaleFormProps = {
   onClose: () => void;
   onSubmit: (data: SaleData) => Promise<{ success: boolean; orderId?: string; orderNumber?: string; orderData?: any }>;
   products: Product[];
+  packs?: ProductPackListItem[];
   services?: Service[];
   onRegisterAddItem?: (fn: (product: Product) => void) => void;
 };
@@ -168,6 +185,7 @@ export function SaleForm({
   onClose,
   onSubmit,
   products,
+  packs = [],
   services,
   onRegisterAddItem,
 }: SaleFormProps) {
@@ -176,6 +194,10 @@ export function SaleForm({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState<CartItem[]>([]);
   const [editedProductPrices, setEditedProductPrices] = useState<Record<string, string>>({});
+  const [editedPackPrices, setEditedPackPrices] = useState<Record<string, string>>({});
+  const [isLoadingPackPreview, setIsLoadingPackPreview] = useState(false);
+  const [draftPack, setDraftPack] = useState<ProductPack | null>(null);
+  const [draftPackPreview, setDraftPackPreview] = useState<ProductPackPreview | null>(null);
   const [isOrderPaymentsModalOpen, setIsOrderPaymentsModalOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<'form' | 'cart'>('form');
   const [orderPaymentMethods, setOrderPaymentMethods] = useState<PaymentMethod[]>([
@@ -245,7 +267,10 @@ export function SaleForm({
     pendingItem: {
       item: Pick<CartItem, "id" | "name" | "price"> & {
         productId?: string;
+        packId?: string;
         customPrice?: number;
+        components?: CartItem["components"];
+        packPreview?: ProductPackPreview | null;
       };
       type: CartItem["type"];
       notes: string;
@@ -292,6 +317,7 @@ export function SaleForm({
     images: [],
     serviceType: tenantDefaultServiceLoaded ? tenantDefaultService : undefined,
     productId: "",
+    packId: "",
     unitPrice: 0,
     paymentMethods: [{
       id: "1",
@@ -302,6 +328,7 @@ export function SaleForm({
 
   // Lock type selection when there are items in cart
   const isTypeLocked = selectedItems.length > 0;
+  const availableItemTypeCount = (canSellProducts ? 2 : 0) + (canSellServices ? 1 : 0);
 
   useEffect(() => {
     if (!tenantFeaturesLoaded) return;
@@ -428,7 +455,7 @@ export function SaleForm({
 
     // Verificar si hay servicios en la venta
     const hasServices = selectedItems.some((item) => item.type === "service");
-    const hasProducts = selectedItems.some((item) => item.type === "product");
+    const hasProducts = selectedItems.some((item) => item.type === "product" || item.type === "pack");
 
     // Validar campos del cliente si hay servicios o productos
     if (hasServices || hasProducts) {
@@ -482,6 +509,8 @@ export function SaleForm({
     });
     setErrors({}); // Limpiar errores de validación
     setSearchTerm(""); // Limpiar búsqueda
+    setEditedProductPrices({});
+    setEditedPackPrices({});
     setIsDropdownOpen(false); // Cerrar dropdown
     setUploadStatus({
       inProgress: false,
@@ -508,6 +537,7 @@ export function SaleForm({
       images: [],
       serviceType: tenantDefaultServiceLoaded ? tenantDefaultService : undefined,
       productId: "",
+      packId: "",
       unitPrice: 0,
       paymentMethods: [{
         id: "1",
@@ -592,39 +622,130 @@ export function SaleForm({
     };
   }, [currentStore?.id]);
 
-  const filteredItems = (): (Product | Service)[] => {
+  const filteredItems = (): (Product | ProductPackListItem | Service)[] => {
     if (!searchTerm.trim()) return [];
     const term = searchTerm.toLowerCase();
 
     // Filtrar según el tipo actual
-    let itemsToSearch: (Product | Service)[] = [];
+    let itemsToSearch: (Product | ProductPackListItem | Service)[] = [];
 
     if (newItem.type === "product") {
       itemsToSearch = products;
+    } else if (newItem.type === "pack") {
+      itemsToSearch = packs;
     } else if (newItem.type === "service") {
       itemsToSearch = services || [];
     }
 
     return itemsToSearch.filter((item) => {
-      const isProduct = "stock" in item;
-      const description = isProduct ? (item as Product).description : null;
+      const description = item.description ?? null;
 
       return (
         item.name.toLowerCase().includes(term) ||
-        (description && (description as string).toLowerCase().includes(term)) ||
+        (typeof description === "string" && description.toLowerCase().includes(term)) ||
         item.id.toLowerCase().includes(term)
       );
     });
   };
 
+  const calculateItemUnitPrice = useCallback((item: CartItem) => {
+    if (item.type === "service") return Number(item.price) || 0;
+    return item.customPrice !== undefined ? Number(item.customPrice) || 0 : Number(item.price) || 0;
+  }, []);
+
+  const calculateSaleTotal = useCallback((items: CartItem[]) => {
+    return items.reduce((sum, item) => sum + (calculateItemUnitPrice(item) * item.quantity), 0);
+  }, [calculateItemUnitPrice]);
+
+  const hasPackStockWarning = useCallback((preview?: ProductPackPreview | null, quantity = 1) => {
+    if (!preview?.items?.length) return false;
+    return preview.items.some((item) => {
+      const stock = Number(item.stock ?? 0);
+      const requiredBase = Number(item.requiredStock ?? item.quantity ?? 0);
+      const required = requiredBase > 0 ? requiredBase : Number(item.quantity ?? 0) * quantity;
+      return Boolean(item.hasStockIssue) || stock <= 0 || stock < required;
+    });
+  }, []);
+
+  const buildPackCartItem = useCallback((pack: ProductPack, preview: ProductPackPreview | null): CartItem => {
+    return {
+      id: `pack-${pack.id}`,
+      packId: pack.id,
+      name: pack.name,
+      price: Number(pack.fixedPrice) || 0,
+      quantity: 1,
+      type: "pack",
+      paymentMethods: [{
+        id: "1",
+        type: PaymentType.EFECTIVO,
+        amount: Number(pack.fixedPrice) || 0,
+      }],
+      components: (pack.items || []).map((item) => ({
+        productId: item.productId,
+        name: item.product?.name || item.productId,
+        quantity: Number(item.quantity) || 0,
+      })),
+      packPreview: preview,
+    };
+  }, []);
+
+  const loadPackData = useCallback(async (packId: string) => {
+    const pack = await productPackService.getById(packId);
+    let preview: ProductPackPreview | null = null;
+
+    if (currentStore?.id) {
+      try {
+        preview = await productPackService.getPreview(packId, currentStore.id);
+      } catch (error) {
+        console.error("Error loading pack preview:", error);
+      }
+    }
+
+    return { pack, preview };
+  }, [currentStore?.id]);
+
+  useEffect(() => {
+    if (newItem.type !== "pack" || !(newItem.packId || newItem.id)) {
+      setDraftPack(null);
+      setDraftPackPreview(null);
+      return;
+    }
+
+    let active = true;
+    const packId = newItem.packId || newItem.id;
+
+    setIsLoadingPackPreview(true);
+    void loadPackData(packId)
+      .then(({ pack, preview }) => {
+        if (!active) return;
+        setDraftPack(pack);
+        setDraftPackPreview(preview);
+      })
+      .catch((error) => {
+        console.error("Error loading selected pack data:", error);
+        if (!active) return;
+        setDraftPack(null);
+        setDraftPackPreview(null);
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoadingPackPreview(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [loadPackData, newItem.id, newItem.packId, newItem.type]);
+
   // Manejar selección de ítem
-  const handleItemSelect = (item: Product | Service) => {
+  const handleItemSelect = (item: Product | ProductPackListItem | Service) => {
     setNewItem((prev) => {
       const updated = {
         ...prev,
         id: item.id,
         name: item.name,
-        price: item.price.toString(),
+        price: String("fixedPrice" in item ? item.fixedPrice : item.price),
       };
       
       // Si es un producto, configurar payment automático de EFECTIVO
@@ -634,6 +755,13 @@ export function SaleForm({
           type: PaymentType.EFECTIVO,
           amount: item.price
         }];
+      } else if ("itemsCount" in item) {
+        updated.paymentMethods = [{
+          id: "1",
+          type: PaymentType.EFECTIVO,
+          amount: item.fixedPrice
+        }];
+        updated.packId = item.id;
       }
       
       return updated;
@@ -664,7 +792,7 @@ export function SaleForm({
 
   // Manejar foco en el campo de búsqueda
   const handleFocus = () => {
-    if (newItem.type === "product") {
+    if (newItem.type === "product" || newItem.type === "pack") {
       setSearchTerm(newItem.name);
       setIsDropdownOpen(!!newItem.name);
     }
@@ -716,7 +844,7 @@ export function SaleForm({
       const newState = { ...prev, [name]: value };
 
       // Actualizar búsqueda cuando cambia el nombre y es un producto
-      if (name === "name" && prev.type === "product") {
+      if (name === "name" && (prev.type === "product" || prev.type === "pack")) {
         setSearchTerm(value);
       }
 
@@ -727,6 +855,8 @@ export function SaleForm({
         newState.quantity = "1";
         newState.notes = "";
         newState.serviceType = value === 'service' ? (tenantDefaultServiceLoaded ? tenantDefaultService : undefined) : undefined;
+        newState.productId = "";
+        newState.packId = "";
         setSearchTerm("");
       }
 
@@ -739,7 +869,7 @@ export function SaleForm({
           : parsedQuantity.toString();
 
         // Si es un producto, actualizar automáticamente el monto del primer método de pago
-        if (prev.type === "product") {
+        if (prev.type === "product" || prev.type === "pack") {
           const effectiveQuantity = parseInt(newState.quantity) || 1;
 
           // Determinar el precio unitario efectivo: precio personalizado si existe, sino precio base del producto
@@ -753,9 +883,16 @@ export function SaleForm({
           }
 
           if (unitPrice === 0) {
-            const product = products.find((p) => p.id === prev.id);
-            if (product) {
-              unitPrice = product.price;
+            if (prev.type === "product") {
+              const product = products.find((p) => p.id === prev.id);
+              if (product) {
+                unitPrice = product.price;
+              }
+            } else if (prev.type === "pack") {
+              const pack = packs.find((p) => p.id === (prev.packId || prev.id));
+              if (pack) {
+                unitPrice = pack.fixedPrice;
+              }
             }
           }
 
@@ -771,17 +908,26 @@ export function SaleForm({
         }
       }
 
-      if (name === "name" && prev.type === "product") {
+      if (name === "name" && (prev.type === "product" || prev.type === "pack")) {
         setIsDropdownOpen(!!value);
         
         // Si es un producto y se encuentra en la lista, configurar payment automático
-        const product = products.find((p) => p.id === value);
+        const product = prev.type === "product" ? products.find((p) => p.id === value) : null;
+        const pack = prev.type === "pack" ? packs.find((p) => p.id === value || p.name === value) : null;
         if (product && prev.paymentMethods.length === 1 && prev.paymentMethods[0].amount === 0) {
           newState.paymentMethods = [{
             id: "1",
             type: PaymentType.EFECTIVO,
             amount: product.price
           }];
+        }
+        if (pack && prev.paymentMethods.length === 1 && prev.paymentMethods[0].amount === 0) {
+          newState.paymentMethods = [{
+            id: "1",
+            type: PaymentType.EFECTIVO,
+            amount: pack.fixedPrice
+          }];
+          newState.packId = pack.id;
         }
       }
 
@@ -790,16 +936,16 @@ export function SaleForm({
   };
 
   // Agregar ítem personalizado
-  const handleAddCustomItem = (e: React.FormEvent) => {
+  const handleAddCustomItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItem.type || !newItem.price) return;
 
-    if (newItem.type === 'product' && !newItem.name) return;
+    if ((newItem.type === 'product' || newItem.type === 'pack') && !newItem.name) return;
 
     const canSellProducts = !tenantFeaturesLoaded || !hasSalesFeatureGate || hasSalesOfProducts;
     const canSellServices = !tenantFeaturesLoaded || !hasSalesFeatureGate || hasSalesOfServices;
 
-    if (newItem.type === 'product' && !canSellProducts) {
+    if ((newItem.type === 'product' || newItem.type === 'pack') && !canSellProducts) {
       toast.error('Tu plan no permite vender productos');
       return;
     }
@@ -858,6 +1004,7 @@ export function SaleForm({
         images: [],
         serviceType: tenantDefaultServiceLoaded ? tenantDefaultService : undefined,
         productId: "",
+        packId: "",
         unitPrice: 0,
         paymentMethods: [{
           id: "1",
@@ -884,6 +1031,35 @@ export function SaleForm({
             price: product.price,
           },
           type: "product" as const,
+          notes,
+          quantity,
+          images: [],
+          customPrice: price > 0 ? price : undefined,
+          paymentMethods: newItem.paymentMethods,
+        };
+      } else if (newItem.type === "pack") {
+        const packId = newItem.packId || newItem.id;
+        if (!packId) return;
+
+        setIsLoadingPackPreview(true);
+        const { pack, preview } = await loadPackData(packId);
+        setIsLoadingPackPreview(false);
+
+        pendingItem = {
+          item: {
+            id: `pack-${pack.id}`,
+            name: pack.name,
+            price: Number(pack.fixedPrice) || 0,
+            packId: pack.id,
+            customPrice: price > 0 ? price : undefined,
+            components: (pack.items || []).map((component) => ({
+              productId: component.productId,
+              name: component.product?.name || component.productId,
+              quantity: Number(component.quantity) || 0,
+            })),
+            packPreview: preview,
+          },
+          type: "pack" as const,
           notes,
           quantity,
           images: [],
@@ -931,6 +1107,39 @@ export function SaleForm({
         undefined,
         newItem.paymentMethods // Pasar métodos de pago del formulario
       );
+    } else if (newItem.type === "pack") {
+      const packId = newItem.packId || newItem.id;
+      if (!packId) return;
+
+      setIsLoadingPackPreview(true);
+      const { pack, preview } = await loadPackData(packId);
+      setIsLoadingPackPreview(false);
+
+      const cartItem = buildPackCartItem(pack, preview);
+      const finalPrice = price > 0 ? price : cartItem.price;
+
+      handleAddItem(
+        {
+          id: cartItem.id,
+          name: cartItem.name,
+          price: cartItem.price,
+          packId: pack.id,
+          customPrice: finalPrice,
+          components: cartItem.components,
+          packPreview: cartItem.packPreview,
+        } as CartItem,
+        "pack",
+        notes,
+        quantity,
+        [],
+        undefined,
+        undefined,
+        newItem.paymentMethods
+      );
+
+      if (hasPackStockWarning(preview, quantity)) {
+        toast.warning("El pack tiene componentes con stock insuficiente o no positivo. La venta sigue permitida.");
+      }
     } else {
       return;
     }
@@ -946,6 +1155,7 @@ export function SaleForm({
       images: [],
       serviceType: tenantDefaultServiceLoaded ? tenantDefaultService : undefined,
       productId: "",
+      packId: "",
       unitPrice: 0,
       paymentMethods: [{
         id: "1",
@@ -959,7 +1169,10 @@ export function SaleForm({
   const handleAddItem = (
     item: Pick<CartItem, "id" | "name" | "price"> & {
       productId?: string;
+      packId?: string;
       customPrice?: number; // Precio personalizado para el producto
+      components?: CartItem["components"];
+      packPreview?: ProductPackPreview | null;
     },
     type: CartItem["type"],
     notes: string = "",
@@ -973,6 +1186,8 @@ export function SaleForm({
       const existingItem = prev.find((i: CartItem) => {
         if (type === "product") {
           return i.id === item.id && i.type === type;
+        } else if (type === "pack") {
+          return i.packId === item.packId && i.type === type;
         } else if (type === "service") {
           return (
             i.name.toLowerCase() === item.name.toLowerCase() && i.type === type
@@ -991,6 +1206,8 @@ export function SaleForm({
           const isSameItem =
             type === "product"
               ? i.id === item.id && i.type === type
+              : type === "pack"
+                ? i.packId === item.packId && i.type === type
               : i.name.toLowerCase() === item.name.toLowerCase() &&
                 i.type === type;
 
@@ -1014,6 +1231,11 @@ export function SaleForm({
             (updatedItem as CartItem & { serviceType: string }).serviceType = serviceType || (tenantDefaultServiceLoaded ? tenantDefaultService : "REPAIR");
           }
 
+          if (type === "pack") {
+            updatedItem.packPreview = item.packPreview ?? i.packPreview ?? null;
+            updatedItem.components = item.components ?? i.components;
+          }
+
           return updatedItem as CartItem;
         });
       }
@@ -1035,6 +1257,14 @@ export function SaleForm({
           productId: item.productId || item.id,
           storeProductId: item.productId || item.id,
           // Guardar el precio personalizado si es diferente al precio base
+          ...(customPrice !== undefined && customPrice > 0 && Number(customPrice) !== Number(item.price) && {
+            customPrice: Number(customPrice)
+          })
+        }),
+        ...(type === "pack" && {
+          packId: item.packId || item.id,
+          components: item.components || [],
+          packPreview: item.packPreview ?? null,
           ...(customPrice !== undefined && customPrice > 0 && Number(customPrice) !== Number(item.price) && {
             customPrice: Number(customPrice)
           })
@@ -1102,6 +1332,28 @@ export function SaleForm({
         confirmedPrice, // Precio personalizado confirmado
         pendingItem.paymentMethods
       );
+    } else if (pendingItem.type === "pack") {
+      handleAddItem(
+        {
+          ...pendingItem.item,
+          price: pendingItem.item.price,
+          customPrice: confirmedPrice,
+          packId: pendingItem.item.packId,
+          components: pendingItem.item.components,
+          packPreview: pendingItem.item.packPreview,
+        } as CartItem,
+        pendingItem.type,
+        pendingItem.notes,
+        pendingItem.quantity,
+        pendingItem.images,
+        undefined,
+        confirmedPrice,
+        pendingItem.paymentMethods
+      );
+
+      if (hasPackStockWarning(pendingItem.item.packPreview, pendingItem.quantity)) {
+        toast.warning("El pack tiene componentes con stock insuficiente o no positivo. La venta sigue permitida.");
+      }
     } else {
       return;
     }
@@ -1126,6 +1378,7 @@ export function SaleForm({
       images: [],
       serviceType: tenantDefaultServiceLoaded ? tenantDefaultService : undefined,
       productId: "",
+      packId: "",
       unitPrice: 0,
       paymentMethods: [{
         id: "1",
@@ -1169,11 +1422,13 @@ export function SaleForm({
 
     // Verificar si hay servicios o productos en la venta
     const hasServices = selectedItems.some((item) => item.type === "service");
-    const hasProducts = selectedItems.some((item) => item.type === "product");
-    const isServiceOnlySale = hasServices && !hasProducts;
+    const hasProducts = selectedItems.some((item) => item.type === "product" || item.type === "pack");
+    const hasPacks = selectedItems.some((item) => item.type === "pack");
+    const hasGoods = hasProducts || hasPacks;
+    const isServiceOnlySale = hasServices && !hasGoods;
 
     // Si hay servicios o productos, validar formulario
-    if (hasServices || hasProducts) {
+    if (hasServices || hasGoods) {
       if (!validateForm()) {
         const firstErrorField = Object.keys(errors)[0];
         if (firstErrorField) {
@@ -1219,6 +1474,17 @@ export function SaleForm({
           };
         });
 
+      const packsData = selectedItems
+        .filter((item) => item.type === "pack")
+        .map((item) => {
+          const hasCustomPrice = item.customPrice !== undefined && Number(item.customPrice) !== Number(item.price);
+          return {
+            packId: item.packId || item.id.replace(/^pack-/, ""),
+            quantity: item.quantity,
+            ...(hasCustomPrice ? { customPrice: Number(item.customPrice) } : {}),
+          };
+        });
+
       // Procesar servicios
       const servicesData = await Promise.all(
         selectedItems
@@ -1255,14 +1521,14 @@ export function SaleForm({
       );
 
       // Validar que haya al menos un producto o servicio
-      if (productsData.length === 0 && servicesData.length === 0) {
-        toast.error("La venta debe incluir al menos un producto o servicio válido");
+      if (productsData.length === 0 && packsData.length === 0 && servicesData.length === 0) {
+        toast.error("La venta debe incluir al menos un producto, pack o servicio válido");
         return;
       }
 
       // Generar DNI único para ventas de productos si no se ingresó
       let finalDni = customerData.documentNumber?.trim();
-      if (!finalDni && hasProducts && !hasServices) {
+      if (!finalDni && hasGoods && !hasServices) {
         // Usar DNI por defecto fijo ya que no hay colisiones en el backend
         finalDni = "00000000";
       }
@@ -1270,7 +1536,7 @@ export function SaleForm({
       // Usar los datos del cliente si hay servicios o productos, de lo contrario usar los valores por defecto
       const clientInfo = hasGenericClient
         ? defaultClientInfo
-        : (hasServices || hasProducts)
+        : (hasServices || hasGoods)
           ? {
             name: customerData.name || (hasServices ? "Venta" : "Cliente"),
             email: customerData.email,
@@ -1294,6 +1560,7 @@ export function SaleForm({
         return;
       }
 
+      const orderTotal = calculateSaleTotal(selectedItems);
       const totalAmount = Number(orderPaymentMethodsToUse.reduce((sum, pm) => sum + pm.amount, 0));
 
       // Validar que haya una sesión de caja activa
@@ -1305,6 +1572,7 @@ export function SaleForm({
       const saleData = {
         clientInfo,
         products: productsData,
+        packs: packsData,
         services: servicesData.map(service => ({
           ...service,
           type: 'MISELANEOUS' as 'MISELANEOUS' // Forzar siempre MISELANEOUS con casting explícito
@@ -1313,6 +1581,7 @@ export function SaleForm({
           type: pm.type as 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA' | 'YAPE' | 'PLIN' | 'DATAPHONE' | 'BIZUM' | 'OTRO',
           amount: pm.amount
         })),
+        total: orderTotal,
         totalAmount, // Agregar el monto total confirmado
         cashSessionId: currentCashSession, // Usar sesión de caja real
       };
@@ -2107,10 +2376,11 @@ export function SaleForm({
                     value={newItem.type}
                     onChange={handleNewItemChange}
                     className={`w-full p-2 bg-muted border rounded ${isTypeLocked ? 'text-muted-foreground' : ''}`}
-                    disabled={!(canSellProducts && canSellServices) || isTypeLocked}
+                    disabled={availableItemTypeCount <= 1 || isTypeLocked}
                     required
                   >
                     {canSellProducts && <option value="product">Producto</option>}
+                    {canSellProducts && <option value="pack">Pack</option>}
                     {canSellServices && <option value="service">Servicio</option>}
                   </select>
                 </div>
@@ -2121,6 +2391,8 @@ export function SaleForm({
                       switch (newItem.type) {
                         case "product":
                           return "Buscar producto";
+                        case "pack":
+                          return "Buscar pack";
                         case "service":
                           return newItem.serviceType === "MISELANEOUS" ? "Nombre" : "Nombre del servicio";
                         default:
@@ -2143,6 +2415,8 @@ export function SaleForm({
                               switch (newItem.type) {
                                 case "product":
                                   return "Buscar producto...";
+                                case "pack":
+                                  return "Buscar pack...";
                                 case "service":
                                   return newItem.serviceType === "MISELANEOUS" ? "Nombre" : "Nombre del servicio";
                                 default:
@@ -2151,12 +2425,14 @@ export function SaleForm({
                             })()
                           }
                         />
-                        {isDropdownOpen && newItem.type === "product" && (
+                        {isDropdownOpen && (newItem.type === "product" || newItem.type === "pack") && (
                           <div className="absolute z-10 w-full mt-1 bg-card text-card-foreground border rounded-md shadow-lg max-h-60 overflow-auto">
                             {filteredItems().map((item) => {
                               const isProduct = "stock" in item;
                               const stock = isProduct ? (item as any).stock : 0;
                               const hasStock = isProduct && stock > 0;
+                              const isPack = "itemsCount" in item;
+                              const packPrice = isPack ? item.fixedPrice : item.price;
 
                               return (
                                 <div
@@ -2171,9 +2447,12 @@ export function SaleForm({
                                     {isProduct && !hasStock && (
                                       <span className="text-xs text-destructive font-semibold">SIN STOCK</span>
                                     )}
+                                    {isPack && (
+                                      <span className="text-xs text-muted-foreground">{item.itemsCount} comp.</span>
+                                    )}
                                   </div>
                                   <div className="text-sm text-muted-foreground flex items-center justify-between">
-                                    <span>{formatCurrency(item.price)}</span>
+                                    <span>{formatCurrency(packPrice)}</span>
                                     {isProduct && (
                                       <span className={`text-xs ${hasStock ? 'text-success' : 'text-destructive'}`}>
                                         Stock: {stock}
@@ -2185,7 +2464,7 @@ export function SaleForm({
                             })}
                             {filteredItems().length === 0 && (
                               <div className="p-2 text-muted-foreground">
-                                No se encontraron productos
+                                {newItem.type === "pack" ? "No se encontraron packs" : "No se encontraron productos"}
                               </div>
                             )}
                           </div>
@@ -2198,11 +2477,13 @@ export function SaleForm({
                 {/* Campos de precio y cantidad con métodos de pago */}
                 <div className="space-y-4">
                   {(() => {
-                    const showPrice = newItem.type === "service";
+                    const showPrice = newItem.type === "service" || newItem.type === "pack";
                     const showQuantity = newItem.type !== "service";
                     const isProduct = newItem.type === "product";
+                    const isPack = newItem.type === "pack";
                     const selectedProduct = isProduct && products.find(p => p.id === newItem.id);
-                    const basePrice = selectedProduct ? selectedProduct.price : 0;
+                    const selectedPack = isPack && packs.find(p => p.id === (newItem.packId || newItem.id));
+                    const basePrice = selectedProduct ? selectedProduct.price : selectedPack ? selectedPack.fixedPrice : 0;
 
                     // Calcular siempre el total esperado de la compra según cantidad y precio
                     const quantityNumber = (() => {
@@ -2212,8 +2493,8 @@ export function SaleForm({
 
                     let expectedTotal = 0;
 
-                    if (isProduct) {
-                      // Para productos: usar precio personalizado si se ingresó, sino el precio base
+                    if (isProduct || isPack) {
+                      // Para productos y packs: usar precio personalizado si se ingresó, sino el precio base
                       let unitPrice = 0;
 
                       if (newItem.price) {
@@ -2243,9 +2524,9 @@ export function SaleForm({
                             <div className="space-y-2">
                               <div className="flex justify-between items-center">
                                 <label className="text-sm font-medium">
-                                  {isProduct ? "Precio unitario" : "Precio"}
+                                  {isProduct || isPack ? "Precio unitario" : "Precio"}
                                 </label>
-                                {isProduct && (
+                                {(isProduct || isPack) && (
                                   <span className="text-xs text-muted-foreground">
                                     {formatCurrency(basePrice)}
                                   </span>
@@ -2257,10 +2538,10 @@ export function SaleForm({
                                 value={newItem.price}
                                 onChange={handleNewItemChange}
                                 className="w-full p-2 border rounded"
-                                placeholder={isProduct ? `Dejar vacío para usar precio base (${formatCurrency(basePrice)})` : "0.00"}
+                                placeholder={isProduct || isPack ? `Dejar vacío para usar precio base (${formatCurrency(basePrice)})` : "0.00"}
                                 min="0"
                                 step="0.01"
-                                required={!isProduct}
+                                required={!(isProduct || isPack)}
                               />
                             </div>
                           )}
@@ -2289,6 +2570,67 @@ export function SaleForm({
                     );
                   })()}
                 </div>
+
+                {newItem.type === "pack" && draftPack && (
+                  <div className="space-y-3 rounded-lg border p-3 bg-muted/20">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2 font-medium">
+                          <Package className="h-4 w-4" />
+                          {draftPack.name}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Precio base: {formatCurrency(draftPack.fixedPrice)}
+                        </p>
+                      </div>
+                      {hasPackStockWarning(draftPackPreview, Number(newItem.quantity || 1)) && (
+                        <div className="inline-flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-900">
+                          <TriangleAlert className="h-3.5 w-3.5" />
+                          Stock comprometido
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      {draftPack.items.map((component) => {
+                        const previewItem = draftPackPreview?.items.find((item) => item.productId === component.productId);
+                        const componentWarning =
+                          Boolean(previewItem?.hasStockIssue) ||
+                          Number(previewItem?.stock ?? 0) <= 0 ||
+                          (previewItem?.requiredStock !== undefined &&
+                            Number(previewItem.stock ?? 0) < Number(previewItem.requiredStock));
+
+                        return (
+                          <div
+                            key={`${draftPack.id}-${component.productId}`}
+                            className={`rounded-md border px-3 py-2 text-sm ${componentWarning ? 'border-amber-300 bg-amber-50/80' : 'bg-background'}`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="font-medium">{component.product?.name || component.productId}</span>
+                              <span>x{component.quantity}</span>
+                            </div>
+                            {previewItem && (
+                              <div className={`mt-1 text-xs ${componentWarning ? 'text-amber-900' : 'text-muted-foreground'}`}>
+                                Stock tienda: {previewItem.stock ?? "N/D"}
+                                {previewItem.requiredStock !== undefined ? ` · Requerido: ${previewItem.requiredStock}` : ""}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {hasPackStockWarning(draftPackPreview, Number(newItem.quantity || 1)) && (
+                      <Alert className="border-amber-300 bg-amber-50 text-amber-950">
+                        <TriangleAlert className="h-4 w-4" />
+                        <AlertTitle>Advertencia de stock</AlertTitle>
+                        <AlertDescription>
+                          Uno o más componentes del pack tienen stock 0, negativo o insuficiente. Se permitirá agregarlo y venderlo igualmente.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+                )}
 
                 {newItem.type === "service" && (
                   <>
@@ -2416,9 +2758,9 @@ export function SaleForm({
                     )}
                   </>
                 )}
-                <Button type="submit" className="w-full">
+                <Button type="submit" className="w-full" disabled={isLoadingPackPreview}>
                   <Plus className="h-4 w-4 mr-2" />
-                  Agregar al carrito
+                  {isLoadingPackPreview ? "Cargando pack..." : "Agregar al carrito"}
                 </Button>
                 {canSellProducts && (
                   <QRScanner
@@ -2456,24 +2798,26 @@ export function SaleForm({
                       const baseUnitPrice = item.price;
                       const currentUnitPrice = item.customPrice ?? item.price;
 
-                      const editedUnitPriceStr = item.type === "product"
-                        ? (editedProductPrices[itemKey] ?? currentUnitPrice.toString())
+                      const isEditablePricedItem = item.type === "product" || item.type === "pack";
+                      const editedUnitPriceStr = isEditablePricedItem
+                        ? ((item.type === "product" ? editedProductPrices[itemKey] : editedPackPrices[itemKey]) ?? currentUnitPrice.toString())
                         : currentUnitPrice.toString();
 
-                      const parsedEditedUnitPrice = item.type === "product" && editedUnitPriceStr !== ""
+                      const parsedEditedUnitPrice = isEditablePricedItem && editedUnitPriceStr !== ""
                         ? Number(editedUnitPriceStr)
                         : undefined;
 
                       const finalUnitPrice = item.type === "service"
                         ? item.price
-                        : item.type === "product"
+                        : isEditablePricedItem
                           ? (parsedEditedUnitPrice ?? 0)
                           : currentUnitPrice;
 
-                      const isUnitPriceModified = item.type === "product" && (
+                      const isUnitPriceModified = isEditablePricedItem && (
                         editedUnitPriceStr === "" ||
                         (parsedEditedUnitPrice !== undefined && parsedEditedUnitPrice !== baseUnitPrice)
                       );
+                      const packWarning = item.type === "pack" && hasPackStockWarning(item.packPreview, item.quantity);
                       
                       const originalTotal = baseUnitPrice * item.quantity;
                       const finalTotal = finalUnitPrice * item.quantity;
@@ -2486,7 +2830,7 @@ export function SaleForm({
                           <div>
                             <div className="font-medium">{item.name}</div>
                             <div className="text-sm text-muted-foreground">
-                              {item.type === "product" ? (
+                              {isEditablePricedItem ? (
                                 <>
                                   <input
                                     type="number"
@@ -2494,14 +2838,21 @@ export function SaleForm({
                                     onChange={(e) => {
                                       const value = e.target.value;
 
-                                      setEditedProductPrices((prev) => ({
-                                        ...prev,
-                                        [itemKey]: value,
-                                      }));
+                                      if (item.type === "product") {
+                                        setEditedProductPrices((prev) => ({
+                                          ...prev,
+                                          [itemKey]: value,
+                                        }));
+                                      } else {
+                                        setEditedPackPrices((prev) => ({
+                                          ...prev,
+                                          [itemKey]: value,
+                                        }));
+                                      }
 
                                       setSelectedItems((prev) =>
                                         prev.map((i) => {
-                                          if (i.type !== "product" || i.id !== item.id) return i;
+                                          if (i.type !== item.type || i.id !== item.id) return i;
 
                                           if (value === "") {
                                             return { ...i, customPrice: undefined };
@@ -2540,6 +2891,34 @@ export function SaleForm({
                             </div>
                             {item.notes && (
                               <div className="text-xs text-muted-foreground mt-1">{item.notes}</div>
+                            )}
+                            {item.type === "pack" && item.components && item.components.length > 0 && (
+                              <div className="mt-2 space-y-1">
+                                {item.components.map((component) => {
+                                  const previewItem = item.packPreview?.items?.find((preview) => preview.productId === component.productId);
+                                  const componentWarning =
+                                    Boolean(previewItem?.hasStockIssue) ||
+                                    Number(previewItem?.stock ?? 0) <= 0 ||
+                                    (previewItem?.requiredStock !== undefined &&
+                                      Number(previewItem.stock ?? 0) < Number(previewItem.requiredStock));
+
+                                  return (
+                                    <div
+                                      key={`${item.id}-${component.productId}`}
+                                      className={`rounded-md px-2 py-1 text-xs ${componentWarning ? 'bg-amber-50 text-amber-900' : 'bg-muted/40 text-muted-foreground'}`}
+                                    >
+                                      {component.name} x{component.quantity}
+                                      {previewItem ? ` · Stock: ${previewItem.stock ?? "N/D"}` : ""}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            {packWarning && (
+                              <div className="mt-2 inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-900">
+                                <TriangleAlert className="h-3.5 w-3.5" />
+                                Hay componentes con stock 0, negativo o insuficiente.
+                              </div>
                             )}
                           </div>
 
@@ -2609,36 +2988,14 @@ export function SaleForm({
                 <div className="flex justify-between mb-2">
                   <span>Subtotal:</span>
                   <span>
-                    {formatCurrency(
-                      selectedItems.reduce((sum, item) => {
-                        // Para servicios, siempre usar el precio total del servicio
-                        // Para productos y personalizados, usar el precio personalizado si existe
-                        const itemPrice = item.type === "service"
-                          ? item.price
-                          : item.customPrice !== undefined
-                            ? item.customPrice
-                            : item.price;
-                        return sum + (itemPrice * item.quantity);
-                      }, 0)
-                    )}
+                    {formatCurrency(calculateSaleTotal(selectedItems))}
                   </span>
                 </div>
                 <div className="flex justify-between font-medium text-lg">
                   <div className="flex justify-between w-full gap-4">
                     <span>Total:</span>
                     <span className="font-medium">
-                      {formatCurrency(
-                        selectedItems.reduce((sum, item) => {
-                          // Para servicios, siempre usar el precio total del servicio
-                          // Para productos y personalizados, usar el precio personalizado si existe
-                          const itemPrice = item.type === "service"
-                            ? item.price
-                            : item.customPrice !== undefined
-                              ? item.customPrice
-                              : item.price;
-                          return sum + (itemPrice * item.quantity);
-                        }, 0)
-                      )}
+                      {formatCurrency(calculateSaleTotal(selectedItems))}
                     </span>
                   </div>
                 </div>
@@ -2796,20 +3153,13 @@ export function SaleForm({
                       className="w-full"
                       size="lg"
                       onClick={() => {
-                        const orderTotal = selectedItems.reduce((sum, item) => {
-                          const itemPrice = item.type === "service"
-                            ? item.price
-                            : item.customPrice !== undefined
-                              ? item.customPrice
-                              : item.price;
-                          return sum + (itemPrice * item.quantity);
-                        }, 0);
+                        const orderTotal = calculateSaleTotal(selectedItems);
 
                         const baseMethods = orderPaymentMethods.length > 0
                           ? orderPaymentMethods
                           : [{ id: "1", type: PaymentType.EFECTIVO, amount: 0 }];
 
-                        const hasProducts = selectedItems.some((item) => item.type === "product");
+                        const hasProducts = selectedItems.some((item) => item.type === "product" || item.type === "pack");
                         const initialAmount = hasProducts ? orderTotal : 0;
 
                         setOrderPaymentMethodsDraft(
