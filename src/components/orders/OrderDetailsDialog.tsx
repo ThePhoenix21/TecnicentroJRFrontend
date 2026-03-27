@@ -10,8 +10,10 @@ import { useState, useEffect, useMemo } from "react";
 import { PDFViewer, pdf, PDFDownloadLink } from "@react-pdf/renderer";
 import ReceiptThermalPDF from "@/app/dashboard/ventas/ReceiptThermalPDF";
 import { CancelOrderDialog, type CancelOrderInfo } from "./CancelOrderDialog";
-import { Order, OrderProduct, type PaymentTypeInput } from '@/services/order.service';
+import { Order, OrderProduct, type OrderDetailsResponse, type PaymentTypeInput } from '@/services/order.service';
 import { storeProductService } from '@/services/store-product.service';
+import { storeService } from '@/services/store.service';
+import { Store } from '@/types/store';
 import { orderService } from '@/services/order.service';
 import { SaleData } from '@/types/sale.types';
 import { useAuth } from '@/contexts/auth-context';
@@ -28,6 +30,28 @@ interface OrderDetailsDialogProps {
   order: Order | null;
   onOrderUpdate?: (order: Order) => void;
 }
+
+type DisplayPackComponent = {
+  productId?: string;
+  storeProductId?: string;
+  name: string;
+  quantityPerPack: number;
+  totalQuantity: number;
+  unitPrice: number;
+};
+
+type DisplayPack = {
+  id: string;
+  packId: string;
+  name: string;
+  quantity: number;
+  basePrice: number;
+  unitPrice: number;
+  subtotal: number;
+  discount: number;
+  priceModified: boolean;
+  components: DisplayPackComponent[];
+};
 
 type OrderStatus = keyof typeof statusColors;
 
@@ -97,6 +121,8 @@ const translateServiceType = (type: string | undefined): string => {
   return translations[type] || type.replace('_', ' ');
 };
 
+const formatCurrency = (value: number) => `S/${value.toFixed(2)}`;
+
 interface ProductMap {
   [key: string]: { name: string; price: number; description?: string };
 }
@@ -141,7 +167,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
   const [isCompletingOrder, setIsCompletingOrder] = useState(false);
   const [isCompleteAfterPaymentDialogOpen, setIsCompleteAfterPaymentDialogOpen] = useState(false);
   const [productMap, setProductMap] = useState<ProductMap>({});
-  const [orderDetails, setOrderDetails] = useState<any>(null);
+  const [orderDetails, setOrderDetails] = useState<OrderDetailsResponse | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
   const [isLoadingPendingPayment, setIsLoadingPendingPayment] = useState(false);
@@ -151,6 +177,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
     { id: '1', type: PaymentType.EFECTIVO, amount: 0 },
   ]);
   const [showAdvanceDetails, setShowAdvanceDetails] = useState(false);
+  const [currentStoreDetails, setCurrentStoreDetails] = useState<Store | null>(null);
 
   // Verificar si el usuario es administrador
   const isAdmin = user?.role === 'Admin' || user?.role === 'ADMIN';
@@ -160,11 +187,36 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
   const hasNamedServices = normalizedTenantFeatures.includes('NAMEDSERVICES');
   const hasClientsFeature = normalizedTenantFeatures.includes('CLIENTS');
 
+  // Cargar detalles de la tienda actual
+  useEffect(() => {
+    if (!currentStore?.id) {
+      setCurrentStoreDetails(null);
+      return;
+    }
+
+    const loadStoreDetails = async () => {
+      try {
+        const store = await storeService.getStoreById(currentStore.id);
+        setCurrentStoreDetails(store);
+      } catch (error) {
+        console.error("Error al cargar datos de la tienda actual:", error);
+        setCurrentStoreDetails(null);
+      }
+    };
+
+    loadStoreDetails();
+  }, [currentStore?.id]);
+
   // Información del negocio desde el contexto de autenticación
+  console.log('orderDetails.store:', orderDetails?.store);
+  console.log('orderDetails.store.phone:', orderDetails?.store?.phone);
+  console.log('currentStoreDetails:', currentStoreDetails);
+  console.log('currentStoreDetails.phone:', currentStoreDetails?.phone);
+  
   const businessInfo = {
     name: tenantName || "Negocio",
-    address: orderDetails?.store?.address || "",
-    phone: orderDetails?.store?.phone || "",
+    address: orderDetails?.store?.address || currentStoreDetails?.address || "",
+    phone: orderDetails?.store?.phone || currentStoreDetails?.phone || "Sin teléfono",
     email: "",
     footerText: "Gracias por su compra. Vuelva pronto.",
   };
@@ -236,7 +288,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
     return order?.services || [];
   }, [orderDetails?.servicios, order?.services]);
 
-  const displayPacks = useMemo(() => {
+  const displayPacks = useMemo<DisplayPack[]>(() => {
     const source =
       orderDetails?.packs ||
       orderDetails?.paquetes ||
@@ -245,24 +297,49 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
 
     if (Array.isArray(source)) {
       return source.map((pack: any) => ({
-        id: pack.id || pack.packId,
-        packId: pack.packId || pack.id,
+        id: String(pack.id || pack.packId || ""),
+        packId: String(pack.packId || pack.id || ""),
         name: pack.name || pack.nombre || "Pack",
         quantity: Number(pack.quantity ?? pack.cantidad ?? 0),
-        basePriceSnapshot: Number(pack.basePriceSnapshot ?? pack.precioBaseSnapshot ?? pack.basePrice ?? pack.fixedPrice ?? 0),
-        soldPrice: Number(pack.soldPrice ?? pack.precioVendido ?? pack.unitPrice ?? pack.price ?? 0),
+        basePrice: Number(pack.precioBase ?? pack.basePriceSnapshot ?? pack.precioBaseSnapshot ?? pack.basePrice ?? pack.fixedPrice ?? 0),
+        unitPrice: Number(pack.precioUnitario ?? pack.soldPrice ?? pack.precioVendido ?? pack.unitPrice ?? pack.price ?? 0),
         subtotal: Number(pack.subtotal ?? pack.subTotal ?? 0),
+        discount: Number(pack.descuento ?? 0),
+        priceModified: Boolean(pack.precioModificado),
         components: Array.isArray(pack.components || pack.componentes)
           ? (pack.components || pack.componentes).map((component: any) => ({
               productId: component.productId,
+              storeProductId: component.storeProductId,
               name: component.name || component.nombre || "Producto",
-              quantity: Number(component.quantity ?? component.cantidad ?? 0),
+              quantityPerPack: Number(component.cantidadPorPack ?? component.quantity ?? component.cantidad ?? 0),
+              totalQuantity: Number(component.cantidadTotal ?? component.quantity ?? component.cantidad ?? 0),
+              unitPrice: Number(component.precioUnitario ?? component.unitPrice ?? 0),
             }))
           : [],
       }));
     }
 
-    return order?.orderPacks || [];
+    return (order?.orderPacks || []).map((pack: any) => ({
+      id: String(pack.id || pack.packId || ""),
+      packId: String(pack.packId || pack.id || ""),
+      name: pack.name || pack.nombre || "Pack",
+      quantity: Number(pack.quantity ?? pack.cantidad ?? 0),
+      basePrice: Number(pack.precioBase ?? pack.basePriceSnapshot ?? 0),
+      unitPrice: Number(pack.precioUnitario ?? pack.soldPrice ?? 0),
+      subtotal: Number(pack.subtotal ?? 0),
+      discount: Number(pack.descuento ?? 0),
+      priceModified: Boolean(pack.precioModificado),
+      components: Array.isArray(pack.components || pack.componentes)
+        ? (pack.components || pack.componentes).map((component: any) => ({
+            productId: component.productId,
+            storeProductId: component.storeProductId,
+            name: component.name || component.nombre || "Producto",
+            quantityPerPack: Number(component.cantidadPorPack ?? component.quantity ?? component.cantidad ?? 0),
+            totalQuantity: Number(component.cantidadTotal ?? component.quantity ?? component.cantidad ?? 0),
+            unitPrice: Number(component.precioUnitario ?? component.unitPrice ?? 0),
+          }))
+        : [],
+    }));
   }, [orderDetails?.packs, orderDetails?.paquetes, orderDetails?.productPacks, orderDetails?.orderPacks, order?.orderPacks]);
 
   const orderStatus = useMemo<OrderStatus>(() => {
@@ -477,7 +554,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
   const orderPendingAmount = useMemo(() => {
     if (!orderDetails) return 0;
 
-    const totalAmount = Number(orderDetails.total ?? 0) || 0;
+    const totalAmount = Number(orderDetails.total ?? orderDetails.totalAmount ?? 0) || 0;
     const totalPaid = (orderDetails.paymentMethods || []).reduce(
       (sum: number, method: any) => sum + (Number(method?.amount) || 0),
       0
@@ -807,7 +884,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                 </div>
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Total</p>
-                  <p className="font-medium">S/{Number(order.totalAmount || 0).toFixed(2)}</p>
+                  <p className="font-medium">{formatCurrency(Number(orderDetails?.total ?? order.totalAmount ?? 0))}</p>
                 </div>
                 {hasNamedServices && (
                   <div className="space-y-1">
@@ -893,13 +970,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
               <div className="space-y-2 mt-6">
                 <h3 className="font-medium">Packs</h3>
                 <div className="space-y-3">
-                  {displayPacks.map((pack: any, index: number) => {
-                    const basePrice = Number(pack.basePriceSnapshot ?? pack.basePrice ?? 0);
-                    const soldPrice = Number(pack.soldPrice ?? pack.price ?? 0);
-                    const subtotal =
-                      Number(pack.subtotal ?? 0) ||
-                      (soldPrice * Number(pack.quantity ?? 0));
-
+                  {displayPacks.map((pack, index: number) => {
                     return (
                       <div key={`${pack.packId || pack.id || index}`} className="rounded-lg border p-4 bg-muted/10">
                         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
@@ -910,9 +981,12 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                             </p>
                           </div>
                           <div className="text-sm sm:text-right">
-                            <p>Base snapshot: S/{basePrice.toFixed(2)}</p>
-                            <p>Precio vendido: S/{soldPrice.toFixed(2)}</p>
-                            <p className="font-medium">Subtotal: S/{subtotal.toFixed(2)}</p>
+                            <p>Precio base: {formatCurrency(pack.basePrice)}</p>
+                            <p>Precio unitario: {formatCurrency(pack.unitPrice)}</p>
+                            <p className="font-medium">Subtotal: {formatCurrency(pack.subtotal)}</p>
+                            {pack.priceModified && (
+                              <p className="text-xs text-muted-foreground">Precio modificado</p>
+                            )}
                           </div>
                         </div>
 
@@ -921,12 +995,17 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                               Componentes
                             </p>
-                            {pack.components.map((component: any, componentIndex: number) => (
+                            {pack.components.map((component, componentIndex: number) => (
                               <div
-                                key={`${pack.packId || pack.id || index}-${component.productId || componentIndex}`}
+                                key={`${pack.packId || pack.id || index}-${component.productId || component.storeProductId || componentIndex}`}
                                 className="rounded-md bg-background px-3 py-2 text-sm"
                               >
-                                {component.name || "Producto"} x{Number(component.quantity ?? 0)}
+                                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                  <span>{component.name || "Producto"}</span>
+                                  <span className="text-muted-foreground">
+                                    {component.quantityPerPack} por pack | Total {component.totalQuantity} | P. Unit {formatCurrency(component.unitPrice)}
+                                  </span>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -1062,7 +1141,7 @@ const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({ open, onOpenCha
                 <div className="flex justify-between items-center">
                   <h3 className="font-medium">Total General</h3>
                   <p className="text-lg font-bold">
-                    S/{Number(order.totalAmount || 0).toFixed(2)}
+                    {formatCurrency(Number(orderDetails?.total ?? order.totalAmount ?? 0))}
                   </p>
                 </div>
               </div>

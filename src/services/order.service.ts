@@ -182,6 +182,22 @@ export interface OrderPaymentMethodsResponse {
   payments: PaymentMethod[];
 }
 
+export interface OrderDetailsResponse {
+  id: string;
+  orderNumber?: string;
+  total?: number;
+  totalAmount?: number;
+  descuentos?: number;
+  paymentMethods?: PaymentMethod[];
+  productos?: any[];
+  servicios?: any[];
+  packs?: OrderPack[];
+  paquetes?: OrderPack[];
+  productPacks?: OrderPack[];
+  orderPacks?: OrderPack[];
+  [key: string]: any;
+}
+
 export const orderService = {
   async listOrders(params: {
     page?: number;
@@ -707,10 +723,10 @@ export const orderService = {
   },
 
   // ✅ NUEVO: Obtener detalles completos de una orden para PDF y visualización
-  async getOrderDetails(id: string): Promise<any> {
+  async getOrderDetails(id: string): Promise<OrderDetailsResponse> {
     try {
       const token = localStorage.getItem("auth_token");
-      const response = await api.get<any>(`/orders/details/${id}`, {
+      const response = await api.get<OrderDetailsResponse>(`/orders/details/${id}`, {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`

@@ -233,8 +233,7 @@ const ReceiptThermalPDF: React.FC<ReceiptThermalPDFProps> = ({ saleData, busines
   const totalProductos = productos.reduce((sum: number, item: any) => {
     const precio = parseAmount(item.precioUnitario ?? item.price);
     const cantidad = parseAmount(item.cantidad ?? item.quantity, 1);
-    const descuento = parseAmount(item.descuento);
-    return sum + (precio * cantidad) - descuento;
+    return sum + (precio * cantidad);
   }, 0);
 
   const totalServicios = servicios.reduce((sum: number, item: any) => {
@@ -242,13 +241,20 @@ const ReceiptThermalPDF: React.FC<ReceiptThermalPDFProps> = ({ saleData, busines
   }, 0);
 
   const totalPacks = packs.reduce((sum: number, item: any) => {
-    const soldPrice = parseAmount(item.soldPrice ?? item.precioVendido ?? item.price ?? item.unitPrice);
+    const soldPrice = parseAmount(item.precioUnitario ?? item.soldPrice ?? item.precioVendido ?? item.price ?? item.unitPrice);
     const quantity = parseAmount(item.quantity ?? item.cantidad, 1);
     const subtotal = parseAmount(item.subtotal ?? item.subTotal, soldPrice * quantity);
     return sum + subtotal;
   }, 0);
 
   const subtotalCalculado = totalProductos + totalPacks + totalServicios;
+  const orderTotal = parseAmount(
+    saleData.total ??
+    saleData.totalAmount ??
+    saleData.order?.total ??
+    saleData.order?.totalAmount,
+    subtotalCalculado
+  );
 
   const paymentMethodsSource =
     saleData.paymentMethods ??
@@ -298,7 +304,7 @@ const ReceiptThermalPDF: React.FC<ReceiptThermalPDFProps> = ({ saleData, busines
 
   const pendingForOrder = pendingFromApi > 0
     ? pendingFromApi
-    : Math.max(subtotalCalculado - totalPaidForOrder, 0);
+    : Math.max(orderTotal - totalPaidForOrder, 0);
 
   const shouldShowServiceSummary = hasServicios && totalServicios > 0;
   const servicePaidAmount = shouldShowServiceSummary ? Math.min(totalPaidForOrder, totalServicios) : 0;
@@ -311,7 +317,7 @@ const ReceiptThermalPDF: React.FC<ReceiptThermalPDFProps> = ({ saleData, busines
   // Lógica de visualización del monto final:
   const totalDisplayAmount = (!isCompleted && hasServicios) 
     ? pendingForOrder 
-    : subtotalCalculado;
+    : orderTotal;
 
   const tenantLogoUrl = resolveTenantLogoUrlFromToken();
   const receiptCode = saleData.orderNumber
@@ -465,7 +471,7 @@ const ReceiptThermalPDF: React.FC<ReceiptThermalPDFProps> = ({ saleData, busines
               </View>
               {packs.map((item: any, index: number) => {
                 const quantity = parseAmount(item.quantity ?? item.cantidad, 1);
-                const soldPrice = parseAmount(item.soldPrice ?? item.precioVendido ?? item.price ?? item.unitPrice);
+                const soldPrice = parseAmount(item.precioUnitario ?? item.soldPrice ?? item.precioVendido ?? item.price ?? item.unitPrice);
                 const subtotal = parseAmount(item.subtotal ?? item.subTotal, soldPrice * quantity);
                 const components = item.components || item.componentes || [];
 
@@ -481,7 +487,7 @@ const ReceiptThermalPDF: React.FC<ReceiptThermalPDFProps> = ({ saleData, busines
                     </View>
                     {Array.isArray(components) && components.map((component: any, componentIndex: number) => (
                       <Text key={componentIndex} style={[styles.textSmall, { marginLeft: 24, marginBottom: 2 }]}>
-                        {component.name || component.nombre || 'Producto'} x{parseAmount(component.quantity ?? component.cantidad, 0)}
+                        {component.name || component.nombre || 'Producto'} x{parseAmount(component.cantidadTotal ?? component.quantity ?? component.cantidad, 0)}
                       </Text>
                     ))}
                   </View>

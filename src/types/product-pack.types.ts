@@ -78,17 +78,30 @@ export type UpdateProductPackDto = Partial<CreateProductPackDto>;
 
 export interface OrderPackSnapshotComponent {
   productId?: string;
-  name: string;
-  quantity: number;
+  storeProductId?: string;
+  name?: string;
+  nombre?: string;
+  quantity?: number;
+  cantidad?: number;
+  cantidadPorPack?: number;
+  cantidadTotal?: number;
+  precioUnitario?: number;
 }
 
 export interface OrderPack {
   id: string;
   packId?: string;
-  name: string;
-  quantity: number;
-  basePriceSnapshot: number;
-  soldPrice: number;
+  name?: string;
+  nombre?: string;
+  quantity?: number;
+  cantidad?: number;
+  basePriceSnapshot?: number;
+  precioBase?: number;
+  soldPrice?: number;
+  precioUnitario?: number;
   subtotal: number;
+  descuento?: number;
+  precioModificado?: boolean;
   components: OrderPackSnapshotComponent[];
+  componentes?: OrderPackSnapshotComponent[];
 }
