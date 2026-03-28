@@ -3,6 +3,7 @@ import { api } from './api';
 export enum StockTransferStatus {
   ISSUED = 'ISSUED',
   PENDING = 'PENDING',
+  IN_TRANSIT = 'IN_TRANSIT',
   PARTIAL = 'PARTIAL',
   PARTIALLY_RECEIVED = 'PARTIALLY_RECEIVED',
   COMPLETED = 'COMPLETED',
@@ -96,6 +97,7 @@ export interface UpdateStockTransferDto {
 export interface ProductLookupItem {
   id: string;
   name: string;
+  sku?: string;
 }
 
 class StockTransferService {
@@ -136,6 +138,11 @@ class StockTransferService {
     return response.data;
   }
 
+  async accept(id: string): Promise<{ success: boolean }> {
+    const response = await api.post<{ success: boolean }>(`${this.baseUrl}/${id}/accept`);
+    return response.data;
+  }
+
   async receive(id: string, dto: ReceiveStockTransferDto): Promise<{ success: boolean }> {
     const response = await api.post<{ success: boolean }>(`${this.baseUrl}/${id}/receive`, dto);
     return response.data;
@@ -157,27 +164,33 @@ class StockTransferService {
   }
 
   async getStoreProductsSimpleLookup(storeId: string): Promise<ProductLookupItem[]> {
-    const response = await api.get<Array<{ id?: string; name?: string }>>('/catalog/products/lookup');
+    const response = await api.get<Array<{ id?: string; name?: string; sku?: string }>>(
+      '/catalog/products/lookup-sku'
+    );
     const payload = Array.isArray(response.data) ? response.data : [];
     return payload
       .map((item) => {
         const productId = item.id;
         const name = item.name;
         if (!productId || !name) return null;
-        return { id: productId, name };
+        const sku = item.sku;
+        return sku ? { id: productId, name, sku } : { id: productId, name };
       })
       .filter((item): item is ProductLookupItem => Boolean(item));
   }
 
   async getWarehouseProductsSimpleLookup(warehouseId: string): Promise<ProductLookupItem[]> {
-    const response = await api.get<Array<{ id?: string; name?: string }>>('/catalog/products/lookup');
+    const response = await api.get<Array<{ id?: string; name?: string; sku?: string }>>(
+      '/catalog/products/lookup-sku'
+    );
     const payload = Array.isArray(response.data) ? response.data : [];
     return payload
       .map((item) => {
         const productId = item.id;
         const name = item.name;
         if (!productId || !name) return null;
-        return { id: productId, name };
+        const sku = item.sku;
+        return sku ? { id: productId, name, sku } : { id: productId, name };
       })
       .filter((item): item is ProductLookupItem => Boolean(item));
   }

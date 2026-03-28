@@ -1666,6 +1666,12 @@ export function SaleForm({
   };
 
   // Buscar cliente por DNI con useCallback para evitar recreaciones innecesarias
+  const toSentenceCase = (value: string) => {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return "";
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+  };
+
   const searchClientByDni = useCallback(async (dni: string) => {
     if (!dni || dni.length !== 8) {
       return;
@@ -1681,11 +1687,11 @@ export function SaleForm({
         setCustomerData(prev => {
           const newData = {
             ...prev,
-            name: client.name || '',
-            email: client.email || '',
-            phone: client.phone || '',
-            address: client.address || '',
-            ruc: client.ruc || '',
+            name: client.name ? toSentenceCase(client.name) : '',
+            email: client.email ? toSentenceCase(client.email) : '',
+            phone: client.phone ? toSentenceCase(client.phone) : '',
+            address: client.address ? toSentenceCase(client.address) : '',
+            ruc: client.ruc ? toSentenceCase(client.ruc) : '',
             documentNumber: dni,
             // Mantenemos las notas existentes
             notes: prev.notes

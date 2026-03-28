@@ -74,8 +74,9 @@ class ProviderService {
     return response.data;
   }
 
-  async getProductsLookup(): Promise<ProductLookupItem[]> {
-    const response = await api.get<ProductLookupItem[]>('/catalog/products/lookup');
+  async getProductsLookup(search?: string): Promise<ProductLookupItem[]> {
+    const params = search ? { search } : undefined;
+    const response = await api.get<ProductLookupItem[]>('/catalog/products/lookup-sku', { params });
     return response.data;
   }
 
@@ -87,6 +88,11 @@ class ProviderService {
   async getProvidersRucLookup(): Promise<ProviderRucLookupItem[]> {
     const response = await api.get<ProviderRucLookupItem[]>('/providers/lookup-ruc');
     return response.data;
+  }
+
+  async getProviderProducts(providerId: string): Promise<ProductLookupItem[]> {
+    const response = await api.get<{ products: ProductLookupItem[] }>(`/providers/${providerId}/products`);
+    return response.data.products;
   }
 }
 

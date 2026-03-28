@@ -62,7 +62,8 @@ const PAGE_SIZE = 12;
 
 const statusConfig: Record<StockTransferStatus, { label: string; className: string }> = {
   ISSUED: { label: "Emitida", className: "bg-muted text-muted-foreground" },
-  PENDING: { label: "En tránsito", className: "bg-info/15 text-info" },
+  PENDING: { label: "Pendiente", className: "bg-info/15 text-info" },
+  IN_TRANSIT: { label: "En tránsito", className: "bg-info/15 text-info" },
   PARTIAL: { label: "Recepción parcial", className: "bg-warning/20 text-foreground" },
   PARTIALLY_RECEIVED: {
     label: "Parcialmente recibida",
@@ -171,6 +172,9 @@ export default function MovimientosStockPage() {
   const [receiveSubmitting, setReceiveSubmitting] = useState(false);
   const [receiveItems, setReceiveItems] = useState<ReceiveItem[]>([]);
   const [closePartial, setClosePartial] = useState(false);
+  const [closeWarningOpen, setCloseWarningOpen] = useState(false);
+  const [closeWarningCountdown, setCloseWarningCountdown] = useState(3);
+  const [closeWarningSubmitting, setCloseWarningSubmitting] = useState(false);
 
   // ─── Annul modal ───
   const [annulOpen, setAnnulOpen] = useState(false);
@@ -196,6 +200,25 @@ export default function MovimientosStockPage() {
     const fromDate = new Date(`${from}T00:00:00`).toISOString();
     const toDate = new Date(`${to}T23:59:59.999`).toISOString();
     return { fromDate, toDate };
+  };
+
+  const handleConfirmClosePartial = async () => {
+    if (!detail) return;
+    setCloseWarningSubmitting(true);
+    try {
+      await stockTransferService.closePartial(detail.id);
+      toast.success("Transferencia cerrada como recepción parcial");
+      setCloseWarningOpen(false);
+      setReceiveOpen(false);
+      const updated = await stockTransferService.getById(detail.id);
+      setDetail(updated);
+      loadTransfersRef.current?.(page);
+      loadReceiveTransfersRef.current?.(receivePage);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || "Error al cerrar parcial");
+    } finally {
+      setCloseWarningSubmitting(false);
+    }
   };
 
   const openReceiveById = async (id: string) => {
@@ -330,11 +353,11 @@ export default function MovimientosStockPage() {
         } else if (activeLoginMode === "WAREHOUSE" && currentWarehouse?.id) {
           baseParams.warehouseId = currentWarehouse.id;
         }
-        const [pendingResponse, partialResponse] = await Promise.all([
-          stockTransferService.list({ ...baseParams, status: StockTransferStatus.PENDING }),
+        const [transitResponse, partialResponse] = await Promise.all([
+          stockTransferService.list({ ...baseParams, status: StockTransferStatus.IN_TRANSIT }),
           stockTransferService.list({ ...baseParams, status: StockTransferStatus.PARTIAL }),
         ]);
-        const combined = [...(pendingResponse.data || []), ...(partialResponse.data || [])];
+        const combined = [...(transitResponse.data || []), ...(partialResponse.data || [])];
         const currentType = activeLoginMode === "STORE" ? "STORE" : "WAREHOUSE";
         const filtered = combined
           .filter(
@@ -352,7 +375,7 @@ export default function MovimientosStockPage() {
         setReceiveTransfers(filtered);
         setReceivePage(targetPage);
         const totalPages = Math.max(
-          pendingResponse.pagination?.totalPages || 1,
+          transitResponse.pagination?.totalPages || 1,
           partialResponse.pagination?.totalPages || 1
         );
         setReceiveTotalPages(totalPages || 1);
@@ -448,6 +471,23 @@ export default function MovimientosStockPage() {
       loadTransfersRef.current?.(page);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || error?.message || "Error al confirmar");
+    } finally {
+      setDetailSubmitting(false);
+    }
+  };
+
+  const handleAccept = async () => {
+    if (!detail) return;
+    setDetailSubmitting(true);
+    try {
+      await stockTransferService.accept(detail.id);
+      toast.success("Transferencia aceptada");
+      const updated = await stockTransferService.getById(detail.id);
+      setDetail(updated);
+      loadTransfersRef.current?.(page);
+      loadReceiveTransfersRef.current?.(receivePage);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || error?.message || "Error al aceptar");
     } finally {
       setDetailSubmitting(false);
     }
@@ -702,8 +742,18 @@ export default function MovimientosStockPage() {
       }))
     );
     setClosePartial(false);
+    setCloseWarningOpen(false);
     setReceiveOpen(true);
   };
+
+  useEffect(() => {
+    if (!closeWarningOpen) return;
+    setCloseWarningCountdown(3);
+    const interval = window.setInterval(() => {
+      setCloseWarningCountdown((prev) => (prev > 0 ? prev - 1 : prev));
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [closeWarningOpen]);
 
   const handleSubmitReceive = async () => {
     if (!detail) return;
@@ -716,6 +766,17 @@ export default function MovimientosStockPage() {
       toast.error(
         `La cantidad ingresada para "${excedido.productName}" supera el volumen comprometido en esta transferencia. Por favor verifique los valores antes de continuar.`
       );
+      return;
+    }
+
+    // Validar que al menos un producto tenga cantidad recibida > 0
+    const allZero = receiveItems.every((item) => item.quantityReceived === 0);
+    if (allZero) {
+      if (closePartial) {
+        setCloseWarningOpen(true);
+        return;
+      }
+      toast.error("No se puede recepcionar 0 productos sin cerrar como parcial");
       return;
     }
 
@@ -895,6 +956,12 @@ export default function MovimientosStockPage() {
 
   const isOrigin = (d: StockTransferDetail) => d.origin.id === activeEstablishmentId;
   const isDestination = (d: StockTransferDetail) => d.destination.id === activeEstablishmentId;
+  const isSender = (d: StockTransferDetail) =>
+    d.transferType === "SEND" ? isOrigin(d) : isDestination(d);
+  const isReceiver = (d: StockTransferDetail) =>
+    d.transferType === "SEND" ? isDestination(d) : isOrigin(d);
+  const canAnnulTransit = (d: StockTransferDetail) =>
+    d.items.every((item) => !item.quantityReceived || item.quantityReceived === 0);
 
   const originName =
     activeLoginMode === "STORE"
@@ -1085,7 +1152,8 @@ export default function MovimientosStockPage() {
                     <SelectContent>
                       <SelectItem value="all">Todos</SelectItem>
                       <SelectItem value="ISSUED">Emitida</SelectItem>
-                      <SelectItem value="PENDING">En tránsito</SelectItem>
+                      <SelectItem value="PENDING">Pendiente</SelectItem>
+                      <SelectItem value="IN_TRANSIT">En tránsito</SelectItem>
                       <SelectItem value="PARTIAL">Recepción parcial</SelectItem>
                       <SelectItem value="PARTIALLY_RECEIVED">Parcialmente recibida</SelectItem>
                       <SelectItem value="COMPLETED">Completada</SelectItem>
@@ -1186,7 +1254,7 @@ export default function MovimientosStockPage() {
                                 ? "bg-success/15 text-success"
                                 : t.status === "ANNULLATED"
                                 ? "bg-destructive/15 text-destructive"
-                                : t.status === "PENDING"
+                                : t.status === "PENDING" || t.status === "IN_TRANSIT"
                                 ? "bg-info/15 text-info"
                                 : t.status === "PARTIAL" || t.status === "PARTIALLY_RECEIVED"
                                 ? "bg-warning/20 text-foreground"
@@ -1254,7 +1322,7 @@ export default function MovimientosStockPage() {
                 <div className="space-y-2">
                   <CardTitle className="text-base">Recepciones pendientes</CardTitle>
                   <p className="text-sm text-muted-foreground">
-                    Transferencias en estado pendiente o parcial dirigidas a tu establecimiento.
+                    Transferencias en tránsito o parcial dirigidas a tu establecimiento.
                   </p>
                 </div>
               </CardHeader>
@@ -1553,10 +1621,18 @@ export default function MovimientosStockPage() {
                   </>
                 )}
 
-                {/* PENDING + ORIGEN */}
-                {detail.status === StockTransferStatus.PENDING && isOrigin(detail) && (
+                {/* PENDING: aceptar por emisor */}
+                {detail.status === StockTransferStatus.PENDING && isSender(detail) && (
                   <>
-                    {canCancel && (
+                    {canConfirm && (
+                      <Button size="sm" onClick={handleAccept} disabled={detailSubmitting}>
+                        {detailSubmitting && (
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        )}
+                        Aceptar
+                      </Button>
+                    )}
+                    {canCancel && isOrigin(detail) && (
                       <Button
                         size="sm"
                         variant="destructive"
@@ -1569,10 +1645,8 @@ export default function MovimientosStockPage() {
                   </>
                 )}
 
-                {/* PENDING: receptor según tipo */}
-                {detail.status === StockTransferStatus.PENDING &&
-                  ((detail.transferType === "REQUEST" && isOrigin(detail)) ||
-                   (detail.transferType === "SEND" && isDestination(detail))) && (
+                {/* IN_TRANSIT: receptor */}
+                {detail.status === StockTransferStatus.IN_TRANSIT && isReceiver(detail) && (
                   <>
                     {canReceive && (
                       <Button size="sm" onClick={() => openReceive(detail)}>
@@ -1582,10 +1656,24 @@ export default function MovimientosStockPage() {
                   </>
                 )}
 
+                {/* IN_TRANSIT: anulación por origen si no hay recepciones */}
+                {detail.status === StockTransferStatus.IN_TRANSIT && isOrigin(detail) && (
+                  <>
+                    {canCancel && canAnnulTransit(detail) && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={openAnnul}
+                        disabled={detailSubmitting}
+                      >
+                        Anular
+                      </Button>
+                    )}
+                  </>
+                )}
+
                 {/* PARTIAL: receptor según tipo */}
-                {detail.status === StockTransferStatus.PARTIAL &&
-                  ((detail.transferType === "REQUEST" && isOrigin(detail)) ||
-                   (detail.transferType === "SEND" && isDestination(detail))) && (
+                {detail.status === StockTransferStatus.PARTIAL && isReceiver(detail) && (
                   <>
                     {canReceive && (
                       <Button size="sm" onClick={() => openReceive(detail)}>
@@ -1774,7 +1862,9 @@ export default function MovimientosStockPage() {
                     >
                       <div className="flex-1 relative">
                         <Input
-                          value={item.productId ? productsLookup.find(p => p.id === item.productId)?.name || "" : ""}
+                          value={item.productId
+                            ? productsLookup.find(p => p.id === item.productId)?.name || item.productId
+                            : ""}
                           onChange={(e) => {
                             const value = e.target.value;
                             // Si está editando el texto mostrado, limpiar el productId
@@ -1783,7 +1873,7 @@ export default function MovimientosStockPage() {
                             }
                             handleCreateItemChange(idx, "productId", value);
                           }}
-                          placeholder="Escribe para buscar producto..."
+                          placeholder="Ingrese el nombre del producto..."
                           className="pr-8"
                         />
                         {productSuggestions[idx] && productSuggestions[idx].length > 0 && (
@@ -1829,7 +1919,7 @@ export default function MovimientosStockPage() {
                   ))}
                   <div className="flex items-center gap-2">
                     <QRScanner
-                      enabled={true}
+                      enabled={!!createTransferType && !!destId}
                       mode="both"
                       onScan={handleQRScanTransfer}
                       onError={(error) => toast.error(error)}
@@ -1934,6 +2024,42 @@ export default function MovimientosStockPage() {
             <Button onClick={handleSubmitReceive} disabled={receiveSubmitting}>
               {receiveSubmitting && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
               Confirmar recepción
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══════════════════════════════════
+          MODAL: CIERRE PARCIAL
+      ═══════════════════════════════════ */}
+      <Dialog open={closeWarningOpen} onOpenChange={setCloseWarningOpen}>
+        <DialogContent className="max-w-md w-[95%] mx-auto">
+          <DialogHeader>
+            <DialogTitle>Confirmar cierre parcial</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <p>
+              Estás a punto de cerrar esta transferencia como parcialmente recibida.
+              No podrás registrar más recepciones para esta orden.
+            </p>
+            <p>¿Deseas continuar?</p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setCloseWarningOpen(false)}
+              disabled={closeWarningSubmitting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmClosePartial}
+              disabled={closeWarningSubmitting || closeWarningCountdown > 0}
+            >
+              {closeWarningSubmitting && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+              {closeWarningCountdown > 0
+                ? `Aceptar (${closeWarningCountdown})`
+                : "Aceptar y cerrar"}
             </Button>
           </DialogFooter>
         </DialogContent>

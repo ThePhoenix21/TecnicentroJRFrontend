@@ -61,6 +61,7 @@ export interface UpdateProviderDto {
   phone?: string;
   email?: string;
   address?: string;
+  newProducts?: NewProviderProductDto[];
 }
 
 export interface CreateProviderDto {
@@ -69,6 +70,16 @@ export interface CreateProviderDto {
   phone?: string;
   email?: string;
   address?: string;
+  productIds?: string[];
+  newProducts?: NewProviderProductDto[];
+}
+
+export interface NewProviderProductDto {
+  name: string;
+  sku?: string;
+  description?: string;
+  basePrice?: number;
+  buyCost?: number;
 }
 
 export interface CreateProviderResponse {
@@ -84,6 +95,7 @@ export interface SaveProviderProductsResponse {
 export interface ProductLookupItem {
   id: string;
   name: string;
+  sku?: string;
 }
 
 export interface ProviderLookupItem {

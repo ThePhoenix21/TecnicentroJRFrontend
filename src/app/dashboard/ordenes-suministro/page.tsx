@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { jwtDecode } from "jwt-decode";
-import { Search, X } from "lucide-react";
+import { Package, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { pdf } from '@react-pdf/renderer';
 import { ActiveFilters } from "@/components/ui/active-filters";
@@ -180,6 +180,8 @@ export default function OrdenesSuministroPage() {
   const [storesLookup, setStoresLookup] = useState<StoreLookupItem[]>([]);
   const [warehousesLookup, setWarehousesLookup] = useState<WarehouseSimpleItem[]>([]);
   const [productsLookup, setProductsLookup] = useState<ProductLookupItem[]>([]);
+  const [providerProducts, setProviderProducts] = useState<ProductLookupItem[]>([]);
+  const [providerProductsLoading, setProviderProductsLoading] = useState(false);
   const [usersLookup, setUsersLookup] = useState<UserLookupItem[]>([]);
   const [ordersLookup, setOrdersLookup] = useState<SupplyOrderLookupItem[]>([]);
   const [locationType, setLocationType] = useState<"store" | "warehouse">("store");
@@ -994,14 +996,14 @@ if (openedWindow) {
           </CardContent>
         </Card>
       ) : (
-      <>
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "manage" | "receive")} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="manage">Órdenes de suministro</TabsTrigger>
-          {canReceiveSupplyOrder && <TabsTrigger value="receive">Recepciones</TabsTrigger>}
-        </TabsList>
+        <>
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "manage" | "receive")} className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="manage">Órdenes de suministro</TabsTrigger>
+              {canReceiveSupplyOrder && <TabsTrigger value="receive">Recepciones</TabsTrigger>}
+            </TabsList>
 
-        <TabsContent value="manage">
+            <TabsContent value="manage">
           <Card className="shadow-sm">
             <CardHeader className="p-4 sm:p-6 pb-0 sm:pb-0">
               <div className="flex flex-col space-y-4">
@@ -1309,110 +1311,110 @@ if (openedWindow) {
           </Card>
         </TabsContent>
 
-        <TabsContent value="receive">
-          {!canReceiveSupplyOrder ? (
-            <Card className="shadow-sm">
-              <CardContent className="py-10 text-center text-muted-foreground">
-                No tienes permisos para acceder a recepciones (RECEIVE_SUPPLY_ORDER).
-              </CardContent>
-            </Card>
-          ) : (
-          <Card className="shadow-sm">
-            <CardHeader className="p-4 sm:p-6 pb-0 sm:pb-0">
-              <div className="flex flex-col space-y-2">
-                <CardTitle className="text-xl sm:text-2xl font-semibold tracking-tight">
-                  Recepciones de órdenes
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Puedes seguir recibiendo órdenes en estado pendiente o parcial.
-                </p>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0 sm:p-6 pt-0">
-              {receiveLoading ? (
-                <div className="flex justify-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                </div>
-              ) : receiveOrders.length === 0 ? (
-                <div className="text-center py-10 text-muted-foreground">No hay órdenes pendientes o parciales.</div>
+            <TabsContent value="receive">
+              {!canReceiveSupplyOrder ? (
+                <Card className="shadow-sm">
+                  <CardContent className="py-10 text-center text-muted-foreground">
+                    No tienes permisos para acceder a recepciones (RECEIVE_SUPPLY_ORDER).
+                  </CardContent>
+                </Card>
               ) : (
-                <div className="rounded-md border overflow-hidden">
-                  <Table>
-                    <TableHeader className="bg-muted/50">
-                      <TableRow>
-                        <TableHead className="min-w-[120px]">Código</TableHead>
-                        <TableHead className="hidden sm:table-cell min-w-[120px]">Estado</TableHead>
-                        {/* Hide Emisión, Proveedor, Tienda, Almacén in mobile */}
-                        <TableHead className="hidden sm:table-cell min-w-[140px]">Emisión</TableHead>
-                        <TableHead className="hidden md:table-cell min-w-[150px]">Proveedor</TableHead>
-                        <TableHead className="hidden xl:table-cell min-w-[120px]">Tienda</TableHead>
-                        <TableHead className="hidden xl:table-cell min-w-[120px]">Almacén</TableHead>
-                        <TableHead className="text-right min-w-[100px]">Acción</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {receiveOrders.map((order) => {
-                        const status = statusLabels[order.status];
-                        return (
-                          <TableRow key={order.id}>
-                            <TableCell className="font-medium">{order.code}</TableCell>
-                            <TableCell className="hidden sm:table-cell">
-                              <span
-                                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${status.className}`}
-                              >
-                                {status.label}
-                              </span>
-                            </TableCell>
-                            <TableCell className="hidden sm:table-cell">
-                              {order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}
-                            </TableCell>
-                            <TableCell className="hidden md:table-cell text-muted-foreground">{order.providerName || "-"}</TableCell>
-                            <TableCell className="hidden xl:table-cell text-muted-foreground">{order.storeName || "-"}</TableCell>
-                            <TableCell className="hidden xl:table-cell text-muted-foreground">{order.warehouseName || "-"}</TableCell>
-                            <TableCell className="text-right">
-                              <Button size="sm" onClick={() => openReceive(order.id)}>
-                                Recibir
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+                <Card className="shadow-sm">
+                  <CardHeader className="p-4 sm:p-6 pb-0 sm:pb-0">
+                    <div className="flex flex-col space-y-2">
+                      <CardTitle className="text-xl sm:text-2xl font-semibold tracking-tight">
+                        Recepciones de órdenes
+                      </CardTitle>
+                      <p className="text-sm text-muted-foreground">
+                        Puedes seguir recibiendo órdenes en estado pendiente o parcial.
+                      </p>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0 sm:p-6 pt-0">
+                    {receiveLoading ? (
+                      <div className="flex justify-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                      </div>
+                    ) : receiveOrders.length === 0 ? (
+                      <div className="text-center py-10 text-muted-foreground">No hay órdenes pendientes o parciales.</div>
+                    ) : (
+                      <div className="rounded-md border overflow-hidden">
+                        <Table>
+                          <TableHeader className="bg-muted/50">
+                            <TableRow>
+                              <TableHead className="min-w-[120px]">Código</TableHead>
+                              <TableHead className="hidden sm:table-cell min-w-[120px]">Estado</TableHead>
+                              {/* Hide Emisión, Proveedor, Tienda, Almacén in mobile */}
+                              <TableHead className="hidden sm:table-cell min-w-[140px]">Emisión</TableHead>
+                              <TableHead className="hidden md:table-cell min-w-[150px]">Proveedor</TableHead>
+                              <TableHead className="hidden xl:table-cell min-w-[120px]">Tienda</TableHead>
+                              <TableHead className="hidden xl:table-cell min-w-[120px]">Almacén</TableHead>
+                              <TableHead className="text-right min-w-[100px]">Acción</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {receiveOrders.map((order) => {
+                              const status = statusLabels[order.status];
+                              return (
+                                <TableRow key={order.id}>
+                                  <TableCell className="font-medium">{order.code}</TableCell>
+                                  <TableCell className="hidden sm:table-cell">
+                                    <span
+                                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${status.className}`}
+                                    >
+                                      {status.label}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="hidden sm:table-cell">
+                                    {order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}
+                                  </TableCell>
+                                  <TableCell className="hidden md:table-cell text-muted-foreground">{order.providerName || "-"}</TableCell>
+                                  <TableCell className="hidden xl:table-cell text-muted-foreground">{order.storeName || "-"}</TableCell>
+                                  <TableCell className="hidden xl:table-cell text-muted-foreground">{order.warehouseName || "-"}</TableCell>
+                                  <TableCell className="text-right">
+                                    <Button size="sm" onClick={() => openReceive(order.id)}>
+                                      Recibir
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
 
-              {receiveTotalPages > 1 && (
-                <div className="flex items-center justify-between px-4 py-3 border-t">
-                  <div className="text-sm text-muted-foreground">
-                    Página {receivePage} de {receiveTotalPages}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => loadReceiveOrders(receivePage - 1)}
-                      disabled={receivePage <= 1}
-                      className="h-8"
-                    >
-                      Anterior
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => loadReceiveOrders(receivePage + 1)}
-                      disabled={receivePage >= receiveTotalPages}
-                      className="h-8"
-                    >
-                      Siguiente
-                    </Button>
-                  </div>
-                </div>
+                    {receiveTotalPages > 1 && (
+                      <div className="flex items-center justify-between px-4 py-3 border-t">
+                        <div className="text-sm text-muted-foreground">
+                          Página {receivePage} de {receiveTotalPages}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => loadReceiveOrders(receivePage - 1)}
+                            disabled={receivePage <= 1}
+                            className="h-8"
+                          >
+                            Anterior
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => loadReceiveOrders(receivePage + 1)}
+                            disabled={receivePage >= receiveTotalPages}
+                            className="h-8"
+                          >
+                            Siguiente
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               )}
-            </CardContent>
-          </Card>
-          )}
-        </TabsContent>
+            </TabsContent>
       </Tabs>
 
       <Dialog open={detailOpen} onOpenChange={(open) => (open ? setDetailOpen(true) : closeDetail())}>
@@ -1996,71 +1998,106 @@ if (openedWindow) {
           }
         }}
       >
-        <DialogContent className="sm:max-w-[640px] max-h-[90vh] p-0 overflow-hidden">
-          <div className="flex flex-col max-h-[90vh]">
-            <DialogHeader className="p-4 sm:p-6 pb-2 sm:pb-2 flex-shrink-0">
-              <DialogTitle className="text-lg sm:text-xl">Nueva orden de suministro</DialogTitle>
-            </DialogHeader>
-            <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-4 sm:pb-6">
-              <div className="space-y-4 sm:space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Proveedor</label>
-                    <Select
-                      value={createForm.providerId}
-                      onValueChange={(value) => {
-                        setCreateForm((prev) => ({ ...prev, providerId: value }));
-                        setCreateErrors((prev) => ({ ...prev, providerId: false }));
-                      }}
-                    >
-                      <SelectTrigger
-                        className={`h-10 ${createErrors.providerId ? "border-destructive focus-visible:ring-destructive/30" : undefined}`}
-                      >
-                        <SelectValue placeholder={lookupLoading ? "Cargando..." : "Selecciona proveedor"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {providersLookup.map((provider) => (
-                          <SelectItem key={provider.id} value={provider.id}>
-                            {provider.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+        <DialogContent
+          className="max-h-[95vh] sm:h-[82vh] sm:max-h-[82vh] p-0 overflow-hidden"
+          style={{ width: "min(1180px, calc(100vw - 2rem))", maxWidth: "1180px" }}
+        >
+          <div className="flex flex-col max-h-[95vh] sm:h-[82vh] sm:max-h-[82vh] min-h-0">
+            <div className="shrink-0 border-b bg-linear-to-b from-background to-muted/30 px-6 py-5">
+              <DialogHeader>
+                <div className="flex items-start gap-4">
+                  <div className="flex items-center justify-center h-11 w-11 rounded-2xl bg-primary/10 shadow-sm">
+                    <Package className="h-5 w-5 text-primary" />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Destino</label>
-                    <div className="h-10 px-3 py-2 rounded-md border bg-muted/30 text-sm flex items-center">
-                      {activeLoginMode === 'STORE' ? (
-                        <>
-                          <span className="font-medium">Tienda:</span>
-                          <span className="ml-2">{currentStore?.name || 'No seleccionada'}</span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="font-medium">Almacén:</span>
-                          <span className="ml-2">{currentWarehouse?.name || 'No seleccionado'}</span>
-                        </>
-                      )}
+                  <div className="flex-1">
+                    <DialogTitle className="text-xl font-semibold tracking-tight">Nueva orden de suministro</DialogTitle>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Registra proveedor, destino y productos a abastecer.
+                    </p>
+                  </div>
+                </div>
+              </DialogHeader>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-6 bg-linear-to-b from-muted/10 to-background">
+              <div className="space-y-6">
+                <div className="rounded-xl border bg-background/80 shadow-sm p-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Proveedor</label>
+                      <Select
+                        value={createForm.providerId}
+                        onValueChange={async (value) => {
+                          setCreateForm((prev) => ({ ...prev, providerId: value }));
+                          setCreateErrors((prev) => ({ ...prev, providerId: false }));
+                          
+                          if (value) {
+                            try {
+                              setProviderProductsLoading(true);
+                              const products = await providerService.getProviderProducts(value);
+                              setProviderProducts(products);
+                            } catch (error: any) {
+                              console.error('Error al cargar productos del proveedor:', error);
+                              setProviderProducts([]);
+                            } finally {
+                              setProviderProductsLoading(false);
+                            }
+                          } else {
+                            setProviderProducts([]);
+                          }
+                        }}
+                      >
+                        <SelectTrigger
+                          className={`h-10 ${createErrors.providerId ? "border-destructive focus-visible:ring-destructive/30" : undefined}`}
+                        >
+                          <SelectValue placeholder={lookupLoading ? "Cargando..." : "Selecciona proveedor"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {providersLookup.map((provider) => (
+                            <SelectItem key={provider.id} value={provider.id}>
+                              {provider.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Destino</label>
+                      <div className="h-10 px-3 py-2 rounded-md border bg-muted/30 text-sm flex items-center">
+                        {activeLoginMode === 'STORE' ? (
+                          <>
+                            <span className="font-medium">Tienda:</span>
+                            <span className="ml-2">{currentStore?.name || 'No seleccionada'}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="font-medium">Almacén:</span>
+                            <span className="ml-2">{currentWarehouse?.name || 'No seleccionado'}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <label className="text-sm font-medium">Descripción</label>
+                      <Input
+                        value={createForm.description ?? ""}
+                        onChange={(e) => setCreateForm((prev) => ({ ...prev, description: e.target.value }))}
+                        placeholder="Descripción opcional"
+                        className="h-10"
+                      />
                     </div>
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Descripción</label>
-                  <Input
-                    value={createForm.description ?? ""}
-                    onChange={(e) => setCreateForm((prev) => ({ ...prev, description: e.target.value }))}
-                    placeholder="Descripción opcional"
-                    className="h-10"
-                  />
-                </div>
-
-                <div className="space-y-3 rounded-lg border bg-muted/30 p-3 sm:p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <h3 className="text-sm font-semibold">Productos</h3>
+                <div className="rounded-xl border bg-background/80 shadow-sm p-5 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold">Productos</h3>
+                      <p className="text-xs text-muted-foreground">Agrega productos y cantidades a abastecer.</p>
+                    </div>
                     <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                       <QRScanner
-                        enabled={true}
+                        enabled={createOpen}
                         mode="both"
                         onScan={handleQRScanSupplyOrder}
                         onError={(error) => toast.error(error)}
@@ -2088,9 +2125,10 @@ if (openedWindow) {
                       </Button>
                     </div>
                   </div>
-                  <div className="space-y-4 max-h-[280px] sm:max-h-[320px] overflow-y-auto pr-1">
+                  <div className="space-y-4 max-h-[360px] overflow-y-auto pr-1">
                     {createForm.products.map((item, index) => {
                       const selectedProductName = productsLookup.find((product) => product.id === item.productId)?.name;
+                      const isProductNotSupplied = item.productId && createForm.providerId && providerProducts.length > 0 && !providerProducts.some(p => p.id === item.productId);
                       return (
                         <div key={`${item.productId}-${index}`} className="space-y-3 rounded-md border bg-background p-3">
                           <div className="flex items-center justify-between">
@@ -2207,6 +2245,17 @@ if (openedWindow) {
                               className="h-9"
                             />
                           </div>
+                          {isProductNotSupplied && (
+                            <div className="flex items-start gap-2 rounded-md bg-amber-200/70 border border-amber-300 p-3 text-sm text-amber-950 dark:bg-warning/10 dark:border-warning/30 dark:text-warning">
+                              <svg className="h-5 w-5 text-amber-800 shrink-0 mt-0.5 dark:text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              <div className="flex-1">
+                                <p className="font-medium">Producto no abastecido por este proveedor</p>
+                                <p className="text-xs text-muted-foreground mt-1">El proveedor seleccionado no tiene registrado este producto en su catálogo. Puedes continuar, pero verifica que sea correcto.</p>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -2215,7 +2264,7 @@ if (openedWindow) {
               </div>
             </div>
 
-            <DialogFooter className="px-4 sm:px-6 py-4 border-t flex flex-col sm:flex-row gap-3 pt-4">
+            <DialogFooter className="px-4 sm:px-6 py-10 border-t flex flex-col sm:flex-row gap-3 pt-4">
               <Button
                 variant="outline"
                 onClick={() => {
@@ -2234,7 +2283,7 @@ if (openedWindow) {
           </div>
         </DialogContent>
       </Dialog>
-      </>
+        </>
       )}
     </div>
   );
